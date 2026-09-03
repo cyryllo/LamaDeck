@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.4.21"
+WERSJA = "0.4.22"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -466,6 +466,49 @@ def ollama_zainstaluj():
     # UWAGA: adres to oficjalna, udokumentowana metoda instalacji z ollama.com/download -
     #        warto od czasu do czasu sprawdzić, czy się nie zmieniła.
     _pkexec(["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"])
+
+
+def ollama_wersja_lokalna():
+    # WHAT: odczytuje wersję zainstalowanej lokalnie Ollamy z 'ollama --version'.
+    # WHY:  binarka drukuje np. "ollama version is 0.3.12" (a gdy usługa akurat
+    #       nie działa, dorzuca ostrzeżenie na stderr) - wyciągamy sam numer
+    #       wyrażeniem regularnym zamiast zależeć od dokładnego formatu tekstu,
+    #       który już się zmieniał między wersjami Ollamy.
+    try:
+        r = subprocess.run(["ollama", "--version"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    dopasowanie = re.search(r"(\d+\.\d+\.\d+)", r.stdout + r.stderr)
+    return dopasowanie.group(1) if dopasowanie else None
+
+
+def ollama_wersja_najnowsza():
+    # WHAT: pyta GitHub o tag najnowszego wydania Ollamy. Rzuca wyjątek przy
+    #       błędzie sieci - łapie go wywołujący (SprawdzAktualizacjeWorker).
+    # WHY:  oficjalne repo projektu - nie ma osobnego, prostszego API do
+    #       "jaka jest najnowsza wersja"; ten sam adres, co linkują strony
+    #       release notes na ollama.com/download.
+    r = requests.get(
+        "https://api.github.com/repos/ollama/ollama/releases/latest",
+        timeout=5, headers={"Accept": "application/vnd.github+json"},
+    )
+    r.raise_for_status()
+    tag = r.json().get("tag_name", "")
+    return tag.lstrip("v") or None
+
+
+def _rozbij_wersje(tekst):
+    # WHAT: rozbija string wersji na krotkę liczb do porównania, np. "0.3.12" -> (0, 3, 12).
+    # WHY:  proste porównanie tekstowe źle zestawiłoby np. "0.3.9" i "0.3.10"
+    #       (ten sam problem co w install.sh _compare_versions, tu rozwiązany
+    #       w Pythonie zamiast 'sort -V'). Zatrzymuje się na pierwszym
+    #       nienumerycznym segmencie (np. "-rc1"), żeby nie wywalić wyjątku.
+    wynik = []
+    for czesc in re.split(r"[.\-]", tekst.lstrip("v")):
+        if not czesc.isdigit():
+            break
+        wynik.append(int(czesc))
+    return tuple(wynik)
 
 
 # =============================================================================
@@ -1222,6 +1265,34 @@ class ActionWorker(QThread):
             self.zakonczono.emit(False, _("{opis}: błąd - {blad}").format(opis=self.opis, blad=e))
 
 
+class SprawdzAktualizacjeWorker(QThread):
+    """Sprawdza w tle, czy jest dostępna nowsza wersja Ollamy niż zainstalowana.
+
+    WHY: 'ollama --version' (subprocess) i zapytanie do GitHub (sieć) są
+         blokujące - jak każda inna sieć/proces w tej appce, idą w osobnym wątku.
+         Osobny worker (nie ActionWorker) - potrzebujemy z powrotem STRUKTURY
+         danych (obie wersje + czy jest aktualizacja), nie tylko tekstu komunikatu.
+    """
+    # {"blad": str|None, "lokalna": str|None, "najnowsza": str|None, "dostepna": bool}
+    wynik = pyqtSignal(dict)
+
+    def run(self):
+        lokalna = ollama_wersja_lokalna()
+        try:
+            najnowsza = ollama_wersja_najnowsza()
+        except requests.RequestException as e:
+            self.wynik.emit({"blad": str(e), "lokalna": lokalna, "najnowsza": None, "dostepna": False})
+            return
+        if lokalna is None or najnowsza is None:
+            self.wynik.emit({
+                "blad": _("nie udało się odczytać numeru wersji"),
+                "lokalna": lokalna, "najnowsza": najnowsza, "dostepna": False,
+            })
+            return
+        dostepna = _rozbij_wersje(najnowsza) > _rozbij_wersje(lokalna)
+        self.wynik.emit({"blad": None, "lokalna": lokalna, "najnowsza": najnowsza, "dostepna": dostepna})
+
+
 class AgregatorWorker(QThread):
     """Odpytuje na żywo hosty z listy serwerów o zainstalowane modele.
 
@@ -1385,6 +1456,7 @@ class MainWindow(QMainWindow):
         self.pull_worker = None
         self.refresh_worker = None
         self._instalacja_worker = None  # WHY: osobne śledzenie, żeby nie odpalić instalacji 2x naraz
+        self._aktualizacja_worker = None  # WHY: to samo dla sprawdzania aktualizacji Ollamy
         self._webui_worker = None       # WHY: to samo dla instalacji/uruchomienia Open WebUI
         self._webui_zainstalowane = False  # WHY: potrzebne w klik_webui, żeby wiedzieć co robi przycisk
         self._webui_dziala = False         # WHY: jw. - odróżnia "Uruchom" od "Otwórz" w tym samym miejscu
@@ -1559,6 +1631,20 @@ class MainWindow(QMainWindow):
         self.chk_autostart = QCheckBox(_("Uruchamiaj automatycznie przy starcie systemu"))
         self.chk_autostart.toggled.connect(self.przelacz_autostart)
         uk_ollama.addWidget(self.chk_autostart)
+
+        # WHAT: osobny wiersz na sprawdzanie aktualizacji Ollamy + wynik ostatniego
+        #       sprawdzenia (wersja lokalna / "dostępna nowsza").
+        # WHY:  NA ŻĄDANIE (przycisk), nie w cyklicznym odświeżaniu co 10 s - tak
+        #       samo jak podgląd modeli w Agregatorze (patrz CLAUDE.md) - zapytanie
+        #       do GitHub przy każdym tyknięciu zegara byłoby zbędnym ruchem sieciowym.
+        pasek_aktualizacji = QHBoxLayout()
+        self.btn_sprawdz_aktualizacje = QPushButton(_("Sprawdź aktualizacje"))
+        self.btn_sprawdz_aktualizacje.clicked.connect(self.sprawdz_aktualizacje_ollamy)
+        pasek_aktualizacji.addWidget(self.btn_sprawdz_aktualizacje)
+        self.lbl_wersja_ollama = QLabel("")
+        pasek_aktualizacji.addWidget(self.lbl_wersja_ollama)
+        pasek_aktualizacji.addStretch(1)
+        uk_ollama.addLayout(pasek_aktualizacji)
 
         lewa_kolumna.addWidget(karta_ollama)
 
@@ -2194,6 +2280,7 @@ class MainWindow(QMainWindow):
             self.btn_instaluj.setVisible(True)
             instalacja_w_toku = bool(self._instalacja_worker and self._instalacja_worker.isRunning())
             self.btn_instaluj.setEnabled(not instalacja_w_toku)
+            self.btn_sprawdz_aktualizacje.setEnabled(False)  # WHY: nie ma czego sprawdzać bez instalacji
         else:
             self.btn_instaluj.setVisible(False)
             self.chk_autostart.setEnabled(True)
@@ -2207,6 +2294,9 @@ class MainWindow(QMainWindow):
             self.chk_autostart.blockSignals(True)
             self.chk_autostart.setChecked(stan["enabled"])
             self.chk_autostart.blockSignals(False)
+
+            aktualizacja_w_toku = bool(self._aktualizacja_worker and self._aktualizacja_worker.isRunning())
+            self.btn_sprawdz_aktualizacje.setEnabled(not aktualizacja_w_toku)
 
         self._odswiez_zakladke_zaawansowane(stan)
 
@@ -2343,6 +2433,67 @@ class MainWindow(QMainWindow):
         self.wpis_log(_("Instaluję Ollamę - to może potrwać kilka minut..."))
         self.btn_instaluj.setEnabled(False)
         self._instalacja_worker = self._uruchom_akcje(ollama_zainstaluj, _("Instalacja Ollamy"))
+
+    def sprawdz_aktualizacje_ollamy(self):
+        # WHAT: pyta lokalną binarkę o zainstalowaną wersję i GitHub o najnowszą,
+        #       w tle (SprawdzAktualizacjeWorker), i - jeśli jest nowsza - proponuje
+        #       aktualizację tym samym skryptem, którym instaluje się Ollama.
+        # WHY:  po wyjściu nowej wersji Ollamy część modeli bywa spakowana w
+        #       formacie, którego starsza Ollama nie obsłuży ("model requires
+        #       newer Ollama") - stąd potrzeba szybkiego sprawdzenia z okna,
+        #       zamiast dowiadywania się o tym z błędu przy pobieraniu.
+        if self._aktualizacja_worker and self._aktualizacja_worker.isRunning():
+            self.wpis_log(_("Sprawdzanie aktualizacji już trwa - poczekaj na zakończenie."))
+            return
+        self.wpis_log(_("Sprawdzam dostępność aktualizacji Ollamy..."))
+        self.btn_sprawdz_aktualizacje.setEnabled(False)
+        worker = SprawdzAktualizacjeWorker()
+        self._workers.append(worker)
+
+        def _po_sprawdzeniu(wynik, w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+            self.btn_sprawdz_aktualizacje.setEnabled(True)
+            self._pokaz_wynik_sprawdzenia_aktualizacji(wynik)
+
+        worker.wynik.connect(_po_sprawdzeniu)
+        self._aktualizacja_worker = worker
+        worker.start()
+
+    def _pokaz_wynik_sprawdzenia_aktualizacji(self, wynik):
+        # WHAT: loguje wynik sprawdzenia i - gdy jest nowsza wersja - pyta,
+        #       czy zainstalować ją teraz (świadoma zgoda, tak jak przy
+        #       pierwszej instalacji - to znowu pkexec + skrypt z internetu).
+        if wynik["lokalna"]:
+            self.lbl_wersja_ollama.setText(_("wersja: {wersja}").format(wersja=wynik["lokalna"]))
+        if wynik["blad"]:
+            self.wpis_log(_("Nie udało się sprawdzić aktualizacji Ollamy: {blad}").format(blad=wynik["blad"]))
+            return
+        if not wynik["dostepna"]:
+            self.wpis_log(_("Masz najnowszą wersję Ollamy ({wersja}).").format(wersja=wynik["lokalna"]))
+            return
+        self.wpis_log(_("Dostępna nowa wersja Ollamy: {najnowsza} (masz {lokalna}).").format(
+            najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]))
+        odp = QMessageBox.question(
+            self, _("Aktualizacja Ollamy"),
+            _("Dostępna jest nowsza wersja Ollamy: {najnowsza}\n"
+              "Masz zainstalowaną: {lokalna}\n\n"
+              "Niektóre modele wymagają nowszej wersji Ollamy, żeby działać "
+              "poprawnie - warto aktualizować.\n\n"
+              "Zainstalować aktualizację teraz?\n\n"
+              "Pobierze i uruchomi oficjalny skrypt instalacyjny z ollama.com\n"
+              "(wymaga uprawnień administratora i połączenia z internetem).").format(
+                najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]),
+        )
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        self.wpis_log(_("Aktualizuję Ollamę - to może potrwać kilka minut..."))
+        # WHY: ten sam skrypt instalacyjny aktualizuje istniejącą instalację
+        #      w miejscu (oficjalne zachowanie install.sh z ollama.com) - nie
+        #      trzeba osobnej funkcji na "aktualizuj" vs "zainstaluj od zera".
+        #      Zapisujemy jako _instalacja_worker - to ten sam worker, który
+        #      blokuje przycisk "Zainstaluj Ollama" w _po_odswiezeniu.
+        self._instalacja_worker = self._uruchom_akcje(ollama_zainstaluj, _("Aktualizacja Ollamy"))
 
     def klik_webui(self):
         if self._webui_worker and self._webui_worker.isRunning():

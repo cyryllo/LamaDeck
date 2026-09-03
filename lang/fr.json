@@ -177,5 +177,16 @@
   "Opcjonalne pakiety WebUI": "Paquets optionnels de WebUI",
   "Zainstalować też opcjonalne pakiety systemowe (ffmpeg, pandoc, zstd)?\n\nPotrzebne do transkrypcji audio i importu dokumentów (PDF/Word) do RAG.\nBez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.\nWymaga uprawnień administratora.": "Installer aussi les paquets système optionnels (ffmpeg, pandoc, zstd) ?\n\nNécessaires pour la transcription audio et l'importation de documents (PDF/Word) dans le RAG.\nSans eux, WebUI fonctionne normalement, juste sans ces deux fonctions.\nNécessite les droits administrateur.",
   "Instaluję opcjonalne pakiety WebUI (ffmpeg, pandoc, zstd)...": "Installation des paquets optionnels de WebUI (ffmpeg, pandoc, zstd)...",
-  "Instalacja opcjonalnych pakietów WebUI": "Installation des paquets optionnels de WebUI"
+  "Instalacja opcjonalnych pakietów WebUI": "Installation des paquets optionnels de WebUI",
+  "Sprawdź aktualizacje": "Vérifier les mises à jour",
+  "Sprawdzam dostępność aktualizacji Ollamy...": "Recherche de mises à jour d'Ollama...",
+  "Sprawdzanie aktualizacji już trwa - poczekaj na zakończenie.": "Une vérification des mises à jour est déjà en cours - veuillez attendre la fin.",
+  "nie udało się odczytać numeru wersji": "impossible de lire le numéro de version",
+  "Nie udało się sprawdzić aktualizacji Ollamy: {blad}": "Échec de la vérification des mises à jour d'Ollama : {blad}",
+  "Masz najnowszą wersję Ollamy ({wersja}).": "Vous avez la dernière version d'Ollama ({wersja}).",
+  "Dostępna nowa wersja Ollamy: {najnowsza} (masz {lokalna}).": "Une nouvelle version d'Ollama est disponible : {najnowsza} (vous avez {lokalna}).",
+  "Aktualizacja Ollamy": "Mise à jour d'Ollama",
+  "Dostępna jest nowsza wersja Ollamy: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNiektóre modele wymagają nowszej wersji Ollamy, żeby działać poprawnie - warto aktualizować.\n\nZainstalować aktualizację teraz?\n\nPobierze i uruchomi oficjalny skrypt instalacyjny z ollama.com\n(wymaga uprawnień administratora i połączenia z internetem).": "Une version plus récente d'Ollama est disponible : {najnowsza}\nVersion installée : {lokalna}\n\nCertains modèles nécessitent une version plus récente d'Ollama pour fonctionner correctement - il est conseillé de mettre à jour.\n\nInstaller la mise à jour maintenant ?\n\nCela téléchargera et exécutera le script d'installation officiel depuis ollama.com\n(nécessite des privilèges administrateur et une connexion internet).",
+  "Aktualizuję Ollamę - to może potrwać kilka minut...": "Mise à jour d'Ollama en cours - cela peut prendre quelques minutes...",
+  "wersja: {wersja}": "version : {wersja}"
 }
