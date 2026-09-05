@@ -188,5 +188,13 @@
   "Aktualizacja Ollamy": "Ollama Update",
   "Dostępna jest nowsza wersja Ollamy: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNiektóre modele wymagają nowszej wersji Ollamy, żeby działać poprawnie - warto aktualizować.\n\nZainstalować aktualizację teraz?\n\nPobierze i uruchomi oficjalny skrypt instalacyjny z ollama.com\n(wymaga uprawnień administratora i połączenia z internetem).": "A newer version of Ollama is available: {najnowsza}\nYou have installed: {lokalna}\n\nSome models require a newer version of Ollama to work correctly - it's worth updating.\n\nInstall the update now?\n\nThis will download and run the official install script from ollama.com\n(requires administrator privileges and an internet connection).",
   "Aktualizuję Ollamę - to może potrwać kilka minut...": "Updating Ollama - this may take a few minutes...",
-  "wersja: {wersja}": "version: {wersja}"
+  "wersja: {wersja}": "version: {wersja}",
+  "Sprawdzam dostępność aktualizacji Open WebUI...": "Checking for Open WebUI updates...",
+  "Nie udało się sprawdzić aktualizacji Open WebUI: {blad}": "Failed to check for Open WebUI updates: {blad}",
+  "Masz najnowszą wersję Open WebUI ({wersja}).": "You have the latest version of Open WebUI ({wersja}).",
+  "Dostępna nowa wersja Open WebUI: {najnowsza} (masz {lokalna}).": "A new version of Open WebUI is available: {najnowsza} (you have {lokalna}).",
+  "Aktualizacja Open WebUI": "Open WebUI Update",
+  "Dostępna jest nowsza wersja Open WebUI: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNowe wersje zwykle poprawiają błędy i dodają funkcje, a czasem wymagają ich, by dobrze współpracować z nowszą Ollamą.\n\nZainstalować aktualizację teraz?\n\nUruchomi 'uv tool upgrade' dla bieżącego użytkownika\n(bez uprawnień administratora - wymaga internetu).": "A newer version of Open WebUI is available: {najnowsza}\nYou have installed: {lokalna}\n\nNewer versions usually fix bugs and add features, and sometimes require them to work well with a newer Ollama.\n\nInstall the update now?\n\nThis will run 'uv tool upgrade' for the current user\n(no administrator privileges required - needs an internet connection).",
+  "Aktualizuję Open WebUI - to może potrwać kilka minut...": "Updating Open WebUI - this may take a few minutes...",
+  "uv tool upgrade: nieznany błąd": "uv tool upgrade: unknown error"
 }

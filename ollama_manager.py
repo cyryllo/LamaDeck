@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.4.22"
+WERSJA = "0.4.23"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -588,6 +588,47 @@ def webui_zainstaluj():
     )
     if wynik.returncode != 0:
         raise RuntimeError(wynik.stderr.strip() or _("uv tool install: nieznany błąd"))
+
+
+def webui_wersja_lokalna():
+    # WHAT: czyta zainstalowaną wersję Open WebUI z 'uv tool list'.
+    # WHY:  binarka 'open-webui' nie ma flagi --version - ale 'uv', który ją
+    #       zainstalował (patrz webui_zainstaluj), zna dokładną wersję w swoim
+    #       środowisku narzędzia i wypisuje ją jako "open-webui vX.Y.Z".
+    uv = _uv_binarka()
+    if not uv:
+        return None
+    try:
+        r = subprocess.run([uv, "tool", "list"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    dopasowanie = re.search(r"^open-webui\s+v?(\d+\.\d+\.\d+)", r.stdout, re.MULTILINE)
+    return dopasowanie.group(1) if dopasowanie else None
+
+
+def webui_wersja_najnowsza():
+    # WHAT: pyta PyPI o najnowszą opublikowaną wersję pakietu 'open-webui'. Rzuca
+    #       wyjątek przy błędzie sieci - łapie go wywołujący (SprawdzAktualizacjeWorker).
+    # WHY:  'uv tool install'/'uv tool upgrade' i tak instalują z PyPI - to samo
+    #       źródło prawdy, którego użyje sama instalacja, nie osobne repo GitHub.
+    r = requests.get("https://pypi.org/pypi/open-webui/json", timeout=5)
+    r.raise_for_status()
+    return r.json().get("info", {}).get("version") or None
+
+
+def webui_aktualizuj():
+    # WHAT: aktualizuje Open WebUI do najnowszej wersji przez 'uv tool upgrade'.
+    # WHY:  'uv tool upgrade' pamięta oryginalne opcje instalacji (m.in. przypięty
+    #       Python 3.11 z webui_zainstaluj) i reinstaluje w tym samym środowisku
+    #       narzędzia - nie trzeba duplikować 'uv tool install --python 3.11' tutaj.
+    #       Bez pkexec - w przeciwieństwie do Ollamy, to zwykły proces użytkownika.
+    uv = _uv_zapewnij()
+    wynik = subprocess.run(
+        [uv, "tool", "upgrade", "open-webui"],
+        capture_output=True, text=True, timeout=None,
+    )
+    if wynik.returncode != 0:
+        raise RuntimeError(wynik.stderr.strip() or _("uv tool upgrade: nieznany błąd"))
 
 
 def webui_zainstaluj_opcjonalne():
@@ -1266,20 +1307,28 @@ class ActionWorker(QThread):
 
 
 class SprawdzAktualizacjeWorker(QThread):
-    """Sprawdza w tle, czy jest dostępna nowsza wersja Ollamy niż zainstalowana.
+    """Sprawdza w tle, czy jest dostępna nowsza wersja programu niż zainstalowana.
 
-    WHY: 'ollama --version' (subprocess) i zapytanie do GitHub (sieć) są
+    WHY: odczyt lokalnej wersji (subprocess) i zapytanie o najnowszą (sieć) są
          blokujące - jak każda inna sieć/proces w tej appce, idą w osobnym wątku.
          Osobny worker (nie ActionWorker) - potrzebujemy z powrotem STRUKTURY
          danych (obie wersje + czy jest aktualizacja), nie tylko tekstu komunikatu.
+         Ogólny - przyjmuje funkcje "wersja lokalna"/"wersja najnowsza" w
+         konstruktorze, żeby nie duplikować tej samej logiki dla Ollamy i Open
+         WebUI (dwa różne miejsca w oknie wołają ten sam worker z różnymi funkcjami).
     """
     # {"blad": str|None, "lokalna": str|None, "najnowsza": str|None, "dostepna": bool}
     wynik = pyqtSignal(dict)
 
+    def __init__(self, funkcja_lokalna, funkcja_najnowsza):
+        super().__init__()
+        self.funkcja_lokalna = funkcja_lokalna
+        self.funkcja_najnowsza = funkcja_najnowsza
+
     def run(self):
-        lokalna = ollama_wersja_lokalna()
+        lokalna = self.funkcja_lokalna()
         try:
-            najnowsza = ollama_wersja_najnowsza()
+            najnowsza = self.funkcja_najnowsza()
         except requests.RequestException as e:
             self.wynik.emit({"blad": str(e), "lokalna": lokalna, "najnowsza": None, "dostepna": False})
             return
@@ -1460,6 +1509,7 @@ class MainWindow(QMainWindow):
         self._webui_worker = None       # WHY: to samo dla instalacji/uruchomienia Open WebUI
         self._webui_zainstalowane = False  # WHY: potrzebne w klik_webui, żeby wiedzieć co robi przycisk
         self._webui_dziala = False         # WHY: jw. - odróżnia "Uruchom" od "Otwórz" w tym samym miejscu
+        self._aktualizacja_webui_worker = None  # WHY: to samo dla sprawdzania aktualizacji Open WebUI
         self._litellm_worker = None     # WHY: to samo dla instalacji/uruchomienia LiteLLM
         self._litellm_zainstalowany = False  # WHY: potrzebne w klik_litellm, żeby wiedzieć co robi przycisk
         self._agregator_worker = None   # WHY: osobny wątek na podgląd modeli (zakładka "Agregator modeli")
@@ -1667,6 +1717,18 @@ class MainWindow(QMainWindow):
         self.chk_webui_autostart.setEnabled(False)  # WHY: bez sensu, dopóki WebUI nie jest zainstalowane
         self.chk_webui_autostart.toggled.connect(self.przelacz_webui_autostart)
         uk_webui.addWidget(self.chk_webui_autostart)
+
+        # WHAT: to samo co przy Ollamie wyżej - sprawdzanie aktualizacji NA
+        #       ŻĄDANIE (przycisk), nie w cyklicznym odświeżaniu co 10 s.
+        pasek_aktualizacji_webui = QHBoxLayout()
+        self.btn_sprawdz_aktualizacje_webui = QPushButton(_("Sprawdź aktualizacje"))
+        self.btn_sprawdz_aktualizacje_webui.clicked.connect(self.sprawdz_aktualizacje_webui)
+        pasek_aktualizacji_webui.addWidget(self.btn_sprawdz_aktualizacje_webui)
+        self.lbl_wersja_webui = QLabel("")
+        pasek_aktualizacji_webui.addWidget(self.lbl_wersja_webui)
+        pasek_aktualizacji_webui.addStretch(1)
+        uk_webui.addLayout(pasek_aktualizacji_webui)
+
         lewa_kolumna.addWidget(karta_webui)
 
         lewa_kolumna.addStretch(1)  # WHY: karty trzymają się góry lewej kolumny
@@ -2372,6 +2434,13 @@ class MainWindow(QMainWindow):
         self.chk_webui_autostart.setChecked(stan["webui_autostart"])
         self.chk_webui_autostart.blockSignals(False)
 
+        # WHY: jak przy Ollamie - bez sensu sprawdzać aktualizacje czegoś, co
+        #      nie jest zainstalowane, ani odpalać sprawdzenie 2x naraz.
+        aktualizacja_webui_w_toku = bool(
+            self._aktualizacja_webui_worker and self._aktualizacja_webui_worker.isRunning()
+        )
+        self.btn_sprawdz_aktualizacje_webui.setEnabled(stan["webui"] and not aktualizacja_webui_w_toku)
+
         # WHAT: jeden przycisk, dwa znaczenia - "Zainstaluj" / "Uruchom" - w
         #       przeciwieństwie do WebUI nie ma tu trzeciego stanu "Otwórz",
         #       bo LiteLLM to sam endpoint API, nie strona do oglądania.
@@ -2447,7 +2516,7 @@ class MainWindow(QMainWindow):
             return
         self.wpis_log(_("Sprawdzam dostępność aktualizacji Ollamy..."))
         self.btn_sprawdz_aktualizacje.setEnabled(False)
-        worker = SprawdzAktualizacjeWorker()
+        worker = SprawdzAktualizacjeWorker(ollama_wersja_lokalna, ollama_wersja_najnowsza)
         self._workers.append(worker)
 
         def _po_sprawdzeniu(wynik, w=worker):
@@ -2583,6 +2652,64 @@ class MainWindow(QMainWindow):
             return
         self.wpis_log(_("Zatrzymuję Open WebUI..."))
         self._webui_worker = self._uruchom_akcje(webui_zatrzymaj, _("Zatrzymanie Open WebUI"))
+
+    def sprawdz_aktualizacje_webui(self):
+        # WHAT: to samo co sprawdz_aktualizacje_ollamy, tylko dla Open WebUI -
+        #       'uv tool list' (lokalnie) + PyPI (najnowsza), a przy zgodzie
+        #       'uv tool upgrade' zamiast oficjalnego skryptu instalacyjnego.
+        # WHY:  Open WebUI dostaje częste aktualizacje (poprawki, nowe funkcje,
+        #       kompatybilność z nowszym API Ollamy) - łatwo przeoczyć, że jest
+        #       nowsza wersja, skoro appka sama nigdy nie sprawdza tego w tle.
+        if self._aktualizacja_webui_worker and self._aktualizacja_webui_worker.isRunning():
+            self.wpis_log(_("Sprawdzanie aktualizacji już trwa - poczekaj na zakończenie."))
+            return
+        self.wpis_log(_("Sprawdzam dostępność aktualizacji Open WebUI..."))
+        self.btn_sprawdz_aktualizacje_webui.setEnabled(False)
+        worker = SprawdzAktualizacjeWorker(webui_wersja_lokalna, webui_wersja_najnowsza)
+        self._workers.append(worker)
+
+        def _po_sprawdzeniu(wynik, w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+            self.btn_sprawdz_aktualizacje_webui.setEnabled(True)
+            self._pokaz_wynik_sprawdzenia_aktualizacji_webui(wynik)
+
+        worker.wynik.connect(_po_sprawdzeniu)
+        self._aktualizacja_webui_worker = worker
+        worker.start()
+
+    def _pokaz_wynik_sprawdzenia_aktualizacji_webui(self, wynik):
+        # WHAT: loguje wynik i - gdy jest nowsza wersja - pyta, czy zaktualizować
+        #       teraz. W przeciwieństwie do Ollamy NIE wymaga pkexec/roota -
+        #       'uv tool upgrade' działa jako zwykły użytkownik (patrz webui_aktualizuj).
+        if wynik["lokalna"]:
+            self.lbl_wersja_webui.setText(_("wersja: {wersja}").format(wersja=wynik["lokalna"]))
+        if wynik["blad"]:
+            self.wpis_log(_("Nie udało się sprawdzić aktualizacji Open WebUI: {blad}").format(blad=wynik["blad"]))
+            return
+        if not wynik["dostepna"]:
+            self.wpis_log(_("Masz najnowszą wersję Open WebUI ({wersja}).").format(wersja=wynik["lokalna"]))
+            return
+        self.wpis_log(_("Dostępna nowa wersja Open WebUI: {najnowsza} (masz {lokalna}).").format(
+            najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]))
+        odp = QMessageBox.question(
+            self, _("Aktualizacja Open WebUI"),
+            _("Dostępna jest nowsza wersja Open WebUI: {najnowsza}\n"
+              "Masz zainstalowaną: {lokalna}\n\n"
+              "Nowe wersje zwykle poprawiają błędy i dodają funkcje, a czasem "
+              "wymagają ich, by dobrze współpracować z nowszą Ollamą.\n\n"
+              "Zainstalować aktualizację teraz?\n\n"
+              "Uruchomi 'uv tool upgrade' dla bieżącego użytkownika\n"
+              "(bez uprawnień administratora - wymaga internetu).").format(
+                najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]),
+        )
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        self.wpis_log(_("Aktualizuję Open WebUI - to może potrwać kilka minut..."))
+        # WHY: zapisujemy jako _webui_worker - ten sam worker, który blokuje
+        #      "Uruchom/Zatrzymaj WebUI" w _po_odswiezeniu, żeby nie dało się
+        #      odpalić/zatrzymać WebUI w trakcie jego własnej aktualizacji.
+        self._webui_worker = self._uruchom_akcje(webui_aktualizuj, _("Aktualizacja Open WebUI"))
 
     # --- Sterowanie usługą ---
     def start_uslugi(self):

@@ -188,5 +188,13 @@
   "Aktualizacja Ollamy": "Ollama-Update",
   "Dostępna jest nowsza wersja Ollamy: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNiektóre modele wymagają nowszej wersji Ollamy, żeby działać poprawnie - warto aktualizować.\n\nZainstalować aktualizację teraz?\n\nPobierze i uruchomi oficjalny skrypt instalacyjny z ollama.com\n(wymaga uprawnień administratora i połączenia z internetem).": "Eine neuere Version von Ollama ist verfügbar: {najnowsza}\nInstalliert ist: {lokalna}\n\nManche Modelle benötigen eine neuere Version von Ollama, um korrekt zu funktionieren - eine Aktualisierung lohnt sich.\n\nUpdate jetzt installieren?\n\nLädt das offizielle Installationsskript von ollama.com herunter und führt es aus\n(erfordert Administratorrechte und eine Internetverbindung).",
   "Aktualizuję Ollamę - to może potrwać kilka minut...": "Aktualisiere Ollama - das kann einige Minuten dauern...",
-  "wersja: {wersja}": "Version: {wersja}"
+  "wersja: {wersja}": "Version: {wersja}",
+  "Sprawdzam dostępność aktualizacji Open WebUI...": "Suche nach Open-WebUI-Updates...",
+  "Nie udało się sprawdzić aktualizacji Open WebUI: {blad}": "Update-Prüfung für Open WebUI fehlgeschlagen: {blad}",
+  "Masz najnowszą wersję Open WebUI ({wersja}).": "Sie haben die neueste Version von Open WebUI ({wersja}).",
+  "Dostępna nowa wersja Open WebUI: {najnowsza} (masz {lokalna}).": "Eine neue Version von Open WebUI ist verfügbar: {najnowsza} (Sie haben {lokalna}).",
+  "Aktualizacja Open WebUI": "Open-WebUI-Update",
+  "Dostępna jest nowsza wersja Open WebUI: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNowe wersje zwykle poprawiają błędy i dodają funkcje, a czasem wymagają ich, by dobrze współpracować z nowszą Ollamą.\n\nZainstalować aktualizację teraz?\n\nUruchomi 'uv tool upgrade' dla bieżącego użytkownika\n(bez uprawnień administratora - wymaga internetu).": "Eine neuere Version von Open WebUI ist verfügbar: {najnowsza}\nInstalliert ist: {lokalna}\n\nNeuere Versionen beheben meist Fehler und bringen neue Funktionen, und werden manchmal benötigt, damit alles mit einer neueren Ollama gut zusammenarbeitet.\n\nUpdate jetzt installieren?\n\nFührt 'uv tool upgrade' für den aktuellen Benutzer aus\n(keine Administratorrechte nötig - erfordert eine Internetverbindung).",
+  "Aktualizuję Open WebUI - to może potrwać kilka minut...": "Aktualisiere Open WebUI - das kann einige Minuten dauern...",
+  "uv tool upgrade: nieznany błąd": "uv tool upgrade: unbekannter Fehler"
 }
