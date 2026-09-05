@@ -66,6 +66,9 @@ python3 ollama_manager.py
 - Start / stop the systemd service, live status detection
 - Autostart on system boot
 - Detects a missing install + a one-click install button
+- On-demand update check against the latest GitHub release, with a prompt to reinstall
+  (the official install script updates an existing install in place) if you're behind — useful
+  since newer models sometimes need a newer Ollama to even load
 
 **Models**
 - Table of installed models — name, disk size, and an estimated/live VRAM column each — + deletion
@@ -86,6 +89,10 @@ python3 ollama_manager.py
 - One-click install of the browser chat panel (no Docker)
 - Start / stop, autostart on login
 - The "Open WebUI" button opens the panel in the browser (no automatic opening)
+- On-demand update check against the latest PyPI release, with a prompt to upgrade via
+  `uv tool upgrade` (no admin rights needed) if you're behind
+- After a fresh install, offers to install the optional `ffmpeg`/`pandoc`/`zstd` packages
+  needed for voice transcription and document RAG (the only step that needs admin rights)
 
 **Server switcher**
 - Choose the Ollama host (localhost or any host on the LAN, e.g. BC-250) for model operations

@@ -65,6 +65,9 @@ python3 ollama_manager.py
 - Start / stop usługi systemd, wykrywanie stanu na bieżąco
 - Autostart przy starcie systemu
 - Wykrywanie braku instalacji + przycisk instalującej ją jednym kliknięciem
+- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na GitHubie, z propozycją
+  reinstalacji (oficjalny skrypt instalacyjny aktualizuje istniejącą instalację w miejscu),
+  gdy masz starszą wersję — przydatne, bo niektóre modele wymagają nowszej Ollamy, żeby w ogóle się wczytać
 
 **Modele**
 - Tabela zainstalowanych modeli — nazwa, rozmiar na dysku i kolumna z szacowanym/realnym
@@ -87,6 +90,10 @@ python3 ollama_manager.py
 - Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)
 - Start / stop, autostart po zalogowaniu
 - Przycisk "Otwórz WebUI" otwiera panel w przeglądarce (bez automatycznego otwierania)
+- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na PyPI, z propozycją
+  aktualizacji przez `uv tool upgrade` (bez uprawnień administratora), gdy masz starszą wersję
+- Po udanej instalacji appka proponuje doinstalowanie opcjonalnych pakietów `ffmpeg`/`pandoc`/`zstd`
+  potrzebnych do transkrypcji głosu i importu dokumentów do RAG (jedyny krok wymagający roota)
 
 **Przełącznik serwera**
 - Wybór hosta Ollama (localhost albo dowolny w LAN, np. BC-250) dla operacji na modelach
