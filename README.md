@@ -8,9 +8,9 @@ everything runs on your LAN.
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
-> **Status: working, but still beta.** Actively developed — I'm continuously testing it for
-> correctness and regularly adding new options and features. Expect occasional rough edges;
-> [bug reports and feedback](../../issues) are welcome.
+> **Status: stable (v0.5.0).** Daily driver on my own setup, working as expected. Still
+> actively developed — new options and features keep coming; [bug reports and
+> feedback](../../issues) are welcome.
 
 ![Ollama Manager — Services tab](om.png)
 
