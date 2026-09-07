@@ -12,7 +12,7 @@ everything runs on your LAN.
 > actively developed — new options and features keep coming; [bug reports and
 > feedback](../../issues) are welcome.
 
-![Ollama Manager — Services tab](om.png)
+![Ollama Manager — Models tab](om.png)
 
 ## Requirements
 

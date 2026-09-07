@@ -11,7 +11,7 @@ lokalnie, w Twoim LAN.
 > zgodnie z oczekiwaniami. Nadal aktywnie rozwijana — regularnie dochodzą nowe opcje
 > i funkcjonalności; [zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
-![Ollama Manager — zakładka Usługi](om.png)
+![Ollama Manager — zakładka Modele](om.png)
 
 ## Wymagania
 
