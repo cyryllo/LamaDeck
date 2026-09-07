@@ -199,14 +199,15 @@
   "uv tool upgrade: nieznany błąd": "uv tool upgrade: error desconocido",
   "Pobierz z Hugging Face...": "Descargar desde Hugging Face...",
   "Pobierz z Hugging Face": "Descargar desde Hugging Face",
-  "Link do repo albo 'użytkownik/repo':": "Enlace del repositorio o 'usuario/repo':",
-  "Szukaj wariantów": "Buscar variantes",
-  "Dostępne kwantyzacje:": "Cuantizaciones disponibles:",
   "Anuluj": "Cancelar",
-  "Wklej poprawny link do Hugging Face albo 'użytkownik/repo'.": "Pega un enlace válido de Hugging Face o 'usuario/repo'.",
   "Szukam dostępnych wariantów...": "Buscando variantes disponibles...",
   "Znalezione warianty: {n}": "Variantes encontradas: {n}",
   "domyślny (bez sufiksu)": "predeterminado (sin sufijo)",
   "Nie znaleziono takiego repozytorium na Hugging Face.": "No se encontró ese repositorio en Hugging Face.",
-  "To repozytorium nie zawiera żadnych plików .gguf.": "Este repositorio no contiene ningún archivo .gguf."
+  "To repozytorium nie zawiera żadnych plików .gguf.": "Este repositorio no contiene ningún archivo .gguf.",
+  "Szukaj modelu (nazwa) albo wklej link/repo:": "Busca por nombre de modelo o pega un enlace/repo:",
+  "Szukaj": "Buscar",
+  "Szukam pasujących repozytoriów...": "Buscando repositorios coincidentes...",
+  "Brak pasujących repozytoriów GGUF na Hugging Face.": "No se encontraron repositorios GGUF coincidentes en Hugging Face.",
+  "Znalezione repozytoria: {n} - wybierz, aby zobaczyć warianty.": "Repositorios encontrados: {n} - selecciona uno para ver sus variantes."
 }

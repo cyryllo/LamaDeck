@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.1"
+WERSJA = "0.5.2"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -1076,6 +1076,31 @@ def hf_wyszukaj_warianty_gguf(repo):
     return sorted(warianty.items(), key=lambda kv: (kv[0] is None, kv[0] or ""))
 
 
+def hf_wyszukaj_repozytoria(zapytanie):
+    # WHAT: szuka repo na Hugging Face pasujących do zapytania (nazwa, nie
+    #       dokładny "user/repo"), ograniczone do tych oznaczonych tagiem
+    #       'gguf' (HF sam dokleja go repo, w którym wykryje pliki .gguf) -
+    #       odsiewa z góry repo w surowym safetensors, których appka/Ollama i
+    #       tak by nie pobrała. Posortowane wg liczby pobrań - najpopularniejsze
+    #       (zwykle najlepiej utrzymane kwantyzacje, np. bartowski/unsloth) pierwsze.
+    # WHY:  Wariant C z CLAUDE.md (roadmapa) - alternatywa dla wklejania gotowego
+    #       linku/repo (Wariant B, hf_wyszukaj_warianty_gguf), gdy użytkownik
+    #       zna tylko nazwę modelu, nie dokładne repo z kwantyzacją.
+    r = requests.get(
+        "https://huggingface.co/api/models",
+        params={
+            "search": zapytanie, "filter": "gguf",
+            "sort": "downloads", "direction": "-1", "limit": 20,
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+    return [
+        {"id": wpis.get("id", ""), "pobrania": wpis.get("downloads", 0)}
+        for wpis in r.json() if wpis.get("id")
+    ]
+
+
 def _parsuj_rozmiar_parametrow(tekst):
     # WHAT: wyciąga liczbę parametrów (W MILIARDACH) z tekstu typu "8b", "1.5B",
     #       "300m", "70b-instruct", "llama3.1:8b" albo details.parameter_size z
@@ -1448,6 +1473,24 @@ class SzukajGGUFWorker(QThread):
         self.wynik.emit(warianty)
 
 
+class SzukajRepoWorker(QThread):
+    """Szuka repozytoriów GGUF na Hugging Face pasujących do nazwy, w tle."""
+    wynik = pyqtSignal(list)   # lista {"id": str, "pobrania": int} - patrz hf_wyszukaj_repozytoria
+    blad = pyqtSignal(str)
+
+    def __init__(self, zapytanie):
+        super().__init__()
+        self.zapytanie = zapytanie
+
+    def run(self):
+        try:
+            wyniki = hf_wyszukaj_repozytoria(self.zapytanie)
+        except requests.RequestException as e:
+            self.blad.emit(str(e))
+            return
+        self.wynik.emit(wyniki)
+
+
 class AgregatorWorker(QThread):
     """Odpytuje na żywo hosty z listy serwerów o zainstalowane modele.
 
@@ -1600,16 +1643,24 @@ class DialogConfigContinue(QDialog):
 
 
 class DialogPobierzZHF(QDialog):
-    """Pobieranie modelu GGUF z Hugging Face - wpisz repo, wybierz kwantyzację.
+    """Pobieranie modelu GGUF z Hugging Face - szukaj po nazwie albo wklej repo.
 
     WHY: Ollama umie ściągać GGUF wprost z HF ('hf.co/<user>/<repo>:<kwant>'),
-         ale trzeba znać dokładny string kwantyzacji z nazwy pliku w repo -
-         ten dialog go znajduje sam (patrz hf_wyszukaj_warianty_gguf), zamiast
-         każenia szukać na stronie HF w zakładce "Files and versions". Dialog
-         TYLKO buduje string modelu (self.tag_modelu) - samo pobieranie idzie
-         już istniejącym pull_stream()/PullWorker w oknie głównym (patrz
-         MainWindow.pobierz_z_hf) po zamknięciu, zero duplikacji paska
-         postępu/logu/odświeżania listy modeli.
+         ale trzeba znać dokładne repo I string kwantyzacji z nazwy pliku -
+         ten dialog znajduje oba sam, zamiast każenia szukać ręcznie na
+         stronie HF. Dialog TYLKO buduje string modelu (self.tag_modelu) -
+         samo pobieranie idzie już istniejącym pull_stream()/PullWorker w
+         oknie głównym (patrz MainWindow.pobierz_z_hf) po zamknięciu, zero
+         duplikacji paska postępu/logu/odświeżania listy modeli.
+
+         JEDNO pole tekstowe ma DWA znaczenia zależnie od treści (Wariant B +
+         Wariant C z CLAUDE.md, roadmapa): tekst z "/" (link albo gotowe
+         "user/repo") -> od razu szuka WARIANTÓW kwantyzacji w tym repo
+         (hf_wyszukaj_warianty_gguf); zwykła nazwa/fraza (bez "/") -> szuka
+         PASUJĄCYCH REPO po nazwie (hf_wyszukaj_repozytoria), a wybór jednego
+         z wyników dopiero wtedy doszukuje jego wariantów - ta sama lista
+         (`self.lista_wynikow`) jest przeładowywana w obu trybach
+         (`self._tryb`), żeby nie duplikować układu okna.
     """
 
     def __init__(self, parent=None):
@@ -1619,24 +1670,24 @@ class DialogPobierzZHF(QDialog):
         self.repo = None
         self.tag_modelu = None  # WHY: wynik dla wywołującego - ustawiany dopiero w _pobierz()
         self._worker = None
+        self._tryb = None  # "repozytoria" albo "warianty" - patrz docstring klasy
 
         layout = QVBoxLayout(self)
 
-        layout.addWidget(QLabel(_("Link do repo albo 'użytkownik/repo':")))
-        pasek_repo = QHBoxLayout()
-        self.pole_repo = QLineEdit()
-        self.pole_repo.setPlaceholderText("bartowski/Qwen2.5-Coder-7B-Instruct-GGUF")
-        self.pole_repo.returnPressed.connect(self._szukaj)
-        self.btn_szukaj = QPushButton(_("Szukaj wariantów"))
+        layout.addWidget(QLabel(_("Szukaj modelu (nazwa) albo wklej link/repo:")))
+        pasek_zapytanie = QHBoxLayout()
+        self.pole_zapytanie = QLineEdit()
+        self.pole_zapytanie.setPlaceholderText("qwen2.5-coder  —  albo  bartowski/Qwen2.5-Coder-7B-Instruct-GGUF")
+        self.pole_zapytanie.returnPressed.connect(self._szukaj)
+        self.btn_szukaj = QPushButton(_("Szukaj"))
         self.btn_szukaj.clicked.connect(self._szukaj)
-        pasek_repo.addWidget(self.pole_repo, 1)
-        pasek_repo.addWidget(self.btn_szukaj)
-        layout.addLayout(pasek_repo)
+        pasek_zapytanie.addWidget(self.pole_zapytanie, 1)
+        pasek_zapytanie.addWidget(self.btn_szukaj)
+        layout.addLayout(pasek_zapytanie)
 
-        layout.addWidget(QLabel(_("Dostępne kwantyzacje:")))
-        self.lista_wariantow = QListWidget()
-        self.lista_wariantow.itemSelectionChanged.connect(self._zmien_zaznaczenie)
-        layout.addWidget(self.lista_wariantow, 1)
+        self.lista_wynikow = QListWidget()
+        self.lista_wynikow.itemSelectionChanged.connect(self._zmien_zaznaczenie)
+        layout.addWidget(self.lista_wynikow, 1)
 
         self.lbl_status = QLabel("")
         self.lbl_status.setWordWrap(True)
@@ -1654,27 +1705,58 @@ class DialogPobierzZHF(QDialog):
         layout.addLayout(pasek_przyciskow)
 
     def _zmien_zaznaczenie(self):
-        self.btn_pobierz.setEnabled(bool(self.lista_wariantow.selectedItems()))
+        pozycje = self.lista_wynikow.selectedItems()
+        if self._tryb == "warianty":
+            self.btn_pobierz.setEnabled(bool(pozycje))
+            return
+        # WHY: w trybie "repozytoria" zaznaczenie nie pobiera niczego wprost -
+        #      od razu doszukuje warianty WYBRANEGO repo (patrz _szukaj_warianty).
+        self.btn_pobierz.setEnabled(False)
+        if pozycje:
+            self._szukaj_warianty(pozycje[0].data(Qt.ItemDataRole.UserRole))
 
     def _szukaj(self):
         if self._worker and self._worker.isRunning():
             return
-        repo = _hf_repo_z_linku(self.pole_repo.text())
-        if not repo:
-            self.lbl_status.setText(_("Wklej poprawny link do Hugging Face albo 'użytkownik/repo'."))
+        tekst = self.pole_zapytanie.text().strip()
+        if not tekst:
+            return
+        repo = _hf_repo_z_linku(tekst)
+        if repo:
+            self._szukaj_warianty(repo)
+        else:
+            self._szukaj_repozytoria(tekst)
+
+    def _szukaj_warianty(self, repo):
+        # WHY: wołane zarówno wprost z pola (tekst z "/"), jak i po kliknięciu
+        #      wyniku wyszukiwania po nazwie - stąd osobna metoda od _szukaj().
+        if self._worker and self._worker.isRunning():
             return
         self.repo = repo
-        self.lista_wariantow.clear()
+        self._tryb = "warianty"
+        self.lista_wynikow.clear()
         self.btn_pobierz.setEnabled(False)
         self.btn_szukaj.setEnabled(False)
         self.lbl_status.setText(_("Szukam dostępnych wariantów..."))
 
         self._worker = SzukajGGUFWorker(repo)
-        self._worker.wynik.connect(self._po_wyszukaniu)
+        self._worker.wynik.connect(self._po_wyszukaniu_wariantow)
         self._worker.blad.connect(self._po_bledzie)
         self._worker.start()
 
-    def _po_wyszukaniu(self, warianty):
+    def _szukaj_repozytoria(self, zapytanie):
+        self._tryb = "repozytoria"
+        self.lista_wynikow.clear()
+        self.btn_pobierz.setEnabled(False)
+        self.btn_szukaj.setEnabled(False)
+        self.lbl_status.setText(_("Szukam pasujących repozytoriów..."))
+
+        self._worker = SzukajRepoWorker(zapytanie)
+        self._worker.wynik.connect(self._po_wyszukaniu_repozytoriow)
+        self._worker.blad.connect(self._po_bledzie)
+        self._worker.start()
+
+    def _po_wyszukaniu_wariantow(self, warianty):
         self.btn_szukaj.setEnabled(True)
         self.lbl_status.setText(_("Znalezione warianty: {n}").format(n=len(warianty)))
         for kwant, rozmiar_bajty in warianty:
@@ -1682,14 +1764,27 @@ class DialogPobierzZHF(QDialog):
             gb = rozmiar_bajty / (1024 ** 3)
             pozycja = QListWidgetItem(f"{etykieta}   —   {gb:.1f} GB")
             pozycja.setData(Qt.ItemDataRole.UserRole, kwant)
-            self.lista_wariantow.addItem(pozycja)
+            self.lista_wynikow.addItem(pozycja)
+
+    def _po_wyszukaniu_repozytoriow(self, wyniki):
+        self.btn_szukaj.setEnabled(True)
+        if not wyniki:
+            self.lbl_status.setText(_("Brak pasujących repozytoriów GGUF na Hugging Face."))
+            return
+        self.lbl_status.setText(_("Znalezione repozytoria: {n} - wybierz, aby zobaczyć warianty.").format(n=len(wyniki)))
+        for wpis in wyniki:
+            pozycja = QListWidgetItem(f"{wpis['id']}   —   {wpis['pobrania']:,} ⬇".replace(",", " "))
+            pozycja.setData(Qt.ItemDataRole.UserRole, wpis["id"])
+            self.lista_wynikow.addItem(pozycja)
 
     def _po_bledzie(self, komunikat):
         self.btn_szukaj.setEnabled(True)
         self.lbl_status.setText(komunikat)
 
     def _pobierz(self):
-        pozycje = self.lista_wariantow.selectedItems()
+        if self._tryb != "warianty":
+            return
+        pozycje = self.lista_wynikow.selectedItems()
         if not pozycje:
             return
         kwant = pozycje[0].data(Qt.ItemDataRole.UserRole)
