@@ -85,6 +85,10 @@ python3 ollama_manager.py
 - Bieżące, orientacyjne wyliczenie zużycia pamięci (wagi + KV cache + bufory, plus zalecany RAM)
   przy wyborze rozmiaru/kwantyzacji
 - Podgląd modeli aktualnie załadowanych do pamięci (VRAM)
+- Najechanie na wiersz w tabeli zainstalowanych modeli pokazuje dymek ze źródłem (oficjalna
+  biblioteka Ollamy albo Hugging Face z autorem/wydawcą kwantyzacji), rodziną modelu, liczbą
+  parametrów, kwantyzacją i datą pobrania - modele z HF mają też skróconą nazwę w samej tabeli
+  (`<repo>:<kwant> (hf)`) zamiast pełnej `hf.co/<użytkownik>/<repo>:<kwant>`
 - **Pobieranie modeli GGUF wprost z Hugging Face** — jedno pole, dwa sposoby użycia: wklej link
   do repo (albo `użytkownik/repo`), żeby od razu zobaczyć dostępne warianty kwantyzacji (z
   rozmiarami), albo po prostu wpisz nazwę modelu, żeby wyszukać pasujące repo na Hugging Face

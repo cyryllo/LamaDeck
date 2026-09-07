@@ -35,14 +35,14 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QListWidget, QListWidgetItem, QProgressBar, QTabWidget,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
-    QDialog, QLineEdit, QScrollArea,
+    QDialog, QLineEdit, QScrollArea, QFrame,
 )
 
 # --- Konfiguracja ---------------------------------------------------------
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.6"
+WERSJA = "0.5.10"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -1100,8 +1100,73 @@ def _skroc_nazwe_modelu_hf(nazwa):
     if not nazwa.startswith("hf.co/"):
         return nazwa
     reszta = nazwa[len("hf.co/"):]  # "<użytkownik>/<repo>:<kwant>"
-    _uzytkownik, _, repo_i_kwant = reszta.partition("/")
+    # WHY: NIE nazywamy separatora bezimiennym "_" - to by przesłoniło
+    #      globalną funkcję tłumaczeń _() w reszcie funkcji (patrz bug
+    #      naprawiony w _zbuduj_tooltip_modelu, ten sam wzorzec partition()).
+    _uzytkownik, _sep, repo_i_kwant = reszta.partition("/")
     return f"{repo_i_kwant or reszta} (hf)"
+
+
+def _zbuduj_tooltip_modelu(m):
+    # WHAT: składa dymek (tooltip) z podstawowymi informacjami o modelu -
+    #       skąd pochodzi (Ollama library / Hugging Face + autor kwantyzacji
+    #       dla HF), rodzina, parametry, kwantyzacja, data pobrania.
+    # WHY:  na wyraźną prośbę użytkownika ("skąd pobranie, kto jest autorem
+    #       itd") - najprostsza droga do pokazania tego bez budowania osobnego
+    #       panelu: dymek po najechaniu na wiersz, wszystko już mamy z
+    #       /api/tags (patrz OllamaClient.list_models), zero dodatkowych zapytań.
+    #       Zwykły tekst (nie <a href>) dla adresów URL - dymki nie są klikalne,
+    #       więc prawdziwy link tylko myliłby.
+    nazwa = m.get("name", "")
+    linie = [f"<b>{nazwa}</b>"]
+
+    if nazwa.startswith("hf.co/"):
+        reszta = nazwa[len("hf.co/"):]
+        # WHY: NIE nazywamy separatora "_" - przesłoniłoby to globalną
+        #      funkcję tłumaczeń _(), której ta funkcja jeszcze kilka linii
+        #      niżej używa (BUG, który tak właśnie się objawił przy pierwszej
+        #      wersji tego kodu - TypeError: 'str' object is not callable).
+        uzytkownik, _sep, _reszta = reszta.partition("/")
+        repo = reszta.split(":", 1)[0]
+        linie.append(_("Źródło: Hugging Face (huggingface.co/{repo})").format(repo=repo))
+        if uzytkownik:
+            linie.append(_("Autor/wydawca kwantyzacji: {uzytkownik}").format(uzytkownik=uzytkownik))
+    else:
+        rodzina_z_nazwy = nazwa.split(":", 1)[0]
+        linie.append(_("Źródło: ollama.com/library/{model}").format(model=rodzina_z_nazwy))
+
+    rodzina = m.get("family")
+    if rodzina:
+        linie.append(_("Rodzina modelu: {rodzina}").format(rodzina=rodzina))
+    parametry = m.get("parameter_size")
+    if parametry:
+        linie.append(_("Parametry: {parametry}").format(parametry=parametry))
+    kwantyzacja = m.get("quantization_level")
+    # BUG naprawiony: Ollama dla rzadziej spotykanych etykiet kwantyzacji
+    #      (np. "Q6_K_XL" - nowsze warianty od bartowski/unsloth) zwraca
+    #      dosłowne "unknown" zamiast pustego pola - dawniej appka pokazywała
+    #      bezużyteczne "Kwantyzacja: unknown". Dla modeli z HF PRAWDZIWA
+    #      kwantyzacja i tak jest częścią tagu (":Q6_K_XL" w nazwie modelu -
+    #      to dokładnie to, co appka złożyła w DialogPobierzZHF), więc dla
+    #      takich przypadków bierzemy ją stamtąd zamiast z niewiarygodnego
+    #      pola API. Zweryfikowane na żywym modelu: hf.co/unsloth/
+    #      GLM-4.7-Flash-GGUF:Q6_K_XL - details.family="deepseek2" (GLM-4
+    #      dzieli architekturę z DeepSeek2 w silniku Ollamy - to PRAWDZIWA
+    #      wartość z API, nie błąd), details.quantization_level="unknown".
+    if (not kwantyzacja or kwantyzacja.lower() == "unknown") and nazwa.startswith("hf.co/") and ":" in nazwa:
+        kwantyzacja = nazwa.rsplit(":", 1)[1]
+    elif kwantyzacja and kwantyzacja.lower() == "unknown":
+        kwantyzacja = None  # WHY: modele spoza HF nie mają tagu do fallbacku - lepiej nic niż "unknown"
+    if kwantyzacja:
+        linie.append(_("Kwantyzacja: {kwantyzacja}").format(kwantyzacja=kwantyzacja))
+    # WHY: Ollama zwraca znacznik czasu ISO 8601 z nanosekundami - Python nie
+    #      sparsuje > 6 cyfr ułamka sekundy, więc bierzemy tylko samą datę
+    #      (pierwsze 10 znaków: RRRR-MM-DD) zamiast pełnego parsowania.
+    zmodyfikowano = (m.get("modified_at") or "")[:10]
+    if zmodyfikowano:
+        linie.append(_("Pobrano/zmodyfikowano: {data}").format(data=zmodyfikowano))
+
+    return "<br>".join(linie)
 
 
 def hf_wyszukaj_warianty_gguf(repo):
@@ -1323,12 +1388,16 @@ class OllamaClient:
 
     def list_models(self):
         # WHAT: lista zainstalowanych modeli - nazwa, rozmiar na dysku (bajty)
-        #       i metadane kwantyzacji (details.parameter_size/quantization_level).
+        #       i metadane kwantyzacji (details.parameter_size/quantization_level),
+        #       plus rodzina (details.family) i data pobrania/modyfikacji
+        #       (modified_at) - do dymku z informacjami o modelu (patrz
+        #       _zbuduj_tooltip_modelu), bez osobnego zapytania per model.
         # WHY:  rozmiar do pokazania, ile miejsca zajmuje model na dysku;
         #       parameter_size/quantization_level - do wyliczenia orientacyjnego
         #       VRAM tym samym kalkulatorem co karta "Pobierz nowy model"
         #       (patrz _oszacuj_pamiec_bpw), na PRAWDZIWYCH metadanych modelu,
-        #       nie na zgadywaniu rozmiaru z samej nazwy.
+        #       nie na zgadywaniu rozmiaru z samej nazwy. family/modified_at są
+        #       w tej samej odpowiedzi /api/tags - appka je tylko dotąd ignorowała.
         try:
             r = requests.get(f"{self.base_url}/api/tags", timeout=5)
             r.raise_for_status()
@@ -1340,6 +1409,8 @@ class OllamaClient:
                     "size": m.get("size", 0),
                     "parameter_size": szczegoly.get("parameter_size", ""),
                     "quantization_level": szczegoly.get("quantization_level", ""),
+                    "family": szczegoly.get("family", ""),
+                    "modified_at": m.get("modified_at", ""),
                 })
             return wynik
         except requests.RequestException:
@@ -1896,7 +1967,12 @@ class MainWindow(QMainWindow):
         #      model" pokazuje wieloliniowe wyliczenie pamięci (kalkulator
         #      wagi+KV cache+bufory) pod polami modelu/rozmiaru/kwantyzacji -
         #      przy 760x700 część z tego się już nie mieściła bez przewijania.
-        self.setMinimumSize(860, 910)
+        #      Szerokość podbita z 860 do 960 - nazwy modeli z Hugging Face
+        #      ("<repo>:<kwant> (hf)", patrz _skroc_nazwe_modelu_hf) bywają
+        #      dłuższe niż krótkie tagi z ollama.com/library i przy dwóch
+        #      kolumnach obok siebie ("Pobierz nowy model" + "Zainstalowane
+        #      modele") ucinały się w tabeli przy starej szerokości.
+        self.setMinimumSize(960, 910)
         self._buduj_ui()
 
         # WHAT: cykliczne odświeżanie co 10 s.
@@ -2141,19 +2217,6 @@ class MainWindow(QMainWindow):
         pasek_pull.addWidget(self.btn_pull)
         uk_pobierz.addLayout(pasek_pull)
 
-        # WHAT: osobny wiersz - alternatywne źródło modeli (GGUF z Hugging Face,
-        #       poza ollama.com/library), NA ŻĄDANIE w osobnym dialogu, żeby nie
-        #       zapychać głównego wiersza pobierania kolejnym polem.
-        # WHY:  Ollama umie ściągać GGUF wprost z HF, ale TYLKO dla repo, które
-        #       mają w środku pliki .gguf (patrz DialogPobierzZHF) - reszta HF
-        #       jest w surowym safetensors, tego appka/Ollama nie konwertuje.
-        pasek_hf = QHBoxLayout()
-        pasek_hf.addStretch(1)
-        btn_pobierz_z_hf = QPushButton(_("Pobierz z Hugging Face..."))
-        btn_pobierz_z_hf.clicked.connect(self.pobierz_z_hf)
-        pasek_hf.addWidget(btn_pobierz_z_hf)
-        uk_pobierz.addLayout(pasek_hf)
-
         # WHAT: opcjonalny rozmiar (parametry) do doklejenia do nazwy modelu -
         #       osobne pole zamiast pisania "rodzina:rozmiar" ręcznie za każdym
         #       razem. Puste = bez zmian (nazwa z pola wyżej idzie 1:1). Lista
@@ -2214,19 +2277,31 @@ class MainWindow(QMainWindow):
         lbl_link.setOpenExternalLinks(True)
         uk_pobierz.addWidget(lbl_link)
 
-        # WHAT: analogiczna wzmianka dla drugiego, alternatywnego źródła modeli -
-        #       GGUF z Hugging Face (przycisk "Pobierz z Hugging Face..." wyżej).
-        # WHY:  na wyraźną prośbę użytkownika - w przeciwieństwie do
-        #       ollama.com/library (oficjalna biblioteka Ollamy) to repozytoria
-        #       SPOŁECZNOŚCIOWE, które może założyć każdy; appka/Ollama nie
-        #       weryfikuje ich zawartości w żaden sposób, więc dopisek jasno
-        #       zaznacza, że to źródło OPCJONALNE, i doradza ograniczoną
-        #       ostrożność (znani, zaufani autorzy kwantyzacji) zamiast
-        #       ogólnikowego "uważaj" bez konkretnej wskazówki.
+        # WHAT: pozioma linia oddzielająca oficjalną bibliotekę Ollamy (wyżej)
+        #       od alternatywnego źródła - modeli GGUF z Hugging Face (niżej).
+        # WHY:  na wyraźną prośbę użytkownika - bez rozdzielenia oba źródła
+        #       (pola/przyciski Ollamy i przycisk HF) wyglądały jak jedna,
+        #       ciągła sekcja, mimo że mechanizm i charakter źródła (oficjalna
+        #       biblioteka vs. społecznościowe repo) są różne. QFrame zamiast
+        #       koloru/tła - natywny wygląd Breeze, zgodnie z resztą okna.
+        linia_hf = QFrame()
+        linia_hf.setFrameShape(QFrame.Shape.HLine)
+        linia_hf.setFrameShadow(QFrame.Shadow.Sunken)
+        uk_pobierz.addWidget(linia_hf)
+
+        # WHAT: wzmianka o drugim, alternatywnym źródle modeli - GGUF z
+        #       Hugging Face - PRZED przyciskiem, który go otwiera (czytelniej
+        #       niż przycisk nad wyjaśnieniem, co on właściwie robi).
+        # WHY:  w przeciwieństwie do ollama.com/library (oficjalna biblioteka
+        #       Ollamy) to repozytoria SPOŁECZNOŚCIOWE, które może założyć
+        #       każdy; appka/Ollama nie weryfikuje ich zawartości w żaden
+        #       sposób, więc dopisek jasno zaznacza, że to źródło OPCJONALNE,
+        #       i doradza ograniczoną ostrożność (znani, zaufani autorzy
+        #       kwantyzacji) zamiast ogólnikowego "uważaj" bez konkretnej wskazówki.
         lbl_link_hf = QLabel(
             _('Alternatywnie - modele GGUF (opcjonalnie) z '
               '<a href="https://huggingface.co/models?library=gguf">Hugging Face</a> '
-              '(przycisk "Pobierz z Hugging Face..." wyżej). To repozytoria '
+              '(przycisk "Pobierz z Hugging Face..." poniżej). To repozytoria '
               'SPOŁECZNOŚCIOWE, nie oficjalna biblioteka Ollamy - każdy może '
               'tam coś opublikować, appka niczego tam nie weryfikuje. Pobieraj '
               'tylko od znanych, zaufanych autorów kwantyzacji (np. bartowski, '
@@ -2235,6 +2310,13 @@ class MainWindow(QMainWindow):
         lbl_link_hf.setWordWrap(True)
         lbl_link_hf.setOpenExternalLinks(True)
         uk_pobierz.addWidget(lbl_link_hf)
+
+        pasek_hf = QHBoxLayout()
+        pasek_hf.addStretch(1)
+        btn_pobierz_z_hf = QPushButton(_("Pobierz z Hugging Face..."))
+        btn_pobierz_z_hf.clicked.connect(self.pobierz_z_hf)
+        pasek_hf.addWidget(btn_pobierz_z_hf)
+        uk_pobierz.addLayout(pasek_hf)
 
         self.pasek_postepu = QProgressBar()
         self.pasek_postepu.setVisible(False)
@@ -2259,8 +2341,17 @@ class MainWindow(QMainWindow):
         #       co karta "Pobierz nowy model" - _oszacuj_pamiec_bpw).
         self.lista_modeli = QTableWidget(0, 3)
         self.lista_modeli.setHorizontalHeaderLabels([_("Model"), _("Rozmiar na dysku"), _("VRAM")])
-        self.lista_modeli.horizontalHeader().setStretchLastSection(True)
+        # WHY: TYLKO kolumna "Model" się rozciąga - dostaje całą wolną
+        #      przestrzeń, żeby dłuższe nazwy (np. z Hugging Face, patrz
+        #      _skroc_nazwe_modelu_hf) miały jak najwięcej miejsca zamiast się
+        #      ucinać. "Rozmiar na dysku"/"VRAM" to zawsze krótki tekst typu
+        #      "4.4 GB" - ResizeToContents ciasno dopasowuje ich szerokość, nie
+        #      marnując miejsca, które wcześniej zabierał im setStretchLastSection
+        #      (kolumna "VRAM" jako ostatnia rozciągała się RÓWNIEŻ, walcząc
+        #      o przestrzeń z kolumną "Model" zamiast zostawić jej całą resztę).
         self.lista_modeli.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.lista_modeli.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.lista_modeli.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.lista_modeli.verticalHeader().setVisible(False)
         self.lista_modeli.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.lista_modeli.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -2809,9 +2900,21 @@ class MainWindow(QMainWindow):
             #      leci jako dane wiersza, niezależnie od tego, co się WYŚWIETLA -
             #      patrz _wybrany_model().
             pozycja_nazwa.setData(Qt.ItemDataRole.UserRole, nazwa)
+            # WHAT: dymek po najechaniu na wiersz - skąd model pochodzi, kto
+            #       jest autorem kwantyzacji (dla HF), rodzina, parametry itd.
+            # WHY:  na wyraźną prośbę użytkownika - prościej niż osobny panel
+            #       ze szczegółami (patrz _zbuduj_tooltip_modelu); dodatkowo
+            #       pokazuje PEŁNĄ nazwę, gdyby skrócona (patrz wyżej) mimo
+            #       rozciągania kolumny wciąż się nie mieściła.
+            tooltip = _zbuduj_tooltip_modelu(m)
+            pozycja_nazwa.setToolTip(tooltip)
+            pozycja_rozmiar = QTableWidgetItem(f"{rozmiar_gb:.1f} GB")
+            pozycja_rozmiar.setToolTip(tooltip)
+            pozycja_vram = QTableWidgetItem(vram_tekst)
+            pozycja_vram.setToolTip(tooltip)
             self.lista_modeli.setItem(wiersz, 0, pozycja_nazwa)
-            self.lista_modeli.setItem(wiersz, 1, QTableWidgetItem(f"{rozmiar_gb:.1f} GB"))
-            self.lista_modeli.setItem(wiersz, 2, QTableWidgetItem(vram_tekst))
+            self.lista_modeli.setItem(wiersz, 1, pozycja_rozmiar)
+            self.lista_modeli.setItem(wiersz, 2, pozycja_vram)
         if zaznaczony:
             for i in range(self.lista_modeli.rowCount()):
                 if self.lista_modeli.item(i, 0).data(Qt.ItemDataRole.UserRole) == zaznaczony:

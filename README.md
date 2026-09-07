@@ -84,6 +84,10 @@ python3 ollama_manager.py
 - Live, approximate memory-usage estimate (weights + KV cache + buffers, then a recommended-RAM
   figure) as you pick a size/quantization
 - Preview of models currently loaded into memory (VRAM)
+- Hover a row in the installed-models table for a tooltip with its source (the official Ollama
+  library, or Hugging Face with the quantization author/publisher), model family, parameter size,
+  quantization, and download date — HF-sourced models also show a shortened name
+  (`<repo>:<quant> (hf)`) in the table itself instead of the full `hf.co/<user>/<repo>:<quant>`
 - **Download GGUF models straight from Hugging Face** — one field, two ways to use it: paste a
   repo link (or `user/repo`) to list its available quantizations (with sizes) straight away, or
   just type a model name to search Hugging Face for matching repos (sorted by downloads) and pick
