@@ -209,5 +209,13 @@
   "Szukaj": "Cerca",
   "Szukam pasujących repozytoriów...": "Ricerca repository corrispondenti...",
   "Brak pasujących repozytoriów GGUF na Hugging Face.": "Nessun repository GGUF corrispondente trovato su Hugging Face.",
-  "Znalezione repozytoria: {n} - wybierz, aby zobaczyć warianty.": "Repository trovati: {n} - selezionane uno per vedere le varianti."
+  "Znalezione repozytoria: {n} - wybierz, aby zobaczyć warianty.": "Repository trovati: {n} - selezionane uno per vedere le varianti.",
+  "Sprawdzam dostępność aktualizacji LiteLLM...": "Controllo aggiornamenti di LiteLLM...",
+  "Nie udało się sprawdzić aktualizacji LiteLLM: {blad}": "Impossibile controllare gli aggiornamenti di LiteLLM: {blad}",
+  "Masz najnowszą wersję LiteLLM ({wersja}).": "Hai già l'ultima versione di LiteLLM ({wersja}).",
+  "Dostępna nowa wersja LiteLLM: {najnowsza} (masz {lokalna}).": "È disponibile una nuova versione di LiteLLM: {najnowsza} (hai {lokalna}).",
+  "Aktualizacja LiteLLM": "Aggiornamento di LiteLLM",
+  "Dostępna jest nowsza wersja LiteLLM: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNowe wersje zwykle poprawiają błędy i dodają obsługę nowszych modeli/API.\n\nZainstalować aktualizację teraz?\n\nUruchomi 'uv tool upgrade' dla bieżącego użytkownika\n(bez uprawnień administratora - wymaga internetu).": "È disponibile una versione più recente di LiteLLM: {najnowsza}\nVersione installata: {lokalna}\n\nLe versioni più recenti di solito correggono bug e aggiungono il supporto per modelli/API più recenti.\n\nInstallare l'aggiornamento ora?\n\nEseguirà 'uv tool upgrade' per l'utente corrente\n(non richiede privilegi di amministratore - richiede una connessione a internet).",
+  "Aktualizuję LiteLLM - to może potrwać kilka minut...": "Aggiornamento di LiteLLM in corso - potrebbe richiedere alcuni minuti...",
+  "Alternatywnie - modele GGUF (opcjonalnie) z <a href=\"https://huggingface.co/models?library=gguf\">Hugging Face</a> (przycisk \"Pobierz z Hugging Face...\" wyżej). To repozytoria SPOŁECZNOŚCIOWE, nie oficjalna biblioteka Ollamy - każdy może tam coś opublikować, appka niczego tam nie weryfikuje. Pobieraj tylko od znanych, zaufanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth) i sprawdź opis repozytorium przed pobraniem.": "In alternativa - modelli GGUF (opzionale) da <a href=\"https://huggingface.co/models?library=gguf\">Hugging Face</a> (pulsante \"Scarica da Hugging Face...\" sopra). Sono repository della COMUNITÀ, non la libreria ufficiale di Ollama - chiunque può pubblicarvi qualcosa, e l'app non ne verifica in alcun modo il contenuto. Scarica solo da autori di quantizzazione noti e affidabili (es. bartowski, mradermacher, unsloth) e controlla la descrizione del repository prima di scaricare."
 }

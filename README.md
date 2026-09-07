@@ -89,7 +89,10 @@ python3 ollama_manager.py
   just type a model name to search Hugging Face for matching repos (sorted by downloads) and pick
   one from the results. Either way, you never need to know the exact quantization string up
   front. Only repos that actually contain `.gguf` files show up or work — most models on HF are
-  raw `safetensors`, which Ollama can't pull directly
+  raw `safetensors`, which Ollama can't pull directly. **This is an optional, community source**
+  (unlike the official Ollama library above) — the app doesn't vet repo contents, so a note next
+  to the button recommends sticking to well-known quantization publishers (e.g. bartowski,
+  mradermacher, unsloth)
 
 **Open WebUI**
 - One-click install of the browser chat panel (no Docker)
@@ -111,6 +114,8 @@ python3 ollama_manager.py
 - Preview of which models and hosts will end up in the config, before starting
 - Generates a ready-to-paste Continue.dev `config.yaml` for the exposed models — copy/paste only,
   the app never writes to your files
+- On-demand update check against the latest PyPI release, with a prompt to upgrade via
+  `uv tool upgrade` (no admin rights needed) if you're behind
 
 **Advanced (Ollama environment variables)**
 - `OLLAMA_KEEP_ALIVE`, `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work),

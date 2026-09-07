@@ -91,7 +91,10 @@ python3 ollama_manager.py
   (posortowane wg liczby pobrań) i wybrać jedno z wyników. W obu przypadkach appka wylistuje
   warianty na podstawie listy plików w repo, więc nie trzeba znać dokładnego stringa kwantyzacji
   z góry. Pokazują się/działają tylko repo, które faktycznie mają w środku pliki `.gguf` —
-  większość modeli na HF jest w surowym `safetensors`, tego Ollama nie pobierze bezpośrednio
+  większość modeli na HF jest w surowym `safetensors`, tego Ollama nie pobierze bezpośrednio.
+  **To opcjonalne, społecznościowe źródło** (w przeciwieństwie do oficjalnej biblioteki Ollamy
+  wyżej) — appka nie weryfikuje zawartości repo, więc dopisek obok przycisku doradza trzymać się
+  znanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth)
 
 **Open WebUI**
 - Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)
@@ -113,6 +116,8 @@ python3 ollama_manager.py
 - Podgląd, jakie modele i hosty trafią do configu, przed uruchomieniem
 - Generuje gotowy do wklejenia `config.yaml` dla Continue.dev na podstawie wystawionych modeli —
   appka nigdy sama nie zapisuje tego pliku, tylko podgląd/kopiowanie
+- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na PyPI, z propozycją
+  aktualizacji przez `uv tool upgrade` (bez uprawnień administratora), gdy masz starszą wersję
 
 **Zaawansowane (zmienne środowiskowe Ollamy)**
 - `OLLAMA_KEEP_ALIVE`, `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 za mało do pracy agentowej),

@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.3"
+WERSJA = "0.5.6"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -795,6 +795,44 @@ def litellm_zainstaluj():
         raise RuntimeError(wynik.stderr.strip() or _("uv tool install: nieznany błąd"))
 
 
+def litellm_wersja_lokalna():
+    # WHAT: czyta zainstalowaną wersję LiteLLM z 'uv tool list' - jak
+    #       webui_wersja_lokalna(). WHY: instalacja szła jako 'litellm[proxy]'
+    #       (extra), ale 'uv tool list' i tak rejestruje narzędzie pod nazwą
+    #       samego pakietu ("litellm vX.Y.Z"), bez dopisku ekstrasa.
+    uv = _uv_binarka()
+    if not uv:
+        return None
+    try:
+        r = subprocess.run([uv, "tool", "list"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    dopasowanie = re.search(r"^litellm\s+v?(\d+\.\d+\.\d+)", r.stdout, re.MULTILINE)
+    return dopasowanie.group(1) if dopasowanie else None
+
+
+def litellm_wersja_najnowsza():
+    # WHAT: pyta PyPI o najnowszą opublikowaną wersję pakietu 'litellm'. Rzuca
+    #       wyjątek przy błędzie sieci - łapie go wywołujący (SprawdzAktualizacjeWorker).
+    r = requests.get("https://pypi.org/pypi/litellm/json", timeout=5)
+    r.raise_for_status()
+    return r.json().get("info", {}).get("version") or None
+
+
+def litellm_aktualizuj():
+    # WHAT: aktualizuje LiteLLM do najnowszej wersji przez 'uv tool upgrade'.
+    # WHY:  'uv tool upgrade' pamięta oryginalne opcje instalacji (m.in. extra
+    #       '[proxy]' z litellm_zainstaluj) i reinstaluje w tym samym środowisku
+    #       narzędzia. Bez pkexec - tak jak Open WebUI, to zwykły proces użytkownika.
+    uv = _uv_zapewnij()
+    wynik = subprocess.run(
+        [uv, "tool", "upgrade", "litellm"],
+        capture_output=True, text=True, timeout=None,
+    )
+    if wynik.returncode != 0:
+        raise RuntimeError(wynik.stderr.strip() or _("uv tool upgrade: nieznany błąd"))
+
+
 def _litellm_dziala():
     try:
         r = requests.get(f"{LITELLM_URL}/health/liveliness", timeout=1)
@@ -1045,6 +1083,25 @@ def _hf_repo_z_linku(tekst):
     if len(czesci) < 2:
         return None
     return "/".join(czesci[:2])
+
+
+def _skroc_nazwe_modelu_hf(nazwa):
+    # WHAT: skraca długą nazwę modelu pobranego z Hugging Face
+    #       ('hf.co/<użytkownik>/<repo>:<kwant>') do samej nazwy repo +
+    #       kwantyzacji, z dopiskiem "(hf)" na końcu zamiast pełnej ścieżki
+    #       z "hf.co/<użytkownik>/". Modele z ollama.com/library (krótkie
+    #       nazwy typu "qwen2.5-coder:7b") wracają bez zmian - dotyczy
+    #       WYŁĄCZNIE modeli zaczynających się od "hf.co/".
+    # WHY:  pełna nazwa (np. "hf.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF:
+    #       Q4_K_M") jest za długa dla kolumny "Model" w tabeli - obcina się/
+    #       zasłania resztę wiersza. Tylko WYŚWIETLANIE - prawdziwa nazwa (do
+    #       usuwania modelu przez API) leci osobno jako dane wiersza, patrz
+    #       Qt.ItemDataRole.UserRole w _po_odswiezeniu/_wybrany_model.
+    if not nazwa.startswith("hf.co/"):
+        return nazwa
+    reszta = nazwa[len("hf.co/"):]  # "<użytkownik>/<repo>:<kwant>"
+    _uzytkownik, _, repo_i_kwant = reszta.partition("/")
+    return f"{repo_i_kwant or reszta} (hf)"
 
 
 def hf_wyszukaj_warianty_gguf(repo):
@@ -1819,6 +1876,7 @@ class MainWindow(QMainWindow):
         self._webui_zainstalowane = False  # WHY: potrzebne w klik_webui, żeby wiedzieć co robi przycisk
         self._webui_dziala = False         # WHY: jw. - odróżnia "Uruchom" od "Otwórz" w tym samym miejscu
         self._aktualizacja_webui_worker = None  # WHY: to samo dla sprawdzania aktualizacji Open WebUI
+        self._aktualizacja_litellm_worker = None  # WHY: to samo dla sprawdzania aktualizacji LiteLLM
         self._litellm_worker = None     # WHY: to samo dla instalacji/uruchomienia LiteLLM
         self._litellm_zainstalowany = False  # WHY: potrzebne w klik_litellm, żeby wiedzieć co robi przycisk
         self._agregator_worker = None   # WHY: osobny wątek na podgląd modeli (zakładka "Agregator modeli")
@@ -2156,6 +2214,28 @@ class MainWindow(QMainWindow):
         lbl_link.setOpenExternalLinks(True)
         uk_pobierz.addWidget(lbl_link)
 
+        # WHAT: analogiczna wzmianka dla drugiego, alternatywnego źródła modeli -
+        #       GGUF z Hugging Face (przycisk "Pobierz z Hugging Face..." wyżej).
+        # WHY:  na wyraźną prośbę użytkownika - w przeciwieństwie do
+        #       ollama.com/library (oficjalna biblioteka Ollamy) to repozytoria
+        #       SPOŁECZNOŚCIOWE, które może założyć każdy; appka/Ollama nie
+        #       weryfikuje ich zawartości w żaden sposób, więc dopisek jasno
+        #       zaznacza, że to źródło OPCJONALNE, i doradza ograniczoną
+        #       ostrożność (znani, zaufani autorzy kwantyzacji) zamiast
+        #       ogólnikowego "uważaj" bez konkretnej wskazówki.
+        lbl_link_hf = QLabel(
+            _('Alternatywnie - modele GGUF (opcjonalnie) z '
+              '<a href="https://huggingface.co/models?library=gguf">Hugging Face</a> '
+              '(przycisk "Pobierz z Hugging Face..." wyżej). To repozytoria '
+              'SPOŁECZNOŚCIOWE, nie oficjalna biblioteka Ollamy - każdy może '
+              'tam coś opublikować, appka niczego tam nie weryfikuje. Pobieraj '
+              'tylko od znanych, zaufanych autorów kwantyzacji (np. bartowski, '
+              'mradermacher, unsloth) i sprawdź opis repozytorium przed pobraniem.')
+        )
+        lbl_link_hf.setWordWrap(True)
+        lbl_link_hf.setOpenExternalLinks(True)
+        uk_pobierz.addWidget(lbl_link_hf)
+
         self.pasek_postepu = QProgressBar()
         self.pasek_postepu.setVisible(False)
         uk_pobierz.addWidget(self.pasek_postepu)
@@ -2237,6 +2317,18 @@ class MainWindow(QMainWindow):
         self.chk_litellm_autostart.setEnabled(False)  # WHY: bez sensu, dopóki LiteLLM nie jest zainstalowane
         self.chk_litellm_autostart.toggled.connect(self.przelacz_litellm_autostart)
         uk_litellm.addWidget(self.chk_litellm_autostart)
+
+        # WHAT: to samo co przy Ollamie/Open WebUI - sprawdzanie aktualizacji NA
+        #       ŻĄDANIE (przycisk), nie w cyklicznym odświeżaniu co 10 s.
+        pasek_aktualizacji_litellm = QHBoxLayout()
+        self.btn_sprawdz_aktualizacje_litellm = QPushButton(_("Sprawdź aktualizacje"))
+        self.btn_sprawdz_aktualizacje_litellm.clicked.connect(self.sprawdz_aktualizacje_litellm)
+        pasek_aktualizacji_litellm.addWidget(self.btn_sprawdz_aktualizacje_litellm)
+        self.lbl_wersja_litellm = QLabel("")
+        pasek_aktualizacji_litellm.addWidget(self.lbl_wersja_litellm)
+        pasek_aktualizacji_litellm.addStretch(1)
+        uk_litellm.addLayout(pasek_aktualizacji_litellm)
+
         layout.addWidget(karta_litellm)
 
         karta_agregator = QGroupBox(_("Modele w agregatorze"))
@@ -2712,12 +2804,17 @@ class MainWindow(QMainWindow):
 
             wiersz = self.lista_modeli.rowCount()
             self.lista_modeli.insertRow(wiersz)
-            self.lista_modeli.setItem(wiersz, 0, QTableWidgetItem(nazwa))
+            pozycja_nazwa = QTableWidgetItem(_skroc_nazwe_modelu_hf(nazwa))
+            # WHY: prawdziwa nazwa (potrzebna np. do usuwania modelu przez API)
+            #      leci jako dane wiersza, niezależnie od tego, co się WYŚWIETLA -
+            #      patrz _wybrany_model().
+            pozycja_nazwa.setData(Qt.ItemDataRole.UserRole, nazwa)
+            self.lista_modeli.setItem(wiersz, 0, pozycja_nazwa)
             self.lista_modeli.setItem(wiersz, 1, QTableWidgetItem(f"{rozmiar_gb:.1f} GB"))
             self.lista_modeli.setItem(wiersz, 2, QTableWidgetItem(vram_tekst))
         if zaznaczony:
             for i in range(self.lista_modeli.rowCount()):
-                if self.lista_modeli.item(i, 0).text() == zaznaczony:
+                if self.lista_modeli.item(i, 0).data(Qt.ItemDataRole.UserRole) == zaznaczony:
                     self.lista_modeli.setCurrentCell(i, 0)
                     break
 
@@ -2726,7 +2823,7 @@ class MainWindow(QMainWindow):
         for m in stan["zaladowane"]:
             nazwa = m.get("name", "?")
             vram_gb = m.get("size_vram", 0) / (1024 ** 3)
-            self.lista_zaladowane.addItem(f"{nazwa}  —  {vram_gb:.1f} GB VRAM")
+            self.lista_zaladowane.addItem(f"{_skroc_nazwe_modelu_hf(nazwa)}  —  {vram_gb:.1f} GB VRAM")
 
         # WHAT: jeden przycisk, trzy znaczenia - "Zainstaluj" / "Uruchom" / "Otwórz",
         #       zależnie od tego, czy binarka jest zainstalowana i czy WebUI
@@ -2786,6 +2883,14 @@ class MainWindow(QMainWindow):
         self.chk_litellm_autostart.blockSignals(True)
         self.chk_litellm_autostart.setChecked(stan["litellm_autostart"])
         self.chk_litellm_autostart.blockSignals(False)
+
+        # WHY: jak przy Ollamie/Open WebUI wyżej - bez sensu sprawdzać
+        #      aktualizacje czegoś, co nie jest zainstalowane, ani odpalać
+        #      sprawdzenie 2x naraz.
+        aktualizacja_litellm_w_toku = bool(
+            self._aktualizacja_litellm_worker and self._aktualizacja_litellm_worker.isRunning()
+        )
+        self.btn_sprawdz_aktualizacje_litellm.setEnabled(stan["litellm"] and not aktualizacja_litellm_w_toku)
 
         # === Pasek statystyk ============================================
         # WHY: to jedyne miejsce w oknie ze statusem Ollamy - usunięty osobny
@@ -3192,6 +3297,63 @@ class MainWindow(QMainWindow):
         self.wpis_log(_("Zatrzymuję LiteLLM..."))
         self._litellm_worker = self._uruchom_akcje(litellm_zatrzymaj, _("Zatrzymanie LiteLLM"))
 
+    def sprawdz_aktualizacje_litellm(self):
+        # WHAT: to samo co sprawdz_aktualizacje_webui, tylko dla LiteLLM -
+        #       'uv tool list' (lokalnie) + PyPI (najnowsza), a przy zgodzie
+        #       'uv tool upgrade' zamiast reinstalacji od zera.
+        if self._aktualizacja_litellm_worker and self._aktualizacja_litellm_worker.isRunning():
+            self.wpis_log(_("Sprawdzanie aktualizacji już trwa - poczekaj na zakończenie."))
+            return
+        self.wpis_log(_("Sprawdzam dostępność aktualizacji LiteLLM..."))
+        self.btn_sprawdz_aktualizacje_litellm.setEnabled(False)
+        worker = SprawdzAktualizacjeWorker(litellm_wersja_lokalna, litellm_wersja_najnowsza)
+        self._workers.append(worker)
+
+        def _po_sprawdzeniu(wynik, w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+            self.btn_sprawdz_aktualizacje_litellm.setEnabled(True)
+            self._pokaz_wynik_sprawdzenia_aktualizacji_litellm(wynik)
+
+        worker.wynik.connect(_po_sprawdzeniu)
+        self._aktualizacja_litellm_worker = worker
+        worker.start()
+
+    def _pokaz_wynik_sprawdzenia_aktualizacji_litellm(self, wynik):
+        # WHAT: loguje wynik i - gdy jest nowsza wersja - pyta, czy zaktualizować
+        #       teraz. Jak Open WebUI, NIE wymaga pkexec/roota - 'uv tool
+        #       upgrade' działa jako zwykły użytkownik (patrz litellm_aktualizuj).
+        if wynik["lokalna"]:
+            self.lbl_wersja_litellm.setText(_("wersja: {wersja}").format(wersja=wynik["lokalna"]))
+        if wynik["blad"]:
+            self.wpis_log(_("Nie udało się sprawdzić aktualizacji LiteLLM: {blad}").format(blad=wynik["blad"]))
+            return
+        if not wynik["dostepna"]:
+            self.wpis_log(_("Masz najnowszą wersję LiteLLM ({wersja}).").format(wersja=wynik["lokalna"]))
+            return
+        self.wpis_log(_("Dostępna nowa wersja LiteLLM: {najnowsza} (masz {lokalna}).").format(
+            najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]))
+        odp = QMessageBox.question(
+            self, _("Aktualizacja LiteLLM"),
+            _("Dostępna jest nowsza wersja LiteLLM: {najnowsza}\n"
+              "Masz zainstalowaną: {lokalna}\n\n"
+              "Nowe wersje zwykle poprawiają błędy i dodają obsługę nowszych "
+              "modeli/API.\n\n"
+              "Zainstalować aktualizację teraz?\n\n"
+              "Uruchomi 'uv tool upgrade' dla bieżącego użytkownika\n"
+              "(bez uprawnień administratora - wymaga internetu).").format(
+                najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"]),
+        )
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        self.wpis_log(_("Aktualizuję LiteLLM - to może potrwać kilka minut..."))
+        # WHY: zapisujemy jako _litellm_worker - ten sam worker, który blokuje
+        #      "Uruchom/Zatrzymaj LiteLLM" w _po_odswiezeniu, żeby nie dało się
+        #      odpalić/zatrzymać LiteLLM w trakcie jego własnej aktualizacji. Jak
+        #      przy Open WebUI - BEZ auto-restartu usługi po aktualizacji, jeśli
+        #      akurat działa; użytkownik restartuje ręcznie ("Uruchom ponownie").
+        self._litellm_worker = self._uruchom_akcje(litellm_aktualizuj, _("Aktualizacja LiteLLM"))
+
     def przelacz_litellm_autostart(self, wlacz):
         # WHY: jw. co przy WebUI - usługa --user, ale i tak przez _uruchom_akcje (blokujące I/O).
         opis = _("Włączenie autostartu LiteLLM") if wlacz else _("Wyłączenie autostartu LiteLLM")
@@ -3261,7 +3423,10 @@ class MainWindow(QMainWindow):
         if wiersz < 0:
             return None
         item = self.lista_modeli.item(wiersz, 0)
-        return item.text() if item else None
+        # WHY: PRAWDZIWA nazwa modelu (do API/usuwania) leci jako dane wiersza,
+        #      nie jako wyświetlany tekst - patrz _skroc_nazwe_modelu_hf w
+        #      _po_odswiezeniu (modele z HF wyświetlają skróconą nazwę + "(hf)").
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _aktualizuj_przycisk_usun(self):
         # WHY: usuwać można tylko gdy coś jest zaznaczone.
