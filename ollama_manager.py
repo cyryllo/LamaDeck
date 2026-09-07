@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.2"
+WERSJA = "0.5.3"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -1002,26 +1002,31 @@ def _zbuduj_tag_modelu(model, rozmiar, kwantyzacja):
 #  MainWindow.pobierz_z_hf), zero duplikacji paska postępu/logu.
 # =============================================================================
 
-# WHAT: znane etykiety kwantyzacji GGUF (nazewnictwo llama.cpp/ggml), od
-#       NAJDŁUŻSZYCH do najkrótszych w obrębie tej samej rodziny (np. Q4_K_M
-#       przed Q4_K) - regex poniżej dopasowuje pierwsze trafienie, więc
-#       krótszy wariant wcześniej ucinałby dłuższy o brakujący sufiks.
-_GGUF_KWANTYZACJE = [
-    "IQ1_S", "IQ1_M",
-    "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
-    "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
-    "IQ4_NL", "IQ4_XS",
-    "TQ1_0", "TQ2_0",
-    "Q2_K_S", "Q2_K",
-    "Q3_K_L", "Q3_K_M", "Q3_K_S", "Q3_K",
-    "Q4_K_M", "Q4_K_S", "Q4_K", "Q4_0", "Q4_1",
-    "Q5_K_M", "Q5_K_S", "Q5_K", "Q5_0", "Q5_1",
-    "Q6_K",
-    "Q8_0", "Q8_K",
-    "BF16", "F16", "FP16", "F32", "FP32",
+# WHAT: znane PRZEDROSTKI rodzin kwantyzacji GGUF (nazewnictwo llama.cpp/ggml)
+#       - regex niżej dopasowuje przedrostek + WSZYSTKO, co po nim bezpośrednio
+#       następuje w tym samym "słowie" (cyfry/litery/podkreślniki), więc cały
+#       token typu "Q4_K_M", "Q3_K_XL" czy "Q4_0_4_4" (ARM repack) łapie się
+#       w całości jako JEDNA kwantyzacja - nie tylko sam przedrostek.
+# BUG naprawiony: poprzednia wersja miała sztywną listę PEŁNYCH etykiet
+#       (np. "Q4_0", "Q3_K") z granicą dopuszczającą "_" jako koniec słowa -
+#       więc np. plik "...-Q4_0_4_4.gguf" (osobny wariant repackowany pod ARM,
+#       NIE to samo co zwykłe "Q4_0") dopasowywał się jako zwykłe "Q4_0" i jego
+#       rozmiar sumował się z prawdziwym plikiem Q4_0.gguf - w oknie wychodziła
+#       jedna pozycja "Q4_0" z zawyżonym, bezsensownym rozmiarem (odkryte na
+#       żywych danych bartowski/Qwen2.5-Coder-7B-Instruct-GGUF: Q4_0 pokazywało
+#       16,5 GB zamiast prawdziwych ~4,1 GB, bo doliczało 3 różne pliki
+#       "_4_4"/"_4_8"/"_8_8"). To samo dotyczyło "_L"/"_XL" (np. Q3_K_XL,
+#       Q4_K_L, Q6_K_L) - żadnego z tych sufiksów nie było na sztywnej liście,
+#       więc padały na krótszy wpis z listy (np. "Q3_K") zamiast zostać własną,
+#       osobną pozycją.
+_GGUF_KWANTYZACJA_PREFIKSY = [
+    "IQ1", "IQ2", "IQ3", "IQ4",
+    "TQ1", "TQ2",
+    "Q2", "Q3", "Q4", "Q5", "Q6", "Q8",
+    "BF16", "FP16", "F16", "FP32", "F32",
 ]
 _GGUF_KWANTYZACJA_WZORZEC = re.compile(
-    r"(?<![A-Za-z0-9])(" + "|".join(_GGUF_KWANTYZACJE) + r")(?![A-Za-z0-9])",
+    r"(?<![A-Za-z0-9_])(?:" + "|".join(_GGUF_KWANTYZACJA_PREFIKSY) + r")[A-Za-z0-9_]*",
     re.IGNORECASE,
 )
 
@@ -1065,7 +1070,10 @@ def hf_wyszukaj_warianty_gguf(repo):
         if not sciezka.lower().endswith(".gguf"):
             continue
         dopasowanie = _GGUF_KWANTYZACJA_WZORZEC.search(Path(sciezka).stem)
-        kwant = dopasowanie.group(1).upper() if dopasowanie else None
+        # WHY: group(0), nie group(1) - przedrostki w regexie są teraz
+        #      niepobierające ('(?:...)'), całe dopasowanie (przedrostek +
+        #      cała reszta tokenu) to jedyna "grupa", jaką mamy.
+        kwant = dopasowanie.group(0).upper() if dopasowanie else None
         warianty[kwant] = warianty.get(kwant, 0) + wpis.get("size", 0)
 
     if not warianty:
