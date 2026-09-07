@@ -85,6 +85,11 @@ python3 ollama_manager.py
 - Bieżące, orientacyjne wyliczenie zużycia pamięci (wagi + KV cache + bufory, plus zalecany RAM)
   przy wyborze rozmiaru/kwantyzacji
 - Podgląd modeli aktualnie załadowanych do pamięci (VRAM)
+- **Pobieranie modeli GGUF wprost z Hugging Face** — wklej link do repo (albo `użytkownik/repo`),
+  a appka wylistuje dostępne warianty kwantyzacji (z rozmiarami) na podstawie listy plików w
+  repo, więc nie trzeba znać dokładnego stringa kwantyzacji z góry. Działa tylko dla repo, które
+  faktycznie mają w środku pliki `.gguf` — większość modeli na HF jest w surowym `safetensors`,
+  tego Ollama nie pobierze bezpośrednio
 
 **Open WebUI**
 - Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)

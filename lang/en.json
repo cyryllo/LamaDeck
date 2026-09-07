@@ -196,5 +196,17 @@
   "Aktualizacja Open WebUI": "Open WebUI Update",
   "Dostępna jest nowsza wersja Open WebUI: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNowe wersje zwykle poprawiają błędy i dodają funkcje, a czasem wymagają ich, by dobrze współpracować z nowszą Ollamą.\n\nZainstalować aktualizację teraz?\n\nUruchomi 'uv tool upgrade' dla bieżącego użytkownika\n(bez uprawnień administratora - wymaga internetu).": "A newer version of Open WebUI is available: {najnowsza}\nYou have installed: {lokalna}\n\nNewer versions usually fix bugs and add features, and sometimes require them to work well with a newer Ollama.\n\nInstall the update now?\n\nThis will run 'uv tool upgrade' for the current user\n(no administrator privileges required - needs an internet connection).",
   "Aktualizuję Open WebUI - to może potrwać kilka minut...": "Updating Open WebUI - this may take a few minutes...",
-  "uv tool upgrade: nieznany błąd": "uv tool upgrade: unknown error"
+  "uv tool upgrade: nieznany błąd": "uv tool upgrade: unknown error",
+  "Pobierz z Hugging Face...": "Download from Hugging Face...",
+  "Pobierz z Hugging Face": "Download from Hugging Face",
+  "Link do repo albo 'użytkownik/repo':": "Repo link or 'user/repo':",
+  "Szukaj wariantów": "Search variants",
+  "Dostępne kwantyzacje:": "Available quantizations:",
+  "Anuluj": "Cancel",
+  "Wklej poprawny link do Hugging Face albo 'użytkownik/repo'.": "Paste a valid Hugging Face link or 'user/repo'.",
+  "Szukam dostępnych wariantów...": "Searching for available variants...",
+  "Znalezione warianty: {n}": "Variants found: {n}",
+  "domyślny (bez sufiksu)": "default (no suffix)",
+  "Nie znaleziono takiego repozytorium na Hugging Face.": "No such repository found on Hugging Face.",
+  "To repozytorium nie zawiera żadnych plików .gguf.": "This repository doesn't contain any .gguf files."
 }

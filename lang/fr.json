@@ -196,5 +196,17 @@
   "Aktualizacja Open WebUI": "Mise à jour d'Open WebUI",
   "Dostępna jest nowsza wersja Open WebUI: {najnowsza}\nMasz zainstalowaną: {lokalna}\n\nNowe wersje zwykle poprawiają błędy i dodają funkcje, a czasem wymagają ich, by dobrze współpracować z nowszą Ollamą.\n\nZainstalować aktualizację teraz?\n\nUruchomi 'uv tool upgrade' dla bieżącego użytkownika\n(bez uprawnień administratora - wymaga internetu).": "Une version plus récente d'Open WebUI est disponible : {najnowsza}\nVersion installée : {lokalna}\n\nLes nouvelles versions corrigent généralement des bugs et ajoutent des fonctionnalités, et sont parfois nécessaires pour bien fonctionner avec une Ollama plus récente.\n\nInstaller la mise à jour maintenant ?\n\nCela exécutera 'uv tool upgrade' pour l'utilisateur actuel\n(aucun privilège administrateur requis - nécessite une connexion internet).",
   "Aktualizuję Open WebUI - to może potrwać kilka minut...": "Mise à jour d'Open WebUI en cours - cela peut prendre quelques minutes...",
-  "uv tool upgrade: nieznany błąd": "uv tool upgrade : erreur inconnue"
+  "uv tool upgrade: nieznany błąd": "uv tool upgrade : erreur inconnue",
+  "Pobierz z Hugging Face...": "Télécharger depuis Hugging Face...",
+  "Pobierz z Hugging Face": "Télécharger depuis Hugging Face",
+  "Link do repo albo 'użytkownik/repo':": "Lien du dépôt ou 'utilisateur/dépôt' :",
+  "Szukaj wariantów": "Rechercher les variantes",
+  "Dostępne kwantyzacje:": "Quantifications disponibles :",
+  "Anuluj": "Annuler",
+  "Wklej poprawny link do Hugging Face albo 'użytkownik/repo'.": "Collez un lien Hugging Face valide ou 'utilisateur/dépôt'.",
+  "Szukam dostępnych wariantów...": "Recherche des variantes disponibles...",
+  "Znalezione warianty: {n}": "Variantes trouvées : {n}",
+  "domyślny (bez sufiksu)": "par défaut (sans suffixe)",
+  "Nie znaleziono takiego repozytorium na Hugging Face.": "Ce dépôt est introuvable sur Hugging Face.",
+  "To repozytorium nie zawiera żadnych plików .gguf.": "Ce dépôt ne contient aucun fichier .gguf."
 }

@@ -84,6 +84,10 @@ python3 ollama_manager.py
 - Live, approximate memory-usage estimate (weights + KV cache + buffers, then a recommended-RAM
   figure) as you pick a size/quantization
 - Preview of models currently loaded into memory (VRAM)
+- **Download GGUF models straight from Hugging Face** — paste a repo link (or `user/repo`) and
+  the app lists its available quantizations (with sizes) by reading the repo's file list, so you
+  don't need to know the exact quantization string up front. Only works for repos that actually
+  contain `.gguf` files — most models on HF are raw `safetensors`, which Ollama can't pull directly
 
 **Open WebUI**
 - One-click install of the browser chat panel (no Docker)

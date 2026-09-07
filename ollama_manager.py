@@ -32,7 +32,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QUrl, QSettings
 from PyQt6.QtGui import QIcon, QDesktopServices, QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QPushButton, QListWidget, QProgressBar, QTabWidget,
+    QLabel, QPushButton, QListWidget, QListWidgetItem, QProgressBar, QTabWidget,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea,
@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.0"
+WERSJA = "0.5.1"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -992,6 +992,90 @@ def _zbuduj_tag_modelu(model, rozmiar, kwantyzacja):
     return f"{repo}:" + "-".join(czesci_tagu)
 
 
+# =============================================================================
+#  Pobieranie modeli GGUF z Hugging Face (patrz CLAUDE.md, sekcja roadmapy,
+#  "Wariant B") - Ollama umie ściągać GGUF wprost z HF przez
+#  'hf.co/<user>/<repo>:<kwantyzacja>' (działa TYLKO dla repo z plikami .gguf -
+#  reszta HF jest w surowym safetensors, tego Ollama nie konwertuje w locie).
+#  Ten dialog tylko ZNAJDUJE dostępne warianty i SKŁADA ten string - samo
+#  pobieranie idzie już istniejącym pull_stream()/PullWorker (patrz
+#  MainWindow.pobierz_z_hf), zero duplikacji paska postępu/logu.
+# =============================================================================
+
+# WHAT: znane etykiety kwantyzacji GGUF (nazewnictwo llama.cpp/ggml), od
+#       NAJDŁUŻSZYCH do najkrótszych w obrębie tej samej rodziny (np. Q4_K_M
+#       przed Q4_K) - regex poniżej dopasowuje pierwsze trafienie, więc
+#       krótszy wariant wcześniej ucinałby dłuższy o brakujący sufiks.
+_GGUF_KWANTYZACJE = [
+    "IQ1_S", "IQ1_M",
+    "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
+    "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
+    "IQ4_NL", "IQ4_XS",
+    "TQ1_0", "TQ2_0",
+    "Q2_K_S", "Q2_K",
+    "Q3_K_L", "Q3_K_M", "Q3_K_S", "Q3_K",
+    "Q4_K_M", "Q4_K_S", "Q4_K", "Q4_0", "Q4_1",
+    "Q5_K_M", "Q5_K_S", "Q5_K", "Q5_0", "Q5_1",
+    "Q6_K",
+    "Q8_0", "Q8_K",
+    "BF16", "F16", "FP16", "F32", "FP32",
+]
+_GGUF_KWANTYZACJA_WZORZEC = re.compile(
+    r"(?<![A-Za-z0-9])(" + "|".join(_GGUF_KWANTYZACJE) + r")(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+
+def _hf_repo_z_linku(tekst):
+    # WHAT: wyciąga "użytkownik/repo" z dowolnego wejścia - pełnego linku do
+    #       Hugging Face albo już gotowego "użytkownik/repo". Zwraca None,
+    #       gdy tekst jest za krótki, żeby w ogóle mógł być repo.
+    tekst = tekst.strip()
+    # WHY: dopuszczamy link bez schematu (samo "huggingface.co/...", tak jak
+    #      bywa wklejane z paska adresu bez zaznaczonego "https://").
+    tekst = re.sub(r"^(https?://)?(www\.)?huggingface\.co/", "", tekst, flags=re.IGNORECASE)
+    czesci = [c for c in tekst.strip("/").split("/") if c]
+    # WHY: link do konkretnego pliku/gałęzi (".../blob/main/plik.gguf") ma
+    #      więcej niż dwa segmenty - samo repo to zawsze pierwsze dwa.
+    if len(czesci) < 2:
+        return None
+    return "/".join(czesci[:2])
+
+
+def hf_wyszukaj_warianty_gguf(repo):
+    # WHAT: pyta publiczne API Hugging Face o pliki w repo (endpoint 'tree' -
+    #       w przeciwieństwie do 'api/models/<repo>' zwraca rozmiar KAŻDEGO
+    #       pliku wprost w odpowiedzi, bez osobnego zapytania na plik),
+    #       filtruje `.gguf` i grupuje wg wyciągniętej kwantyzacji.
+    # WHY:  modele dzielone na części ("...-00001-of-00002.gguf") mają kilka
+    #       plików na TĘ SAMĄ kwantyzację - sumujemy ich rozmiar, żeby appka
+    #       pokazała jeden wpis z prawdziwym łącznym rozmiarem do pobrania
+    #       (Ollama sama ściągnie i złoży wszystkie części pod jednym tagiem).
+    r = requests.get(
+        f"https://huggingface.co/api/models/{repo}/tree/main",
+        params={"recursive": "true"}, timeout=10,
+    )
+    if r.status_code == 404:
+        raise ValueError(_("Nie znaleziono takiego repozytorium na Hugging Face."))
+    r.raise_for_status()
+
+    warianty = {}  # kwantyzacja (str) albo None -> suma rozmiaru w bajtach
+    for wpis in r.json():
+        sciezka = wpis.get("path", "")
+        if not sciezka.lower().endswith(".gguf"):
+            continue
+        dopasowanie = _GGUF_KWANTYZACJA_WZORZEC.search(Path(sciezka).stem)
+        kwant = dopasowanie.group(1).upper() if dopasowanie else None
+        warianty[kwant] = warianty.get(kwant, 0) + wpis.get("size", 0)
+
+    if not warianty:
+        raise ValueError(_("To repozytorium nie zawiera żadnych plików .gguf."))
+
+    # WHY: None (nierozpoznana kwantyzacja w nazwie pliku - zwykle repo z
+    #      jednym plikiem .gguf bez dopisku) ląduje na końcu listy.
+    return sorted(warianty.items(), key=lambda kv: (kv[0] is None, kv[0] or ""))
+
+
 def _parsuj_rozmiar_parametrow(tekst):
     # WHAT: wyciąga liczbę parametrów (W MILIARDACH) z tekstu typu "8b", "1.5B",
     #       "300m", "70b-instruct", "llama3.1:8b" albo details.parameter_size z
@@ -1342,6 +1426,28 @@ class SprawdzAktualizacjeWorker(QThread):
         self.wynik.emit({"blad": None, "lokalna": lokalna, "najnowsza": najnowsza, "dostepna": dostepna})
 
 
+class SzukajGGUFWorker(QThread):
+    """Pyta HF API o dostępne warianty kwantyzacji GGUF w repo, w tle.
+
+    WHY: zapytanie sieciowe do Hugging Face nie może blokować GUI, tak jak
+         każde inne zapytanie w tej appce - nawet gdy dialog jest modalny.
+    """
+    wynik = pyqtSignal(list)   # lista (kwant:str|None, rozmiar_bajty:int) - patrz hf_wyszukaj_warianty_gguf
+    blad = pyqtSignal(str)
+
+    def __init__(self, repo):
+        super().__init__()
+        self.repo = repo
+
+    def run(self):
+        try:
+            warianty = hf_wyszukaj_warianty_gguf(self.repo)
+        except (requests.RequestException, ValueError) as e:
+            self.blad.emit(str(e))
+            return
+        self.wynik.emit(warianty)
+
+
 class AgregatorWorker(QThread):
     """Odpytuje na żywo hosty z listy serwerów o zainstalowane modele.
 
@@ -1491,6 +1597,106 @@ class DialogConfigContinue(QDialog):
 
     def _kopiuj(self):
         QApplication.clipboard().setText(self.pole_tresc.toPlainText())
+
+
+class DialogPobierzZHF(QDialog):
+    """Pobieranie modelu GGUF z Hugging Face - wpisz repo, wybierz kwantyzację.
+
+    WHY: Ollama umie ściągać GGUF wprost z HF ('hf.co/<user>/<repo>:<kwant>'),
+         ale trzeba znać dokładny string kwantyzacji z nazwy pliku w repo -
+         ten dialog go znajduje sam (patrz hf_wyszukaj_warianty_gguf), zamiast
+         każenia szukać na stronie HF w zakładce "Files and versions". Dialog
+         TYLKO buduje string modelu (self.tag_modelu) - samo pobieranie idzie
+         już istniejącym pull_stream()/PullWorker w oknie głównym (patrz
+         MainWindow.pobierz_z_hf) po zamknięciu, zero duplikacji paska
+         postępu/logu/odświeżania listy modeli.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(_("Pobierz z Hugging Face"))
+        self.setMinimumWidth(480)
+        self.repo = None
+        self.tag_modelu = None  # WHY: wynik dla wywołującego - ustawiany dopiero w _pobierz()
+        self._worker = None
+
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel(_("Link do repo albo 'użytkownik/repo':")))
+        pasek_repo = QHBoxLayout()
+        self.pole_repo = QLineEdit()
+        self.pole_repo.setPlaceholderText("bartowski/Qwen2.5-Coder-7B-Instruct-GGUF")
+        self.pole_repo.returnPressed.connect(self._szukaj)
+        self.btn_szukaj = QPushButton(_("Szukaj wariantów"))
+        self.btn_szukaj.clicked.connect(self._szukaj)
+        pasek_repo.addWidget(self.pole_repo, 1)
+        pasek_repo.addWidget(self.btn_szukaj)
+        layout.addLayout(pasek_repo)
+
+        layout.addWidget(QLabel(_("Dostępne kwantyzacje:")))
+        self.lista_wariantow = QListWidget()
+        self.lista_wariantow.itemSelectionChanged.connect(self._zmien_zaznaczenie)
+        layout.addWidget(self.lista_wariantow, 1)
+
+        self.lbl_status = QLabel("")
+        self.lbl_status.setWordWrap(True)
+        layout.addWidget(self.lbl_status)
+
+        pasek_przyciskow = QHBoxLayout()
+        pasek_przyciskow.addStretch(1)
+        btn_anuluj = QPushButton(_("Anuluj"))
+        btn_anuluj.clicked.connect(self.reject)
+        self.btn_pobierz = QPushButton(_("Pobierz"))
+        self.btn_pobierz.setEnabled(False)  # WHY: aktywny dopiero po zaznaczeniu wariantu
+        self.btn_pobierz.clicked.connect(self._pobierz)
+        pasek_przyciskow.addWidget(btn_anuluj)
+        pasek_przyciskow.addWidget(self.btn_pobierz)
+        layout.addLayout(pasek_przyciskow)
+
+    def _zmien_zaznaczenie(self):
+        self.btn_pobierz.setEnabled(bool(self.lista_wariantow.selectedItems()))
+
+    def _szukaj(self):
+        if self._worker and self._worker.isRunning():
+            return
+        repo = _hf_repo_z_linku(self.pole_repo.text())
+        if not repo:
+            self.lbl_status.setText(_("Wklej poprawny link do Hugging Face albo 'użytkownik/repo'."))
+            return
+        self.repo = repo
+        self.lista_wariantow.clear()
+        self.btn_pobierz.setEnabled(False)
+        self.btn_szukaj.setEnabled(False)
+        self.lbl_status.setText(_("Szukam dostępnych wariantów..."))
+
+        self._worker = SzukajGGUFWorker(repo)
+        self._worker.wynik.connect(self._po_wyszukaniu)
+        self._worker.blad.connect(self._po_bledzie)
+        self._worker.start()
+
+    def _po_wyszukaniu(self, warianty):
+        self.btn_szukaj.setEnabled(True)
+        self.lbl_status.setText(_("Znalezione warianty: {n}").format(n=len(warianty)))
+        for kwant, rozmiar_bajty in warianty:
+            etykieta = kwant or _("domyślny (bez sufiksu)")
+            gb = rozmiar_bajty / (1024 ** 3)
+            pozycja = QListWidgetItem(f"{etykieta}   —   {gb:.1f} GB")
+            pozycja.setData(Qt.ItemDataRole.UserRole, kwant)
+            self.lista_wariantow.addItem(pozycja)
+
+    def _po_bledzie(self, komunikat):
+        self.btn_szukaj.setEnabled(True)
+        self.lbl_status.setText(komunikat)
+
+    def _pobierz(self):
+        pozycje = self.lista_wariantow.selectedItems()
+        if not pozycje:
+            return
+        kwant = pozycje[0].data(Qt.ItemDataRole.UserRole)
+        # WHY: bez rozpoznanej kwantyzacji (repo z jednym plikiem .gguf bez
+        #      dopisku) Ollama chce sam 'hf.co/user/repo', bez dwukropka.
+        self.tag_modelu = f"hf.co/{self.repo}:{kwant}" if kwant else f"hf.co/{self.repo}"
+        self.accept()
 
 
 # =============================================================================
@@ -1773,6 +1979,19 @@ class MainWindow(QMainWindow):
         pasek_pull.addWidget(self.combo_modele, 1)
         pasek_pull.addWidget(self.btn_pull)
         uk_pobierz.addLayout(pasek_pull)
+
+        # WHAT: osobny wiersz - alternatywne źródło modeli (GGUF z Hugging Face,
+        #       poza ollama.com/library), NA ŻĄDANIE w osobnym dialogu, żeby nie
+        #       zapychać głównego wiersza pobierania kolejnym polem.
+        # WHY:  Ollama umie ściągać GGUF wprost z HF, ale TYLKO dla repo, które
+        #       mają w środku pliki .gguf (patrz DialogPobierzZHF) - reszta HF
+        #       jest w surowym safetensors, tego appka/Ollama nie konwertuje.
+        pasek_hf = QHBoxLayout()
+        pasek_hf.addStretch(1)
+        btn_pobierz_z_hf = QPushButton(_("Pobierz z Hugging Face..."))
+        btn_pobierz_z_hf.clicked.connect(self.pobierz_z_hf)
+        pasek_hf.addWidget(btn_pobierz_z_hf)
+        uk_pobierz.addLayout(pasek_hf)
 
         # WHAT: opcjonalny rozmiar (parametry) do doklejenia do nazwy modelu -
         #       osobne pole zamiast pisania "rodzina:rozmiar" ręcznie za każdym
@@ -3097,7 +3316,22 @@ class MainWindow(QMainWindow):
         model = _zbuduj_tag_modelu(
             model_wpisany, self.combo_rozmiar.currentText(), self.combo_kwantyzacja.currentData()
         )
-        # WHY: jedno pobieranie naraz - prościej i nie obciąża łącza/dysku podwójnie.
+        self._rozpocznij_pobieranie(model)
+
+    def pobierz_z_hf(self):
+        # WHAT: otwiera dialog wyszukiwania wariantów GGUF na Hugging Face -
+        #       dialog tylko SKŁADA string modelu ('hf.co/user/repo:kwant'),
+        #       samo pobieranie idzie tym samym _rozpocznij_pobieranie(), co
+        #       zwykły "Pobierz" wyżej (patrz DialogPobierzZHF).
+        dialog = DialogPobierzZHF(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.tag_modelu:
+            self._rozpocznij_pobieranie(dialog.tag_modelu)
+
+    def _rozpocznij_pobieranie(self, model):
+        # WHAT: wspólny start pobierania (PullWorker) - dzieli go zwykłe pole
+        #       modelu i dialog Hugging Face, żeby nie duplikować paska
+        #       postępu/logu/blokady "jedno pobieranie naraz".
+        # WHY:  jedno pobieranie naraz - prościej i nie obciąża łącza/dysku podwójnie.
         if self.pull_worker and self.pull_worker.isRunning():
             self.wpis_log(_("Pobieranie już trwa - poczekaj na zakończenie."))
             return
