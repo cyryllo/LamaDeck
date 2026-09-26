@@ -43,7 +43,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.11"
+WERSJA = "0.5.12"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -1702,6 +1702,67 @@ class DialogConfigContinue(QDialog):
         QApplication.clipboard().setText(self.pole_tresc.toPlainText())
 
 
+class DialogPolaczenieUnsloth(QDialog):
+    """Dane do ręcznego dodania agregatora LiteLLM jako połączenia w Unsloth Studio.
+
+    WHY: Unsloth Studio NIE ma pliku konfiguracyjnego, który dałoby się
+         wygenerować jak config.yaml dla Continue - połączenia dodaje się
+         w jego oknie (Settings -> Connections -> Add Connection; sprawdzone
+         w docs 2026-09: unsloth.ai/docs/integrations/connections). Typ
+         "vLLM" to w Studio ogólne połączenie z serwerem zgodnym z API
+         OpenAI (Base URL + opcjonalny klucz + "Load Models" z /v1/models) -
+         LiteLLM wystawia dokładnie takie API, więc to właściwy wybór. Dialog
+         pokazuje gotowe wartości do skopiowania + listę ID modeli na wypadek,
+         gdyby "Load Models" nic nie wczytało (Studio pozwala wpisać je ręcznie).
+    """
+
+    def __init__(self, modele, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(_("Połączenie dla Unsloth Studio"))
+        self.setMinimumSize(560, 420)
+        self.adres = f"{LITELLM_URL}/v1"
+        layout = QVBoxLayout(self)
+
+        lbl_kroki = QLabel(_(
+            "Unsloth Studio nie ma pliku konfiguracyjnego - połączenie dodaje się w jego "
+            "oknie:\n"
+            "1. Settings → Connections → Add Connection.\n"
+            "2. Typ: vLLM (to w Studio ogólne połączenie z serwerem zgodnym z API OpenAI, "
+            "a takie API wystawia LiteLLM).\n"
+            "3. Base URL: {adres}\n"
+            "4. API key: zostaw puste.\n"
+            "5. Kliknij Load Models i zaznacz modele. Jeśli lista się nie wczyta, wpisz "
+            "ID modeli ręcznie z listy poniżej.\n"
+            "Studio na innym komputerze w sieci: zamiast localhost podaj adres IP tego "
+            "komputera. LiteLLM musi być uruchomione (karta wyżej)."
+        ).format(adres=self.adres))
+        lbl_kroki.setWordWrap(True)
+        lbl_kroki.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(lbl_kroki)
+
+        layout.addWidget(QLabel(_("ID modeli w agregatorze:")))
+        self.pole_modele = QPlainTextEdit()
+        self.pole_modele.setPlainText("\n".join(modele))
+        self.pole_modele.setReadOnly(True)
+        czcionka = self.pole_modele.font()
+        czcionka.setFamily("monospace")
+        self.pole_modele.setFont(czcionka)
+        layout.addWidget(self.pole_modele, 1)
+
+        pasek = QHBoxLayout()
+        pasek.addStretch(1)
+        btn_adres = QPushButton(_("Kopiuj adres"))
+        btn_adres.clicked.connect(lambda: QApplication.clipboard().setText(self.adres))
+        pasek.addWidget(btn_adres)
+        btn_modele = QPushButton(_("Kopiuj listę modeli"))
+        btn_modele.clicked.connect(lambda: QApplication.clipboard().setText(self.pole_modele.toPlainText()))
+        pasek.addWidget(btn_modele)
+        btn_zamknij = QPushButton(_("Zamknij"))
+        btn_zamknij.clicked.connect(self.accept)
+        pasek.addWidget(btn_zamknij)
+        layout.addLayout(pasek)
+
+
 # =============================================================================
 #  Główne okno
 # =============================================================================
@@ -2165,6 +2226,9 @@ class MainWindow(QMainWindow):
         self.btn_config_continue = QPushButton(_("Config dla Continue..."))
         self.btn_config_continue.clicked.connect(self.generuj_config_continue)
         pasek_agregator.addWidget(self.btn_config_continue)
+        self.btn_polaczenie_unsloth = QPushButton(_("Połączenie dla Unsloth Studio..."))
+        self.btn_polaczenie_unsloth.clicked.connect(self.pokaz_polaczenie_unsloth)
+        pasek_agregator.addWidget(self.btn_polaczenie_unsloth)
         uk_agregator.addLayout(pasek_agregator)
         self.lista_agregator = QListWidget()
         uk_agregator.addWidget(self.lista_agregator)
@@ -3192,23 +3256,20 @@ class MainWindow(QMainWindow):
         worker.wynik.connect(_po_sprawdzeniu)
         worker.start()
 
-    def generuj_config_continue(self):
-        # WHAT: odpytuje hosty (jak odswiez_liste_agregatora) i z wykrytych
-        #       modeli buduje gotowy config.yaml dla Continue.dev, pokazany
-        #       do skopiowania w DialogConfigContinue.
-        # WHY:  osobne, świadome kliknięcie zamiast automatycznego zapisu przy
-        #       starcie LiteLLM - appka nie ma dotykać ~/.continue/config.yaml
-        #       (patrz DialogConfigContinue). Model może wystąpić na kilku
-        #       hostach naraz (LiteLLM sam routuje) - Continue widzi tylko
-        #       nazwę modelu, więc listę deduplikujemy.
+    def _z_modelami_agregatora(self, przycisk, akcja):
+        # WHAT: odpytuje hosty (jak odswiez_liste_agregatora), deduplikuje
+        #       wykryte modele i woła `akcja(modele)` - wspólne dla eksportu
+        #       configu Continue i połączenia Unsloth Studio.
+        # WHY:  model może być na kilku hostach naraz (LiteLLM sam routuje) -
+        #       klient widzi tylko nazwę, więc listę deduplikujemy.
         if self._agregator_worker and self._agregator_worker.isRunning():
             return
-        self.btn_config_continue.setEnabled(False)
+        przycisk.setEnabled(False)
         worker = AgregatorWorker(self.serwery)
         self._agregator_worker = worker
 
         def _po_sprawdzeniu(wpisy, w=worker):
-            self.btn_config_continue.setEnabled(True)
+            przycisk.setEnabled(True)
             modele = sorted({model for _nazwa_hosta, model, _adres in wpisy})
             if not modele:
                 QMessageBox.information(
@@ -3217,10 +3278,28 @@ class MainWindow(QMainWindow):
                       "sprawdź listę serwerów u góry okna i spróbuj ponownie."),
                 )
                 return
-            DialogConfigContinue(_zbuduj_config_continue(modele), self).exec()
+            akcja(modele)
 
         worker.wynik.connect(_po_sprawdzeniu)
         worker.start()
+
+    def generuj_config_continue(self):
+        # WHAT: gotowy config.yaml dla Continue.dev z modeli agregatora,
+        #       pokazany do skopiowania w DialogConfigContinue.
+        # WHY:  osobne, świadome kliknięcie zamiast automatycznego zapisu - appka
+        #       nie ma dotykać ~/.continue/config.yaml (patrz DialogConfigContinue).
+        self._z_modelami_agregatora(
+            self.btn_config_continue,
+            lambda modele: DialogConfigContinue(_zbuduj_config_continue(modele), self).exec(),
+        )
+
+    def pokaz_polaczenie_unsloth(self):
+        # WHAT: dane do dodania agregatora jako połączenia w Unsloth Studio
+        #       (patrz DialogPolaczenieUnsloth - Studio nie ma pliku configu).
+        self._z_modelami_agregatora(
+            self.btn_polaczenie_unsloth,
+            lambda modele: DialogPolaczenieUnsloth(modele, self).exec(),
+        )
 
     # --- Modele ---
     def _wybrany_model(self):

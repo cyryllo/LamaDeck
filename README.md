@@ -111,6 +111,9 @@ python3 ollama_manager.py
 - Preview of which models and hosts will end up in the config, before starting
 - Generates a ready-to-paste Continue.dev `config.yaml` for the exposed models — copy/paste only,
   the app never writes to your files
+- Connection details for **Unsloth Studio** — Studio has no config file (connections are added in
+  its Settings → Connections), so the app shows exactly what to enter (connection type, Base URL,
+  API key) plus the list of model IDs to copy
 - On-demand update check against the latest PyPI release, with a prompt to upgrade via
   `uv tool upgrade` (no admin rights needed) if you're behind
 

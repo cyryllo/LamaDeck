@@ -111,6 +111,9 @@ python3 ollama_manager.py
 - Podgląd, jakie modele i hosty trafią do configu, przed uruchomieniem
 - Generuje gotowy do wklejenia `config.yaml` dla Continue.dev na podstawie wystawionych modeli —
   appka nigdy sama nie zapisuje tego pliku, tylko podgląd/kopiowanie
+- Dane połączenia dla **Unsloth Studio** — Studio nie ma pliku konfiguracyjnego (połączenia dodaje
+  się w jego Settings → Connections), więc appka pokazuje dokładnie, co tam wpisać (typ połączenia,
+  Base URL, klucz API) i listę ID modeli do skopiowania
 - Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na PyPI, z propozycją
   aktualizacji przez `uv tool upgrade` (bez uprawnień administratora), gdy masz starszą wersję
 
