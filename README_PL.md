@@ -70,35 +70,26 @@ python3 ollama_manager.py
   gdy masz starszą wersję — przydatne, bo niektóre modele wymagają nowszej Ollamy, żeby w ogóle się wczytać
 
 **Modele**
-- Tabela zainstalowanych modeli — nazwa, rozmiar na dysku i kolumna z szacowanym/realnym
-  VRAM dla każdego — + usuwanie
-- Pobieranie nowych modeli z podpowiedziami popularnych, pogrupowanymi wg zastosowania wprost
-  w rozwijanej liście — ogólne/czat (Llama, Gemma, Mistral, Phi, Qwen3), kod (Qwen-Coder,
-  DeepSeek-Coder-V2, Ornith), rozumowanie/agentowe (DeepSeek-R1, GPT-OSS), embeddingi do RAG
-  (Nomic, Mixedbread, BGE-M3, EmbeddingGemma) i wizyjne (Qwen2.5-VL, Llama 3.2 Vision, Moondream)
-  — z paskiem postępu
-- Wybór rozmiaru i kwantyzacji (domyślna/Q8_0/pełna F16) przy pobieraniu — obie listy są
-  dopasowane do wybranego modelu (a kwantyzacja dodatkowo do rozmiaru), zweryfikowane na
-  ollama.com/library; dla modeli wymagających dodatkowego segmentu w tagu przy niedomyślnej
-  kwantyzacji (np. "instruct"/"it") appka dokleja go sama — Q8_0/F16 w ogóle się pokazują
-  tylko tam, gdzie potwierdzono, że działający tag istnieje
-- Bieżące, orientacyjne wyliczenie zużycia pamięci (wagi + KV cache + bufory, plus zalecany RAM)
-  przy wyborze rozmiaru/kwantyzacji
+- **Jedna wyszukiwarka dla dwóch źródeł** — wpisz nazwę modelu, a appka szuka naraz w oficjalnej
+  bibliotece Ollamy (ollama.com) i na Hugging Face (tylko modele GGUF). Każdy wynik ma kolumnę
+  **Źródło**, więc zawsze wiadomo, skąd jest model. Wybierz wynik, żeby zobaczyć wszystkie jego
+  warianty (tagi/kwantyzacje) z **prawdziwym rozmiarem pliku**, wybierz wariant i kliknij
+  Pobierz — z paskiem postępu. Nie trzeba znać dokładnego tagu z góry. Warianty MLX (tylko Apple)
+  i modele „cloud” (niepobieralne) są pomijane
+- Wklejony link do Hugging Face (albo `użytkownik/repo`) od razu pokazuje warianty tego repo;
+  wpisanie dokładnej nazwy (np. `llama3.2:3b` albo `hf.co/...:Q4_K_M`) pozwala pobrać bez szukania
+- **Hugging Face to opcjonalne, społecznościowe źródło** — każdy może tam coś opublikować, a appka
+  nie weryfikuje zawartości repo, więc dopisek w karcie doradza trzymać się znanych autorów
+  kwantyzacji (np. bartowski, mradermacher, unsloth)
+- Orientacyjne wyliczenie zużycia pamięci dla wybranego wariantu (prawdziwy rozmiar pliku + KV
+  cache + bufory, plus zalecany RAM; szczegóły w dymku)
+- Tabela zainstalowanych modeli — nazwa, **źródło** (Ollama / Hugging Face), rozmiar na dysku
+  i kolumna z szacowanym/realnym VRAM — + usuwanie. Najechanie na wiersz pokazuje źródło (dla HF
+  z autorem kwantyzacji), rodzinę modelu, liczbę parametrów, kwantyzację i datę pobrania
 - Podgląd modeli aktualnie załadowanych do pamięci (VRAM)
-- Najechanie na wiersz w tabeli zainstalowanych modeli pokazuje dymek ze źródłem (oficjalna
-  biblioteka Ollamy albo Hugging Face z autorem/wydawcą kwantyzacji), rodziną modelu, liczbą
-  parametrów, kwantyzacją i datą pobrania - modele z HF mają też skróconą nazwę w samej tabeli
-  (`<repo>:<kwant> (hf)`) zamiast pełnej `hf.co/<użytkownik>/<repo>:<kwant>`
-- **Pobieranie modeli GGUF wprost z Hugging Face** — jedno pole, dwa sposoby użycia: wklej link
-  do repo (albo `użytkownik/repo`), żeby od razu zobaczyć dostępne warianty kwantyzacji (z
-  rozmiarami), albo po prostu wpisz nazwę modelu, żeby wyszukać pasujące repo na Hugging Face
-  (posortowane wg liczby pobrań) i wybrać jedno z wyników. W obu przypadkach appka wylistuje
-  warianty na podstawie listy plików w repo, więc nie trzeba znać dokładnego stringa kwantyzacji
-  z góry. Pokazują się/działają tylko repo, które faktycznie mają w środku pliki `.gguf` —
-  większość modeli na HF jest w surowym `safetensors`, tego Ollama nie pobierze bezpośrednio.
-  **To opcjonalne, społecznościowe źródło** (w przeciwieństwie do oficjalnej biblioteki Ollamy
-  wyżej) — appka nie weryfikuje zawartości repo, więc dopisek obok przycisku doradza trzymać się
-  znanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth)
+- Uwaga: ollama.com nie ma publicznego API wyszukiwania, więc appka czyta jej strony wyszukiwania
+  i tagów — jeśli wygląd strony się zmieni, wyszukiwanie w Ollamie może wymagać poprawki (Hugging
+  Face ma prawdziwe API)
 
 **Open WebUI**
 - Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)

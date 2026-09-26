@@ -17,6 +17,7 @@
 
 import sys
 import json
+import html
 import os
 import re
 import shlex
@@ -29,20 +30,20 @@ from pathlib import Path
 import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QUrl, QSettings
-from PyQt6.QtGui import QIcon, QDesktopServices, QStandardItemModel, QStandardItem
+from PyQt6.QtGui import QIcon, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QPushButton, QListWidget, QListWidgetItem, QProgressBar, QTabWidget,
+    QLabel, QPushButton, QListWidget, QProgressBar, QTabWidget,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
-    QDialog, QLineEdit, QScrollArea, QFrame,
+    QDialog, QLineEdit, QScrollArea,
 )
 
 # --- Konfiguracja ---------------------------------------------------------
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.10"
+WERSJA = "0.5.11"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -61,162 +62,6 @@ WEBUI_URL = "http://localhost:8080"
 # WHAT: adres agregatora LiteLLM (domyślny port 'litellm --config ...').
 # WHY:  jw. - jedno miejsce do zmiany, gdyby port kolidował z czymś innym.
 LITELLM_URL = "http://localhost:4000"
-
-# WHAT: modele (SAME nazwy rodzin, bez rozmiaru) podpowiadane w rozwijanej
-#       liście pobierania - pogrupowane wg zastosowania. Rozmiar wybiera się
-#       osobno, w polu "Rozmiar" obok, którego podpowiedzi zależą od wybranego
-#       modelu (patrz ROZMIARY_WG_MODELU i _aktualizuj_liste_rozmiarow). Pełne
-#       wyjaśnienie każdej kategorii jest w zakładce "Pomoc" (patrz
-#       _zakladka_pomoc) - tu w rozwijanej liście widać tylko nazwy kategorii
-#       jako nieklikalne nagłówki (patrz _wypelnij_combo_modele).
-# WHY:  użytkownik wybiera z listy, zamiast wpisywać nazwy z palca, a grupowanie
-#       od razu pokazuje, do czego dany model służy (np. że embeddingi to NIE
-#       modele do rozmowy). Pole jest edytowalne, więc dowolny inny model z
-#       ollama.com/library da się mimo to wpisać ręcznie.
-POLECANE_MODELE_WG_KATEGORII = [
-    ("Ogólne / czat", [
-        "llama3.2",     # Meta - lekki, uniwersalny (domyślnie 3B)
-        "llama3.1",     # Meta - solidny model ogólnego przeznaczenia
-        "gemma3",       # Google - domyślnie 4B, mieści się na jednym GPU
-        "gemma2",       # Google - poprzednia generacja
-        "mistral",      # Mistral AI - klasyczny 7B
-        "phi4",         # Microsoft - 14B, mocny w rozumowaniu
-        "qwen3",        # Qwen - ogólny model najnowszej generacji
-    ]),
-    ("Kod / programowanie", [
-        "qwen2.5-coder",      # Qwen - do kodu, wspiera tool-calling
-        "deepseek-coder-v2",  # DeepSeek - MoE do kodu, tool-calling
-        "ornith",              # agent kodujący, MIT, kontekst 256K
-    ]),
-    ("Rozumowanie / agentowe", [
-        "deepseek-r1",  # DeepSeek - model z "myśleniem" (reasoning)
-        "gpt-oss",      # OpenAI - open-weight, reasoning/agentowy
-    ]),
-    ("Embeddingi (RAG)", [
-        "nomic-embed-text",   # embeddingi (RAG, wyszukiwanie semantyczne)
-        "mxbai-embed-large",  # embeddingi - SOTA jakość dla tej klasy rozmiaru
-        "bge-m3",              # embeddingi - wielojęzyczne, długie dokumenty (do 8192 tokenów)
-        "embeddinggemma",      # embeddingi - najnowsze od Google (na bazie Gemma 3), bardzo lekkie
-    ]),
-    ("Wizyjne (obrazy/dokumenty)", [
-        "qwen2.5vl",        # wizyjny (obrazy/OCR/dokumenty) - Qwen
-        "llama3.2-vision",  # wizyjny - Meta
-        "moondream",        # wizyjny - bardzo lekki (<4GB VRAM)
-    ]),
-]
-
-# WHAT: płaska lista wszystkich modeli z POLECANE_MODELE_WG_KATEGORII - do
-#       miejsc, którym nie zależy na podziale (np. weryfikacja w testach).
-POLECANE_MODELE = [nazwa for _kategoria, modele in POLECANE_MODELE_WG_KATEGORII for nazwa in modele]
-
-# WHAT: RZECZYWISTE rozmiary dostępne dla każdego modelu z POLECANE_MODELE -
-#       zweryfikowane wprost na stronach tagów ollama.com/library/<model>/tags
-#       (2026-07). Pole "Rozmiar" pokazuje TYLKO te podpowiedzi, gdy wybrany
-#       model jest na tej liście (patrz _aktualizuj_liste_rozmiarow).
-# WHY:  BUG naprawiony: poprzednia wersja miała jedną wspólną listę podpowiedzi
-#       (1b-70b) dla WSZYSTKICH modeli naraz, więc appka sugerowała rozmiary,
-#       których dany model w ogóle nie ma (np. Ornith: appka pokazywała 1b-70b,
-#       a naprawdę istnieją tylko warianty 9b i 35b - wybranie czegokolwiek
-#       innego kończyłoby się błędem pobierania). Rozmiary bez większego
-#       znaczenia (Mistral, Phi-4 - jeden rozmiar bazowy) i tak są tu wpisane
-#       jawnie, żeby podpowiedź była zgodna z rzeczywistością, a nie pusta.
-# UWAGA: ta lista się starzeje, gdy Ollama doda nowe warianty - sprawdzać przy
-#        okazji aktualizacji POLECANE_MODELE.
-ROZMIARY_WG_MODELU = {
-    "llama3.2": ["1b", "3b"],
-    "llama3.1": ["8b", "70b", "405b"],
-    "gemma3": ["270m", "1b", "4b", "12b", "27b"],
-    "gemma2": ["2b", "9b", "27b"],
-    "mistral": ["7b"],
-    "phi4": ["14b"],
-    "deepseek-r1": ["1.5b", "7b", "8b", "14b", "32b", "70b", "671b"],
-    "qwen3": ["0.6b", "1.7b", "4b", "8b", "14b", "30b", "32b", "235b"],
-    "qwen2.5-coder": ["0.5b", "1.5b", "3b", "7b", "14b", "32b"],
-    "gpt-oss": ["20b", "120b"],
-    "deepseek-coder-v2": ["16b", "236b"],
-    "ornith": ["9b", "35b"],
-    "nomic-embed-text": ["137m"],
-    "mxbai-embed-large": ["335m"],
-    "bge-m3": ["567m"],
-    "embeddinggemma": ["300m"],
-    "qwen2.5vl": ["3b", "7b", "32b", "72b"],
-    "llama3.2-vision": ["11b", "90b"],
-    "moondream": ["1.8b"],
-}
-
-# WHAT: podpowiedzi rozmiaru dla modelu spoza POLECANE_MODELE (wpisanego z ręki) -
-#       appka nie zna jego rzeczywistych wariantów, więc dostaje ogólny,
-#       orientacyjny przekrój zamiast konkretnej, zweryfikowanej listy.
-ROZMIARY_MODELI_OGOLNE = [
-    "1b", "1.5b", "3b", "4b", "7b", "8b", "9b", "12b", "14b",
-    "20b", "27b", "30b", "32b", "34b", "70b",
-]
-
-# WHAT: dla każdego modelu - (zbiór kwantyzacji POTWIERDZONYCH jako realnie
-#       pobieralny tag, segment do wstawienia W ŚRODKU tagu między rozmiarem
-#       a kwantyzacją). Zweryfikowane bezpośrednio (HTTP 200 kontra 404 na
-#       konkretnym tagu, kilka rozmiarów i oba warianty na model) na
-#       ollama.com, 2026-07 - nie zgadywane.
-# WHY:  BUG naprawiony (dwukrotnie) - appka najpierw zakładała, że KAŻDY model
-#       akceptuje płaski format "rozmiar-kwantyzacja" (np. "8b-q8_0"), co dla
-#       większości modeli (Llama, Gemma, Mistral, Qwen-Coder) kończyło się
-#       404/"manifest unknown" - naprawdę potrzebują dodatkowego segmentu W
-#       ŚRODKU tagu ("8b-instruct-q8_0"; Gemma używa "-it-" zamiast
-#       "-instruct-"). Pierwsza poprawka po prostu WYŁĄCZAŁA Q8_0/F16 dla
-#       takich modeli (bezpieczne, ale ograniczające) - ta wersja zamiast
-#       tego dokleja poprawny segment, więc wybór działa naprawdę, nie tylko
-#       się nie psuje. DeepSeek-Coder-V2 początkowo dał 404 z samym "instruct" -
-#       właściwy segment dla 16B to "lite-instruct" (bo to konkretnie wariant
-#       "lite" tego modelu), a dla 236B samo "instruct" - patrz wyjątek w
-#       KWANTYZACJE_WYJATKI_ROZMIAROW niżej. DeepSeek-R1 ma segment RÓŻNY dla
-#       różnych rozmiarów (llama-distill/qwen-distill/0528-qwen3, zależnie od
-#       rozmiaru, więcej niż dwa warianty) - zbyt niejednolite, żeby bezpiecznie
-#       wypisać wszystkie wyjątki, więc kwantyzacja zostaje dla niego wyłączona
-#       (tylko "domyślna"). Modele NIEobjęte tą listą dostają WYŁĄCZNIE
-#       "domyślną" - bezpieczniej pokazać mniej opcji niż zbudować tag, który
-#       się nie pobierze.
-KWANTYZACJE_WG_MODELU = {
-    "llama3.2": ({"q8_0", "fp16"}, "instruct"),
-    "llama3.1": ({"q8_0", "fp16"}, "instruct"),
-    "gemma3": ({"q8_0", "fp16"}, "it"),
-    "gemma2": ({"q8_0", "fp16"}, "instruct"),
-    "mistral": ({"q8_0", "fp16"}, "instruct"),
-    "qwen2.5-coder": ({"q8_0", "fp16"}, "instruct"),
-    "phi4": ({"q8_0", "fp16"}, ""),
-    "qwen3": ({"q8_0", "fp16"}, ""),  # UWAGA: NIE dotyczy rozmiarów MoE - patrz KWANTYZACJE_WYJATKI_ROZMIAROW
-    "ornith": ({"q8_0"}, ""),  # fp16 NIE istnieje (jest "bf16", którego appka nie oferuje jako opcję)
-    "deepseek-coder-v2": ({"q8_0", "fp16"}, "instruct"),  # domyślnie dla 236b - 16b ma inny segment, patrz niżej
-}
-
-# WHAT: wyjątki dla KONKRETNYCH (model, rozmiar), gdzie ogólna reguła z
-#       KWANTYZACJE_WG_MODELU wyżej nie obowiązuje - ta sama para (zbiór
-#       kwantyzacji, segment) co tam, tylko nadpisana dla jednego rozmiaru.
-#       Puste set() = tylko domyślna (segment wtedy bez znaczenia).
-# WHY:  qwen3:30b i qwen3:235b to warianty MoE (tag "a3b-"/"a22b-" w środku,
-#       inny wzorzec niż reszta rozmiarów tego modelu) - dokładny format
-#       niepotwierdzony bezpośrednio, więc appka nie zgaduje. DeepSeek-Coder-V2
-#       16B to konkretnie wariant "lite" tego modelu - segment "lite-instruct",
-#       NIE samo "instruct" (to dla 236B) - potwierdzone bezpośrednio,
-#       "236b-lite-instruct-..." nie istnieje.
-KWANTYZACJE_WYJATKI_ROZMIAROW = {
-    ("qwen3", "30b"): (set(), ""),
-    ("qwen3", "235b"): (set(), ""),
-    ("deepseek-coder-v2", "16b"): ({"q8_0", "fp16"}, "lite-instruct"),
-}
-
-
-def _dostepne_kwantyzacje(model, rozmiar):
-    wyjatek = KWANTYZACJE_WYJATKI_ROZMIAROW.get((model, rozmiar))
-    if wyjatek is not None:
-        return wyjatek[0]
-    return KWANTYZACJE_WG_MODELU.get(model, (set(), ""))[0]
-
-
-def _segment_kwantyzacji(model, rozmiar):
-    wyjatek = KWANTYZACJE_WYJATKI_ROZMIAROW.get((model, rozmiar))
-    if wyjatek is not None:
-        return wyjatek[1]
-    return KWANTYZACJE_WG_MODELU.get(model, (set(), ""))[1]
 
 # WHAT: profil startowy dla przycisku "Zastosuj zalecane wartości" w zakładce
 #       Zaawansowane - wypełnia formularz, NIC nie zapisuje samo z siebie.
@@ -997,47 +842,14 @@ def litellm_autostart(wlacz, serwery):
         _systemctl_user(["disable", "--now", "litellm.service"])
 
 
-def _zbuduj_tag_modelu(model, rozmiar, kwantyzacja):
-    # WHAT: dokleja rozmiar i/albo wariant kwantyzacji do tagu modelu przed
-    #       pobraniem, oddzielone myślnikiem (konwencja Ollamy - np. "8b-q8_0").
-    #       Jeśli wybrano kwantyzację I dany model wymaga dodatkowego segmentu
-    #       w środku tagu (np. "instruct"/"it" - patrz KWANTYZACJE_WG_MODELU),
-    #       segment ląduje MIĘDZY rozmiarem a kwantyzacją: "8b-instruct-q8_0".
-    # WHY:  jeśli nazwa modelu ma już tag (po dwukropku, np. wybrany wprost z
-    #       listy podpowiedzi "llama3.1:8b"), doklejamy do NIEGO; jeśli nazwa
-    #       to sam człon rodziny bez tagu (czyli wskazywałaby "latest"),
-    #       rozmiar/kwantyzacja stają się całym tagiem. Segment jest doklejany
-    #       tylko wtedy, gdy appka go ZNA i zweryfikowała (patrz
-    #       KWANTYZACJE_WG_MODELU) - _aktualizuj_liste_kwantyzacji już wcześniej
-    #       dba o to, żeby kwantyzacja w ogóle nie była wybieralna dla modeli
-    #       bez takiej weryfikacji, więc to tylko dopięcie tej samej logiki.
-    model = model.strip()
-    if ":" in model:
-        repo, czesci_tagu = model.split(":", 1)
-        czesci_tagu = [czesci_tagu]
-    else:
-        repo, czesci_tagu = model, []
-    rozmiar = rozmiar.strip() if rozmiar else ""
-    if rozmiar:
-        czesci_tagu.append(rozmiar)
-    if kwantyzacja:
-        segment = _segment_kwantyzacji(repo, rozmiar)
-        if segment:
-            czesci_tagu.append(segment)
-        czesci_tagu.append(kwantyzacja)
-    if not czesci_tagu:
-        return repo
-    return f"{repo}:" + "-".join(czesci_tagu)
-
-
 # =============================================================================
-#  Pobieranie modeli GGUF z Hugging Face (patrz CLAUDE.md, sekcja roadmapy,
-#  "Wariant B") - Ollama umie ściągać GGUF wprost z HF przez
-#  'hf.co/<user>/<repo>:<kwantyzacja>' (działa TYLKO dla repo z plikami .gguf -
-#  reszta HF jest w surowym safetensors, tego Ollama nie konwertuje w locie).
-#  Ten dialog tylko ZNAJDUJE dostępne warianty i SKŁADA ten string - samo
-#  pobieranie idzie już istniejącym pull_stream()/PullWorker (patrz
-#  MainWindow.pobierz_z_hf), zero duplikacji paska postępu/logu.
+#  Wyszukiwanie i pobieranie modeli - JEDNA wyszukiwarka dla dwóch źródeł:
+#  oficjalnej biblioteki Ollamy (ollama.com) i Hugging Face (tylko GGUF - reszta
+#  HF jest w surowym safetensors, tego Ollama nie konwertuje w locie; Ollama
+#  pobiera GGUF z HF przez 'hf.co/<user>/<repo>:<kwantyzacja>').
+#  Te funkcje tylko ZNAJDUJĄ modele/warianty i dają gotową nazwę do pobrania -
+#  samo pobieranie idzie istniejącym pull_stream()/PullWorker (patrz
+#  MainWindow._rozpocznij_pobieranie), zero duplikacji paska postępu/logu.
 # =============================================================================
 
 # WHAT: znane PRZEDROSTKI rodzin kwantyzacji GGUF (nazewnictwo llama.cpp/ggml)
@@ -1088,8 +900,8 @@ def _hf_repo_z_linku(tekst):
 def _skroc_nazwe_modelu_hf(nazwa):
     # WHAT: skraca długą nazwę modelu pobranego z Hugging Face
     #       ('hf.co/<użytkownik>/<repo>:<kwant>') do samej nazwy repo +
-    #       kwantyzacji, z dopiskiem "(hf)" na końcu zamiast pełnej ścieżki
-    #       z "hf.co/<użytkownik>/". Modele z ollama.com/library (krótkie
+    #       kwantyzacji, bez "hf.co/<użytkownik>/" - źródło pokazuje osobna
+    #       kolumna "Źródło" (patrz _zrodlo_modelu). Modele z ollama.com/library (krótkie
     #       nazwy typu "qwen2.5-coder:7b") wracają bez zmian - dotyczy
     #       WYŁĄCZNIE modeli zaczynających się od "hf.co/".
     # WHY:  pełna nazwa (np. "hf.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF:
@@ -1104,7 +916,17 @@ def _skroc_nazwe_modelu_hf(nazwa):
     #      globalną funkcję tłumaczeń _() w reszcie funkcji (patrz bug
     #      naprawiony w _zbuduj_tooltip_modelu, ten sam wzorzec partition()).
     _uzytkownik, _sep, repo_i_kwant = reszta.partition("/")
-    return f"{repo_i_kwant or reszta} (hf)"
+    return repo_i_kwant or reszta
+
+
+def _zrodlo_modelu(nazwa):
+    # WHAT: skąd pochodzi zainstalowany model - po samej nazwie ("hf.co/..." =
+    #       Hugging Face, reszta = biblioteka Ollamy). Nazwy własne źródeł,
+    #       nietłumaczone - tak samo w każdym języku.
+    # WHY:  na wyraźną prośbę użytkownika ("żeby było wiadomo, skąd model jest")
+    #       - osobna kolumna w tabeli zainstalowanych i w wynikach wyszukiwania,
+    #       zamiast dawnego dopisku "(hf)" przy nazwie.
+    return "Hugging Face" if nazwa.startswith("hf.co/") else "Ollama"
 
 
 def _zbuduj_tooltip_modelu(m):
@@ -1147,7 +969,7 @@ def _zbuduj_tooltip_modelu(m):
     #      dosłowne "unknown" zamiast pustego pola - dawniej appka pokazywała
     #      bezużyteczne "Kwantyzacja: unknown". Dla modeli z HF PRAWDZIWA
     #      kwantyzacja i tak jest częścią tagu (":Q6_K_XL" w nazwie modelu -
-    #      to dokładnie to, co appka złożyła w DialogPobierzZHF), więc dla
+    #      to dokładnie to, co appka złożyła w wyszukiwarce), więc dla
     #      takich przypadków bierzemy ją stamtąd zamiast z niewiarygodnego
     #      pola API. Zweryfikowane na żywym modelu: hf.co/unsloth/
     #      GLM-4.7-Flash-GGUF:Q6_K_XL - details.family="deepseek2" (GLM-4
@@ -1178,6 +1000,11 @@ def hf_wyszukaj_warianty_gguf(repo):
     #       plików na TĘ SAMĄ kwantyzację - sumujemy ich rozmiar, żeby appka
     #       pokazała jeden wpis z prawdziwym łącznym rozmiarem do pobrania
     #       (Ollama sama ściągnie i złoży wszystkie części pod jednym tagiem).
+    # BUG naprawiony: niektóre repo mają TEN SAM model dwa razy - w całości
+    #       I pocięty na części (np. Qwen/Qwen2.5-Coder-7B-Instruct-GGUF: fp16
+    #       jako jeden plik 14,2 GB + te same wagi w 4 częściach). Dawniej
+    #       wszystko się sumowało (28,4 GB dla modelu 7B). Teraz: jest plik w
+    #       całości -> liczy się tylko on; części sumujemy tylko, gdy go brak.
     r = requests.get(
         f"https://huggingface.co/api/models/{repo}/tree/main",
         params={"recursive": "true"}, timeout=10,
@@ -1186,7 +1013,8 @@ def hf_wyszukaj_warianty_gguf(repo):
         raise ValueError(_("Nie znaleziono takiego repozytorium na Hugging Face."))
     r.raise_for_status()
 
-    warianty = {}  # kwantyzacja (str) albo None -> suma rozmiaru w bajtach
+    calosci = {}  # kwantyzacja (str) albo None -> rozmiar pliku w całości
+    czesci = {}   # kwantyzacja -> suma rozmiarów części "-00001-of-0000N"
     for wpis in r.json():
         sciezka = wpis.get("path", "")
         if not sciezka.lower().endswith(".gguf"):
@@ -1196,8 +1024,10 @@ def hf_wyszukaj_warianty_gguf(repo):
         #      niepobierające ('(?:...)'), całe dopasowanie (przedrostek +
         #      cała reszta tokenu) to jedyna "grupa", jaką mamy.
         kwant = dopasowanie.group(0).upper() if dopasowanie else None
-        warianty[kwant] = warianty.get(kwant, 0) + wpis.get("size", 0)
+        cel = czesci if re.search(r"-\d{5}-of-\d{5}$", Path(sciezka).stem) else calosci
+        cel[kwant] = cel.get(kwant, 0) + wpis.get("size", 0)
 
+    warianty = {**czesci, **calosci}  # WHY: plik w całości wygrywa z sumą części
     if not warianty:
         raise ValueError(_("To repozytorium nie zawiera żadnych plików .gguf."))
 
@@ -1231,6 +1061,95 @@ def hf_wyszukaj_repozytoria(zapytanie):
     ]
 
 
+def _rozmiar_na_bajty(tekst):
+    # WHAT: zamienia rozmiar w formacie strony ollama.com ("4.7GB", "398MB") na
+    #       bajty. Zwraca None, gdy tekstu nie da się odczytać.
+    # WHY:  HF podaje rozmiar w bajtach wprost z API, ollama.com tylko jako tekst
+    #       na stronie - jedna jednostka dla obu źródeł, żeby tabela wariantów
+    #       i kalkulator pamięci nie musiały ich rozróżniać.
+    dopasowanie = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT]?B)\s*", tekst or "", re.IGNORECASE)
+    if not dopasowanie:
+        return None
+    mnozniki = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}
+    return int(float(dopasowanie.group(1)) * mnozniki[dopasowanie.group(2).upper()])
+
+
+def _formatuj_liczbe(n):
+    # WHAT: liczba pobrań w skróconej formie ("21.8M", "146.0K") - tak jak
+    #       pokazuje ją ollama.com, żeby oba źródła w tabeli wyników wyglądały
+    #       spójnie (HF podaje surową liczbę).
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
+
+def ollama_wyszukaj_modele(zapytanie):
+    # WHAT: szuka modeli w oficjalnej bibliotece Ollamy (ollama.com/search) -
+    #       lista słowników: nazwa, opis, możliwości (tools/vision/embedding/
+    #       thinking), dostępne rozmiary i liczba pobrań (tekst jak na stronie).
+    # WHY:  ollama.com NIE ma publicznego API wyszukiwania (sprawdzone 2026-09:
+    #       /api/search i podobne dają 404) - jedynym źródłem jest zwykła strona
+    #       HTML, więc odczytujemy ją wyrażeniami regularnymi.
+    # UWAGA: celowo KRUCHE miejsce - gdy ollama.com zmieni wygląd strony,
+    #        parser przestanie znajdować wyniki (pusta lista, appka się nie
+    #        wywali) i trzeba go będzie poprawić. Przy HF tego ryzyka nie ma
+    #        (prawdziwe API, patrz hf_wyszukaj_repozytoria).
+    r = requests.get("https://ollama.com/search", params={"q": zapytanie}, timeout=10)
+    r.raise_for_status()
+    czesci = re.split(r'<a href="/library/([^"]+)" class="group w-full">', r.text)
+    wyniki = []
+    for i in range(1, len(czesci), 2):
+        blok = czesci[i + 1].split("</a>", 1)[0]
+        opis = re.search(r'<p class="max-w-lg[^"]*">(.*?)</p>', blok, re.S)
+        pobrania = re.search(r'>\s*([\d.,]+[KMB]?)\s*</span>\s*<span class="hidden sm:flex">&nbsp;Pulls', blok)
+        wyniki.append({
+            "zrodlo": "ollama",
+            "id": czesci[i],
+            "opis": html.unescape(re.sub(r"\s+", " ", opis.group(1))).strip() if opis else "",
+            "mozliwosci": re.findall(r'bg-indigo-50[^>]*>\s*([^<]+?)\s*<', blok),
+            "rozmiary": re.findall(r'bg-\[#ddf4ff\][^>]*>\s*([^<]+?)\s*<', blok),
+            "pobrania": pobrania.group(1) if pobrania else "",
+        })
+    return wyniki
+
+
+def ollama_warianty_modelu(model):
+    # WHAT: czyta stronę tagów modelu (ollama.com/library/<model>/tags) i zwraca
+    #       listę (tag, rozmiar_bajty, kontekst) - każdy dokładny, pobieralny
+    #       wariant z PRAWDZIWYM rozmiarem pliku.
+    # WHY:  zastępuje dawne, ręcznie utrzymywane tabele ROZMIARY_WG_MODELU/
+    #       KWANTYZACJE_WG_MODELU (segmenty "instruct"/"it" w tagu zgadywane
+    #       i weryfikowane ręcznie - źródło kilku błędów) - tagi przychodzą
+    #       gotowe ze źródła, nie trzeba ich znać z góry ani składać z kawałków.
+    #       Pomijamy warianty MLX (tylko Apple Silicon - na Linuksie się nie
+    #       uruchomią) i tagi "cloud"/bez rozmiaru (liczone na serwerach Ollamy,
+    #       nie do pobrania lokalnie).
+    # UWAGA: ta sama kruchość co ollama_wyszukaj_modele - odczyt HTML, nie API.
+    r = requests.get(f"https://ollama.com/library/{model}/tags", timeout=10)
+    if r.status_code == 404:
+        raise ValueError(_("Nie znaleziono takiego modelu w bibliotece Ollamy."))
+    r.raise_for_status()
+    wiersze = re.findall(
+        r'<a href="/library/' + re.escape(model) + r':([^"]+)" class="md:hidden[^"]*">(.*?)</a>',
+        r.text, re.S,
+    )
+    warianty = []
+    for tag, blok in wiersze:
+        tekst = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", blok))
+        if "cloud" in tag or re.search(r"\bMLX\b", tekst):
+            continue
+        rozmiar = re.search(r"•\s*([\d.]+\s*[KMGT]?B)\s*•", tekst)
+        if not rozmiar:
+            continue
+        kontekst = re.search(r"•\s*(\d+[KM]?)\s+context window", tekst)
+        warianty.append((tag, _rozmiar_na_bajty(rozmiar.group(1)), kontekst.group(1) if kontekst else ""))
+    if not warianty:
+        raise ValueError(_("Ten model nie ma wariantów do pobrania na Linuksie (tylko MLX albo cloud)."))
+    return warianty
+
+
 def _parsuj_rozmiar_parametrow(tekst):
     # WHAT: wyciąga liczbę parametrów (W MILIARDACH) z tekstu typu "8b", "1.5B",
     #       "300m", "70b-instruct", "llama3.1:8b" albo details.parameter_size z
@@ -1250,16 +1169,9 @@ def _parsuj_rozmiar_parametrow(tekst):
     return liczba / 1000 if dopasowanie.group(2).upper() == "M" else liczba
 
 
-# WHAT: mnożnik GB/mld parametrów (bity na wagę, przeliczone) wg wariantu
-#       kwantyzacji - kalkulator pamięci dla modeli LLM (Ollama/llama.cpp).
-# WHY:  mapowanie na trzy opcje z combo_kwantyzacja: pusta ("domyślna") to
-#       najbliższy odpowiednik tego, co Ollama zwykle ściąga (Q4_K_M), Q8_0
-#       i FP16 to bezpośrednie odpowiedniki wybranych wariantów.
-_KWANTYZACJA_BPW = {
-    "": ("Q4_K_M", 0.61),
-    "q8_0": ("Q8_0", 1.06),
-    "fp16": ("FP16", 2.00),
-}
+# WHAT: mnożnik GB/mld parametrów, gdy Ollama nie poda kwantyzacji modelu
+#       (odpowiednik Q4_K_M - najczęstszej domyślnej kwantyzacji Ollamy).
+_BPW_DOMYSLNE = 0.61
 
 # WHAT: bajty na element pamięci podręcznej kontekstu (KV cache) wg jej kwantyzacji.
 _KVQ_BAJTY_NA_ELEMENT = {
@@ -1295,11 +1207,11 @@ _KALKULATOR_D = 128  # wymiar głowicy - domyślny
 
 
 # WHAT: mapowanie PRAWDZIWEJ wartości details.quantization_level z /api/tags
-#       (np. "Q4_K_M", "F16") na ten sam mnożnik BPW co _KWANTYZACJA_BPW.
+#       (np. "Q4_K_M", "F16") na mnożnik GB/mld parametrów (BPW).
 # WHY:  lista zainstalowanych modeli liczy VRAM na faktycznych metadanych
 #       Ollamy, nie na zgadywaniu - ale Ollama zna więcej wariantów, niż appka
 #       daje wybrać przy pobieraniu, stąd osobna, szersza tabela. Nieznany/
-#       nierozpoznany wariant dostaje wartość domyślną (jak Q4_K_M).
+#       nierozpoznany wariant dostaje _BPW_DOMYSLNE (jak Q4_K_M).
 _QUANTIZATION_LEVEL_BPW = {
     "FP16": 2.00,
     "F16": 2.00,
@@ -1312,20 +1224,15 @@ _QUANTIZATION_LEVEL_BPW = {
 }
 
 
-def _oszacuj_pamiec_bpw(miliardy_parametrow, bpw, etykieta_q):
-    # WHAT: kalkulator pamięci dla modelu LLM - wagi + KV cache + bufory,
-    #       z zapasem na system - zwraca słownik ze wszystkimi krokami
-    #       pośrednimi. Współdzielony rdzeń dla dwóch miejsc w oknie: karty
-    #       "Pobierz nowy model" (patrz _oszacuj_pamiec, kwantyzacja z combo)
-    #       i listy "Zainstalowane modele" (kwantyzacja z prawdziwych metadanych
-    #       API - patrz _QUANTIZATION_LEVEL_BPW).
-    # WHY:  poprzednia wersja liczyła tylko "wagi × 1.3" - to dawało zbyt
-    #       optymistyczny wynik przy dużym kontekście (KV cache potrafi
-    #       przewyższyć same wagi przy mniejszych modelach i długim kontekście).
-    #       KV cache liczony jest osobno, na podstawie przybliżonej architektury
-    #       (L, H_KV) dobranej wg wielkości P.
-    wagi_gb = miliardy_parametrow * bpw
-
+def _oszacuj_pamiec_z_wag(wagi_gb, miliardy_parametrow, etykieta_q):
+    # WHAT: kalkulator pamięci dla modelu LLM - wagi + KV cache + bufory, z
+    #       zapasem na system - zwraca słownik ze wszystkimi krokami pośrednimi.
+    #       Wspólny rdzeń dla karty "Pobierz nowy model" (wagi = PRAWDZIWY
+    #       rozmiar wybranego pliku) i listy "Zainstalowane modele" (wagi
+    #       wyliczone z metadanych API - patrz _oszacuj_pamiec_bpw).
+    # WHY:  sama waga to za mało - KV cache potrafi przewyższyć wagi przy
+    #       mniejszych modelach i długim kontekście, więc liczymy go osobno, na
+    #       podstawie przybliżonej architektury (L, H_KV) dobranej wg wielkości P.
     l, h_kv = _PRZYBLIZENIE_ARCHITEKTURY_MAX
     for prog, prog_l, prog_h_kv in _PRZYBLIZENIE_ARCHITEKTURY:
         if miliardy_parametrow <= prog:
@@ -1357,11 +1264,10 @@ def _oszacuj_pamiec_bpw(miliardy_parametrow, bpw, etykieta_q):
     }
 
 
-def _oszacuj_pamiec(miliardy_parametrow, kwantyzacja):
-    # WHAT: wariant _oszacuj_pamiec_bpw dla karty "Pobierz nowy model" - bierze
-    #       kwantyzację z combo_kwantyzacja ("", "q8_0", "fp16").
-    etykieta_q, bpw = _KWANTYZACJA_BPW.get(kwantyzacja, _KWANTYZACJA_BPW[""])
-    return _oszacuj_pamiec_bpw(miliardy_parametrow, bpw, etykieta_q)
+def _oszacuj_pamiec_bpw(miliardy_parametrow, bpw, etykieta_q):
+    # WHAT: wariant dla listy "Zainstalowane modele" - wagi liczone z liczby
+    #       parametrów i kwantyzacji z metadanych API (patrz _QUANTIZATION_LEVEL_BPW).
+    return _oszacuj_pamiec_z_wag(miliardy_parametrow * bpw, miliardy_parametrow, etykieta_q)
 
 
 # =============================================================================
@@ -1587,44 +1493,62 @@ class SprawdzAktualizacjeWorker(QThread):
         self.wynik.emit({"blad": None, "lokalna": lokalna, "najnowsza": najnowsza, "dostepna": dostepna})
 
 
-class SzukajGGUFWorker(QThread):
-    """Pyta HF API o dostępne warianty kwantyzacji GGUF w repo, w tle.
+class SzukajModeliWorker(QThread):
+    """Szuka modeli naraz w obu źródłach (biblioteka Ollamy + Hugging Face), w tle.
 
-    WHY: zapytanie sieciowe do Hugging Face nie może blokować GUI, tak jak
-         każde inne zapytanie w tej appce - nawet gdy dialog jest modalny.
+    WHY: jedna wspólna wyszukiwarka w karcie "Pobierz nowy model" - błąd
+         jednego źródła (np. brak sieci do HF albo zmiana strony ollama.com)
+         NIE może ukryć wyników z drugiego, więc każde źródło łapie swój błąd
+         osobno i trafia do listy błędów zamiast przerywać całość.
     """
-    wynik = pyqtSignal(list)   # lista (kwant:str|None, rozmiar_bajty:int) - patrz hf_wyszukaj_warianty_gguf
-    blad = pyqtSignal(str)
-
-    def __init__(self, repo):
-        super().__init__()
-        self.repo = repo
-
-    def run(self):
-        try:
-            warianty = hf_wyszukaj_warianty_gguf(self.repo)
-        except (requests.RequestException, ValueError) as e:
-            self.blad.emit(str(e))
-            return
-        self.wynik.emit(warianty)
-
-
-class SzukajRepoWorker(QThread):
-    """Szuka repozytoriów GGUF na Hugging Face pasujących do nazwy, w tle."""
-    wynik = pyqtSignal(list)   # lista {"id": str, "pobrania": int} - patrz hf_wyszukaj_repozytoria
-    blad = pyqtSignal(str)
+    wynik = pyqtSignal(list, list)  # (wyniki z obu źródeł, komunikaty błędów)
 
     def __init__(self, zapytanie):
         super().__init__()
         self.zapytanie = zapytanie
 
     def run(self):
+        wyniki, bledy = [], []
         try:
-            wyniki = hf_wyszukaj_repozytoria(self.zapytanie)
+            wyniki += ollama_wyszukaj_modele(self.zapytanie)
         except requests.RequestException as e:
-            self.blad.emit(str(e))
+            bledy.append(_("Ollama: {blad}").format(blad=e))
+        try:
+            for wpis in hf_wyszukaj_repozytoria(self.zapytanie):
+                wyniki.append({
+                    "zrodlo": "hf", "id": wpis["id"], "opis": "", "mozliwosci": [],
+                    "rozmiary": [], "pobrania": _formatuj_liczbe(wpis["pobrania"]),
+                })
+        except requests.RequestException as e:
+            bledy.append(_("Hugging Face: {blad}").format(blad=e))
+        self.wynik.emit(wyniki, bledy)
+
+
+class WariantyModeluWorker(QThread):
+    """Pobiera w tle listę wariantów wybranego modelu - z Ollamy albo z HF.
+
+    WHY: jeden worker dla obu źródeł - różni się tylko funkcja czytająca
+         warianty, wynik ma ten sam kształt: (tag/kwantyzacja, rozmiar_bajty,
+         kontekst). Dla HF kontekstu nie znamy przed pobraniem (pusty tekst).
+    """
+    wynik = pyqtSignal(str, str, list)  # (źródło, id modelu, warianty)
+    blad = pyqtSignal(str, str, str)    # (źródło, id modelu, komunikat)
+
+    def __init__(self, zrodlo, model_id):
+        super().__init__()
+        self.zrodlo = zrodlo
+        self.model_id = model_id
+
+    def run(self):
+        try:
+            if self.zrodlo == "hf":
+                warianty = [(kwant, rozmiar, "") for kwant, rozmiar in hf_wyszukaj_warianty_gguf(self.model_id)]
+            else:
+                warianty = ollama_warianty_modelu(self.model_id)
+        except (requests.RequestException, ValueError) as e:
+            self.blad.emit(self.zrodlo, self.model_id, str(e))
             return
-        self.wynik.emit(wyniki)
+        self.wynik.emit(self.zrodlo, self.model_id, warianty)
 
 
 class AgregatorWorker(QThread):
@@ -1778,158 +1702,6 @@ class DialogConfigContinue(QDialog):
         QApplication.clipboard().setText(self.pole_tresc.toPlainText())
 
 
-class DialogPobierzZHF(QDialog):
-    """Pobieranie modelu GGUF z Hugging Face - szukaj po nazwie albo wklej repo.
-
-    WHY: Ollama umie ściągać GGUF wprost z HF ('hf.co/<user>/<repo>:<kwant>'),
-         ale trzeba znać dokładne repo I string kwantyzacji z nazwy pliku -
-         ten dialog znajduje oba sam, zamiast każenia szukać ręcznie na
-         stronie HF. Dialog TYLKO buduje string modelu (self.tag_modelu) -
-         samo pobieranie idzie już istniejącym pull_stream()/PullWorker w
-         oknie głównym (patrz MainWindow.pobierz_z_hf) po zamknięciu, zero
-         duplikacji paska postępu/logu/odświeżania listy modeli.
-
-         JEDNO pole tekstowe ma DWA znaczenia zależnie od treści (Wariant B +
-         Wariant C z CLAUDE.md, roadmapa): tekst z "/" (link albo gotowe
-         "user/repo") -> od razu szuka WARIANTÓW kwantyzacji w tym repo
-         (hf_wyszukaj_warianty_gguf); zwykła nazwa/fraza (bez "/") -> szuka
-         PASUJĄCYCH REPO po nazwie (hf_wyszukaj_repozytoria), a wybór jednego
-         z wyników dopiero wtedy doszukuje jego wariantów - ta sama lista
-         (`self.lista_wynikow`) jest przeładowywana w obu trybach
-         (`self._tryb`), żeby nie duplikować układu okna.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(_("Pobierz z Hugging Face"))
-        self.setMinimumWidth(480)
-        self.repo = None
-        self.tag_modelu = None  # WHY: wynik dla wywołującego - ustawiany dopiero w _pobierz()
-        self._worker = None
-        self._tryb = None  # "repozytoria" albo "warianty" - patrz docstring klasy
-
-        layout = QVBoxLayout(self)
-
-        layout.addWidget(QLabel(_("Szukaj modelu (nazwa) albo wklej link/repo:")))
-        pasek_zapytanie = QHBoxLayout()
-        self.pole_zapytanie = QLineEdit()
-        self.pole_zapytanie.setPlaceholderText("qwen2.5-coder  —  albo  bartowski/Qwen2.5-Coder-7B-Instruct-GGUF")
-        self.pole_zapytanie.returnPressed.connect(self._szukaj)
-        self.btn_szukaj = QPushButton(_("Szukaj"))
-        self.btn_szukaj.clicked.connect(self._szukaj)
-        pasek_zapytanie.addWidget(self.pole_zapytanie, 1)
-        pasek_zapytanie.addWidget(self.btn_szukaj)
-        layout.addLayout(pasek_zapytanie)
-
-        self.lista_wynikow = QListWidget()
-        self.lista_wynikow.itemSelectionChanged.connect(self._zmien_zaznaczenie)
-        layout.addWidget(self.lista_wynikow, 1)
-
-        self.lbl_status = QLabel("")
-        self.lbl_status.setWordWrap(True)
-        layout.addWidget(self.lbl_status)
-
-        pasek_przyciskow = QHBoxLayout()
-        pasek_przyciskow.addStretch(1)
-        btn_anuluj = QPushButton(_("Anuluj"))
-        btn_anuluj.clicked.connect(self.reject)
-        self.btn_pobierz = QPushButton(_("Pobierz"))
-        self.btn_pobierz.setEnabled(False)  # WHY: aktywny dopiero po zaznaczeniu wariantu
-        self.btn_pobierz.clicked.connect(self._pobierz)
-        pasek_przyciskow.addWidget(btn_anuluj)
-        pasek_przyciskow.addWidget(self.btn_pobierz)
-        layout.addLayout(pasek_przyciskow)
-
-    def _zmien_zaznaczenie(self):
-        pozycje = self.lista_wynikow.selectedItems()
-        if self._tryb == "warianty":
-            self.btn_pobierz.setEnabled(bool(pozycje))
-            return
-        # WHY: w trybie "repozytoria" zaznaczenie nie pobiera niczego wprost -
-        #      od razu doszukuje warianty WYBRANEGO repo (patrz _szukaj_warianty).
-        self.btn_pobierz.setEnabled(False)
-        if pozycje:
-            self._szukaj_warianty(pozycje[0].data(Qt.ItemDataRole.UserRole))
-
-    def _szukaj(self):
-        if self._worker and self._worker.isRunning():
-            return
-        tekst = self.pole_zapytanie.text().strip()
-        if not tekst:
-            return
-        repo = _hf_repo_z_linku(tekst)
-        if repo:
-            self._szukaj_warianty(repo)
-        else:
-            self._szukaj_repozytoria(tekst)
-
-    def _szukaj_warianty(self, repo):
-        # WHY: wołane zarówno wprost z pola (tekst z "/"), jak i po kliknięciu
-        #      wyniku wyszukiwania po nazwie - stąd osobna metoda od _szukaj().
-        if self._worker and self._worker.isRunning():
-            return
-        self.repo = repo
-        self._tryb = "warianty"
-        self.lista_wynikow.clear()
-        self.btn_pobierz.setEnabled(False)
-        self.btn_szukaj.setEnabled(False)
-        self.lbl_status.setText(_("Szukam dostępnych wariantów..."))
-
-        self._worker = SzukajGGUFWorker(repo)
-        self._worker.wynik.connect(self._po_wyszukaniu_wariantow)
-        self._worker.blad.connect(self._po_bledzie)
-        self._worker.start()
-
-    def _szukaj_repozytoria(self, zapytanie):
-        self._tryb = "repozytoria"
-        self.lista_wynikow.clear()
-        self.btn_pobierz.setEnabled(False)
-        self.btn_szukaj.setEnabled(False)
-        self.lbl_status.setText(_("Szukam pasujących repozytoriów..."))
-
-        self._worker = SzukajRepoWorker(zapytanie)
-        self._worker.wynik.connect(self._po_wyszukaniu_repozytoriow)
-        self._worker.blad.connect(self._po_bledzie)
-        self._worker.start()
-
-    def _po_wyszukaniu_wariantow(self, warianty):
-        self.btn_szukaj.setEnabled(True)
-        self.lbl_status.setText(_("Znalezione warianty: {n}").format(n=len(warianty)))
-        for kwant, rozmiar_bajty in warianty:
-            etykieta = kwant or _("domyślny (bez sufiksu)")
-            gb = rozmiar_bajty / (1024 ** 3)
-            pozycja = QListWidgetItem(f"{etykieta}   —   {gb:.1f} GB")
-            pozycja.setData(Qt.ItemDataRole.UserRole, kwant)
-            self.lista_wynikow.addItem(pozycja)
-
-    def _po_wyszukaniu_repozytoriow(self, wyniki):
-        self.btn_szukaj.setEnabled(True)
-        if not wyniki:
-            self.lbl_status.setText(_("Brak pasujących repozytoriów GGUF na Hugging Face."))
-            return
-        self.lbl_status.setText(_("Znalezione repozytoria: {n} - wybierz, aby zobaczyć warianty.").format(n=len(wyniki)))
-        for wpis in wyniki:
-            pozycja = QListWidgetItem(f"{wpis['id']}   —   {wpis['pobrania']:,} ⬇".replace(",", " "))
-            pozycja.setData(Qt.ItemDataRole.UserRole, wpis["id"])
-            self.lista_wynikow.addItem(pozycja)
-
-    def _po_bledzie(self, komunikat):
-        self.btn_szukaj.setEnabled(True)
-        self.lbl_status.setText(komunikat)
-
-    def _pobierz(self):
-        if self._tryb != "warianty":
-            return
-        pozycje = self.lista_wynikow.selectedItems()
-        if not pozycje:
-            return
-        kwant = pozycje[0].data(Qt.ItemDataRole.UserRole)
-        # WHY: bez rozpoznanej kwantyzacji (repo z jednym plikiem .gguf bez
-        #      dopisku) Ollama chce sam 'hf.co/user/repo', bez dwukropka.
-        self.tag_modelu = f"hf.co/{self.repo}:{kwant}" if kwant else f"hf.co/{self.repo}"
-        self.accept()
-
-
 # =============================================================================
 #  Główne okno
 # =============================================================================
@@ -1942,6 +1714,9 @@ class MainWindow(QMainWindow):
         self.pull_worker = None
         self.refresh_worker = None
         self._instalacja_worker = None  # WHY: osobne śledzenie, żeby nie odpalić instalacji 2x naraz
+        self._szukaj_worker = None      # WHY: wyszukiwarka modeli (karta "Pobierz nowy model") - jedno szukanie naraz
+        self._warianty_dla = None       # WHY: (źródło, id) modelu, którego warianty CHCEMY pokazać - spóźnione odpowiedzi dla innych są ignorowane
+        self._pobieranie_trwa = False   # WHY: blokada przycisku "Pobierz", niezależna od zaznaczeń w tabelach
         self._aktualizacja_worker = None  # WHY: to samo dla sprawdzania aktualizacji Ollamy
         self._webui_worker = None       # WHY: to samo dla instalacji/uruchomienia Open WebUI
         self._webui_zainstalowane = False  # WHY: potrzebne w klik_webui, żeby wiedzieć co robi przycisk
@@ -1968,7 +1743,7 @@ class MainWindow(QMainWindow):
         #      wagi+KV cache+bufory) pod polami modelu/rozmiaru/kwantyzacji -
         #      przy 760x700 część z tego się już nie mieściła bez przewijania.
         #      Szerokość podbita z 860 do 960 - nazwy modeli z Hugging Face
-        #      ("<repo>:<kwant> (hf)", patrz _skroc_nazwe_modelu_hf) bywają
+        #      ("<repo>:<kwant>", patrz _skroc_nazwe_modelu_hf) bywają
         #      dłuższe niż krótkie tagi z ollama.com/library i przy dwóch
         #      kolumnach obok siebie ("Pobierz nowy model" + "Zainstalowane
         #      modele") ucinały się w tabeli przy starej szerokości.
@@ -2195,133 +1970,84 @@ class MainWindow(QMainWindow):
         layout.addLayout(kolumny, 1)
 
         # --- Lewa kolumna: Pobierz nowy model ---
+        # WHAT: JEDNA wyszukiwarka dla obu źródeł modeli naraz - biblioteki
+        #       Ollamy (ollama.com) i Hugging Face (GGUF). Kroki: wpisz nazwę ->
+        #       wybierz model z wyników (kolumna "Źródło" mówi, skąd jest) ->
+        #       wybierz wariant (tag/kwantyzacja z PRAWDZIWYM rozmiarem pliku)
+        #       -> Pobierz.
+        # WHY:  na prośbę użytkownika - zastępuje dawną listę polecanych
+        #       modeli, pola Rozmiar/Kwantyzacja (oparte na ręcznie utrzymywanych
+        #       tabelach tagów) i osobny dialog HF; jedno miejsce do szukania
+        #       zamiast trzech.
         karta_pobierz = QGroupBox(_("Pobierz nowy model"))
         uk_pobierz = QVBoxLayout(karta_pobierz)
+
+        pasek_szukaj = QHBoxLayout()
+        self.pole_szukaj_model = QLineEdit()
+        self.pole_szukaj_model.setPlaceholderText(_("nazwa modelu, np. qwen2.5-coder"))
+        self.pole_szukaj_model.returnPressed.connect(self.szukaj_modeli)
+        self.pole_szukaj_model.textChanged.connect(self._aktualizuj_przycisk_pobierz)
+        self.btn_szukaj_model = QPushButton(_("Szukaj"))
+        self.btn_szukaj_model.clicked.connect(self.szukaj_modeli)
+        pasek_szukaj.addWidget(self.pole_szukaj_model, 1)
+        pasek_szukaj.addWidget(self.btn_szukaj_model)
+        uk_pobierz.addLayout(pasek_szukaj)
+
+        self.lbl_status_szukania = QLabel("")
+        self.lbl_status_szukania.setWordWrap(True)
+        uk_pobierz.addWidget(self.lbl_status_szukania)
+
+        # WHAT: wyniki z obu źródeł - kolumna "Źródło" zawsze mówi, skąd jest
+        #       model (wyraźna prośba użytkownika). Opis/możliwości/rozmiary
+        #       modelu z Ollamy są w dymku po najechaniu na wiersz.
+        self.tabela_wynikow = QTableWidget(0, 3)
+        self.tabela_wynikow.setHorizontalHeaderLabels([_("Model"), _("Źródło"), _("Pobrania")])
+        self._ustaw_tabele_wyboru(self.tabela_wynikow)
+        self.tabela_wynikow.itemSelectionChanged.connect(self._wybrano_wynik_wyszukiwania)
+        uk_pobierz.addWidget(self.tabela_wynikow, 1)
+
+        self.tabela_wariantow = QTableWidget(0, 3)
+        self.tabela_wariantow.setHorizontalHeaderLabels([_("Wariant"), _("Rozmiar"), _("Kontekst")])
+        self._ustaw_tabele_wyboru(self.tabela_wariantow)
+        self.tabela_wariantow.itemSelectionChanged.connect(self._wybrano_wariant)
+        uk_pobierz.addWidget(self.tabela_wariantow, 1)
+
         pasek_pull = QHBoxLayout()
-        self.combo_modele = QComboBox()
-        self.combo_modele.setEditable(True)  # WHY: pozwól wpisać też dowolną nazwę
-        # WHY: domyślne maxVisibleItems (10) obcinało listę i wymuszało
-        #      przewijanie rozwiniętej listy - z zapasem (5 kategorii + 19
-        #      modeli = 24 wiersze), żeby kolejne dopisane modele też mieściły
-        #      się od razu, bez przewijania.
-        self.combo_modele.setMaxVisibleItems(30)
-        self._wypelnij_combo_modele()
-        # WHY: podpowiedzi na liście to tylko wybór - pełna baza jest na ollama.com,
-        #      placeholder przypomina o tym, gdy pole jest puste.
-        self.combo_modele.lineEdit().setPlaceholderText(
-            _("wpisz nazwę modelu lub wybierz z listy")
-        )
+        self.lbl_do_pobrania = QLabel("")
+        self.lbl_do_pobrania.setWordWrap(True)
         self.btn_pull = QPushButton(_("Pobierz"))
+        self.btn_pull.setEnabled(False)  # WHY: aktywny dopiero po wyborze wariantu (albo wpisaniu dokładnej nazwy)
         self.btn_pull.clicked.connect(self.pobierz_model)
-        pasek_pull.addWidget(self.combo_modele, 1)
+        pasek_pull.addWidget(self.lbl_do_pobrania, 1)
         pasek_pull.addWidget(self.btn_pull)
         uk_pobierz.addLayout(pasek_pull)
 
-        # WHAT: opcjonalny rozmiar (parametry) do doklejenia do nazwy modelu -
-        #       osobne pole zamiast pisania "rodzina:rozmiar" ręcznie za każdym
-        #       razem. Puste = bez zmian (nazwa z pola wyżej idzie 1:1). Lista
-        #       podpowiedzi zależy od wybranego modelu (patrz
-        #       _aktualizuj_liste_rozmiarow, ROZMIARY_WG_MODELU) - appka NIE
-        #       sugeruje już rozmiarów, których dany model w ogóle nie ma.
-        pasek_rozmiar = QHBoxLayout()
-        pasek_rozmiar.addWidget(QLabel(_("Rozmiar:")))
-        self.combo_rozmiar = QComboBox()
-        self.combo_rozmiar.setEditable(True)
-        # WHY: ROZMIARY_MODELI_OGOLNE (fallback dla modeli spoza listy) ma 15
-        #      pozycji - tyle samo z zapasem, żeby też nie wymuszało przewijania.
-        self.combo_rozmiar.setMaxVisibleItems(20)
-        self.combo_rozmiar.setCurrentText("")
-        self.combo_rozmiar.lineEdit().setPlaceholderText(_("opcjonalnie, np. 8b"))
-        pasek_rozmiar.addWidget(self.combo_rozmiar, 1)
-        uk_pobierz.addLayout(pasek_rozmiar)
-
-        # WHAT: wybór kwantyzacji do pobrania - Ollama bez dopisku zwykle
-        #       ściąga Q4_0, appka dokleja wariant do tagu (patrz _zbuduj_tag_modelu).
-        #       Lista dostępnych opcji zależy od modelu I rozmiaru (patrz
-        #       _aktualizuj_liste_kwantyzacji, KWANTYZACJE_WG_MODELU) - appka NIE
-        #       pokazuje już Q8_0/F16 dla modeli, których tag tego nie obsługuje
-        #       w prosty sposób (patrz WHY przy KWANTYZACJE_WG_MODELU).
-        pasek_kwantyzacja = QHBoxLayout()
-        pasek_kwantyzacja.addWidget(QLabel(_("Kwantyzacja:")))
-        self.combo_kwantyzacja = QComboBox()
-        pasek_kwantyzacja.addWidget(self.combo_kwantyzacja, 1)
-        uk_pobierz.addLayout(pasek_kwantyzacja)
-
-        # WHAT: orientacyjne zużycie pamięci dla aktualnie wpisanego rozmiaru
-        #       + kwantyzacji - aktualizowane na żywo (patrz _aktualizuj_szacowana_pamiec).
-        # WHY:  jawnie podpisane jako przybliżenie (patrz _oszacuj_pamiec_gb) -
-        #       appka nie zna architektury modelu przed pobraniem, więc nie
-        #       udaje precyzji, której nie ma.
+        # WHAT: orientacyjne zużycie pamięci dla WYBRANEGO wariantu - wagi to
+        #       prawdziwy rozmiar pliku, reszta (KV cache, bufory) szacowana.
         self.lbl_szacowana_pamiec = QLabel("")
         self.lbl_szacowana_pamiec.setWordWrap(True)
         uk_pobierz.addWidget(self.lbl_szacowana_pamiec)
-        self.combo_modele.currentTextChanged.connect(self._zmien_model_pobierania)
-        self.combo_rozmiar.currentTextChanged.connect(self._zmien_rozmiar_pobierania)
-        self.combo_kwantyzacja.currentIndexChanged.connect(self._aktualizuj_szacowana_pamiec)
-        self._aktualizuj_liste_rozmiarow()
-        self._aktualizuj_liste_kwantyzacji()
-        self._aktualizuj_szacowana_pamiec()
 
-        # WHAT: krótkie wyjaśnienie, skąd wziąć nazwę modelu do pobrania.
-        # WHY:  powyższa lista to tylko garść popularnych modeli - reszta jest
-        #       na ollama.com/library, skąd można skopiować dowolną nazwę. Nie
-        #       każdy model ma opublikowany każdy wariant kwantyzacji - jeśli
-        #       wybranego nie ma, pobieranie zakończy się błędem z Ollamy
-        #       (manifest nieznaleziony) - warto sprawdzić dostępne tagi na stronie.
-        lbl_link = QLabel(
-            _('Sprawdź dostępne modele (i warianty kwantyzacji) na '
-              '<a href="https://ollama.com/library">ollama.com/library</a>, '
-              "wpisz nazwę w polu powyżej i kliknij Pobierz.")
+        # WHAT: skąd pochodzą wyniki + ostrzeżenie o HF + skrót dla znanej nazwy.
+        # WHY:  HF to repozytoria SPOŁECZNOŚCIOWE, które może założyć każdy -
+        #       appka/Ollama nie weryfikuje ich zawartości, więc dopisek jasno
+        #       to mówi i daje konkretną wskazówkę zamiast ogólnikowego "uważaj".
+        lbl_zrodla = QLabel(
+            _('Źródła: <a href="https://ollama.com/library">ollama.com/library</a> (oficjalna '
+              'biblioteka Ollamy) i <a href="https://huggingface.co/models?library=gguf">Hugging '
+              'Face</a> (tylko modele GGUF). Hugging Face to repozytoria SPOŁECZNOŚCIOWE - każdy '
+              'może tam coś opublikować, appka niczego nie weryfikuje. Pobieraj stamtąd tylko od '
+              'znanych, zaufanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth). '
+              'Znasz dokładną nazwę (np. llama3.2:3b albo hf.co/...:Q4_K_M)? Wpisz ją i kliknij '
+              'Pobierz bez szukania.')
         )
-        lbl_link.setWordWrap(True)
-        lbl_link.setOpenExternalLinks(True)
-        uk_pobierz.addWidget(lbl_link)
-
-        # WHAT: pozioma linia oddzielająca oficjalną bibliotekę Ollamy (wyżej)
-        #       od alternatywnego źródła - modeli GGUF z Hugging Face (niżej).
-        # WHY:  na wyraźną prośbę użytkownika - bez rozdzielenia oba źródła
-        #       (pola/przyciski Ollamy i przycisk HF) wyglądały jak jedna,
-        #       ciągła sekcja, mimo że mechanizm i charakter źródła (oficjalna
-        #       biblioteka vs. społecznościowe repo) są różne. QFrame zamiast
-        #       koloru/tła - natywny wygląd Breeze, zgodnie z resztą okna.
-        linia_hf = QFrame()
-        linia_hf.setFrameShape(QFrame.Shape.HLine)
-        linia_hf.setFrameShadow(QFrame.Shadow.Sunken)
-        uk_pobierz.addWidget(linia_hf)
-
-        # WHAT: wzmianka o drugim, alternatywnym źródle modeli - GGUF z
-        #       Hugging Face - PRZED przyciskiem, który go otwiera (czytelniej
-        #       niż przycisk nad wyjaśnieniem, co on właściwie robi).
-        # WHY:  w przeciwieństwie do ollama.com/library (oficjalna biblioteka
-        #       Ollamy) to repozytoria SPOŁECZNOŚCIOWE, które może założyć
-        #       każdy; appka/Ollama nie weryfikuje ich zawartości w żaden
-        #       sposób, więc dopisek jasno zaznacza, że to źródło OPCJONALNE,
-        #       i doradza ograniczoną ostrożność (znani, zaufani autorzy
-        #       kwantyzacji) zamiast ogólnikowego "uważaj" bez konkretnej wskazówki.
-        lbl_link_hf = QLabel(
-            _('Alternatywnie - modele GGUF (opcjonalnie) z '
-              '<a href="https://huggingface.co/models?library=gguf">Hugging Face</a> '
-              '(przycisk "Pobierz z Hugging Face..." poniżej). To repozytoria '
-              'SPOŁECZNOŚCIOWE, nie oficjalna biblioteka Ollamy - każdy może '
-              'tam coś opublikować, appka niczego tam nie weryfikuje. Pobieraj '
-              'tylko od znanych, zaufanych autorów kwantyzacji (np. bartowski, '
-              'mradermacher, unsloth) i sprawdź opis repozytorium przed pobraniem.')
-        )
-        lbl_link_hf.setWordWrap(True)
-        lbl_link_hf.setOpenExternalLinks(True)
-        uk_pobierz.addWidget(lbl_link_hf)
-
-        pasek_hf = QHBoxLayout()
-        pasek_hf.addStretch(1)
-        btn_pobierz_z_hf = QPushButton(_("Pobierz z Hugging Face..."))
-        btn_pobierz_z_hf.clicked.connect(self.pobierz_z_hf)
-        pasek_hf.addWidget(btn_pobierz_z_hf)
-        uk_pobierz.addLayout(pasek_hf)
+        lbl_zrodla.setWordWrap(True)
+        lbl_zrodla.setOpenExternalLinks(True)
+        uk_pobierz.addWidget(lbl_zrodla)
 
         self.pasek_postepu = QProgressBar()
         self.pasek_postepu.setVisible(False)
         uk_pobierz.addWidget(self.pasek_postepu)
-        uk_pobierz.addStretch(1)  # WHY: karta trzyma się góry lewej kolumny
         kolumny.addWidget(karta_pobierz, 1)
 
         # --- Prawa kolumna: Zainstalowane modele ---
@@ -2334,17 +2060,18 @@ class MainWindow(QMainWindow):
         pasek_usun.addStretch(1)
         pasek_usun.addWidget(self.btn_usun)
         uk_zainstalowane.addLayout(pasek_usun)
-        # WHAT: tabela zamiast zwykłej listy - trzy kolumny: nazwa, rozmiar na
+        # WHAT: tabela zamiast zwykłej listy - cztery kolumny: nazwa, źródło
+        #       (Ollama/Hugging Face - patrz _zrodlo_modelu), rozmiar na
         #       dysku (dokładny, z /api/tags) i szacowane VRAM (patrz
         #       _po_odswiezeniu: realne zużycie, jeśli model jest akurat
         #       załadowany, w przeciwnym razie wyliczenie tym samym kalkulatorem
         #       co karta "Pobierz nowy model" - _oszacuj_pamiec_bpw).
-        self.lista_modeli = QTableWidget(0, 3)
-        self.lista_modeli.setHorizontalHeaderLabels([_("Model"), _("Rozmiar na dysku"), _("VRAM")])
+        self.lista_modeli = QTableWidget(0, 4)
+        self.lista_modeli.setHorizontalHeaderLabels([_("Model"), _("Źródło"), _("Rozmiar na dysku"), _("VRAM")])
         # WHY: TYLKO kolumna "Model" się rozciąga - dostaje całą wolną
         #      przestrzeń, żeby dłuższe nazwy (np. z Hugging Face, patrz
         #      _skroc_nazwe_modelu_hf) miały jak najwięcej miejsca zamiast się
-        #      ucinać. "Rozmiar na dysku"/"VRAM" to zawsze krótki tekst typu
+        #      ucinać. "Źródło"/"Rozmiar na dysku"/"VRAM" to zawsze krótki tekst typu
         #      "4.4 GB" - ResizeToContents ciasno dopasowuje ich szerokość, nie
         #      marnując miejsca, które wcześniej zabierał im setStretchLastSection
         #      (kolumna "VRAM" jako ostatnia rozciągała się RÓWNIEŻ, walcząc
@@ -2352,6 +2079,7 @@ class MainWindow(QMainWindow):
         self.lista_modeli.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.lista_modeli.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.lista_modeli.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.lista_modeli.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.lista_modeli.verticalHeader().setVisible(False)
         self.lista_modeli.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.lista_modeli.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -2627,60 +2355,32 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(karta)
 
-        # WHAT: wyjaśnienie kategorii, którymi pogrupowana jest rozwijana
-        #       lista modeli w karcie "Pobierz nowy model" (patrz
-        #       POLECANE_MODELE_WG_KATEGORII, _wypelnij_combo_modele) - sama
-        #       lista pokazuje tylko nazwy kategorii jako nagłówki, pełny
-        #       opis "do czego to jest" jest tutaj.
-        # WHY:  nazwa modelu (np. "bge-m3") sama z siebie nic nie mówi
-        #       użytkownikowi bez doświadczenia z Ollamą - kategorie w
-        #       rozwijanej liście dają szybką orientację, ale bez opisu nie
-        #       wiadomo, czym różni się np. "Rozumowanie" od zwykłego "Ogólne".
-        karta_kategorie = QGroupBox(_("Kategorie modeli do pobrania"))
-        uk_kategorie = QVBoxLayout(karta_kategorie)
-        kategorie = [
-            (_("Ogólne / czat"), _("Do rozmowy, pytań i codziennych zadań - bez wąskiej specjalizacji.")),
-            (_("Kod / programowanie"), _("Pisanie i edycja kodu, wspierają tool-calling pod Continue/OpenCode.")),
-            (_("Rozumowanie / agentowe"), _("Modele z jawnym \"myśleniem\" przed odpowiedzią (chain-of-thought) - "
-                                             "do złożonych, wieloetapowych zadań.")),
-            (_("Embeddingi (RAG)"), _("NIE do rozmowy - zamieniają tekst na wektory pod wyszukiwanie semantyczne "
-                                       "(np. RAG w Open WebUI).")),
-            (_("Wizyjne (obrazy/dokumenty)"), _("Rozumieją obrazy, zrzuty ekranu, skany, OCR - nie tylko tekst.")),
+        # WHAT: skąd biorą się modele w wyszukiwarce na karcie "Pobierz nowy
+        #       model" i dlaczego część wariantów się nie pokazuje.
+        # WHY:  bez tego pominięte warianty (MLX, cloud) wyglądałyby jak awaria
+        #       appki, a różnica w zaufaniu między źródłami - jak detal.
+        karta_zrodla = QGroupBox(_("Skąd pochodzą modele"))
+        uk_zrodla = QVBoxLayout(karta_zrodla)
+        zrodla = [
+            ("Ollama", _("Oficjalna biblioteka Ollamy (ollama.com/library). Wyszukiwarka pokazuje "
+                         "wszystkie warianty modelu (tagi) z prawdziwym rozmiarem pliku. Pomija warianty "
+                         "MLX (działają tylko na komputerach Apple) i \"cloud\" (liczone na serwerach "
+                         "Ollamy, nie do pobrania).")),
+            ("Hugging Face", _("Repozytoria społecznościowe - tylko modele w formacie GGUF, bo innych "
+                               "Ollama nie pobierze. Każdy może tam coś opublikować, appka niczego nie "
+                               "weryfikuje - wybieraj znanych autorów kwantyzacji (np. bartowski, "
+                               "mradermacher, unsloth).")),
         ]
-        for nazwa, opis in kategorie:
+        for nazwa, opis in zrodla:
             lbl_nazwa = QLabel(nazwa)
             czcionka = lbl_nazwa.font()
             czcionka.setBold(True)
             lbl_nazwa.setFont(czcionka)
-            uk_kategorie.addWidget(lbl_nazwa)
+            uk_zrodla.addWidget(lbl_nazwa)
             lbl_opis = QLabel(opis)
             lbl_opis.setWordWrap(True)
-            uk_kategorie.addWidget(lbl_opis)
-        layout.addWidget(karta_kategorie)
-
-        # WHAT: krótkie wyjaśnienie, skąd biorą się ograniczenia w polach
-        #       "Rozmiar" i "Kwantyzacja" na karcie "Pobierz nowy model".
-        # WHY:  bez tego wygląda to jak awaria appki ("czemu nie mogę wybrać
-        #       F16?"), a to świadome ograniczenie - patrz WHY przy
-        #       ROZMIARY_WG_MODELU/KWANTYZACJE_WG_MODELU w kodzie.
-        karta_modele = QGroupBox(_("Rozmiar i kwantyzacja modeli do pobrania"))
-        uk_modele = QVBoxLayout(karta_modele)
-        lbl_modele = QLabel(
-            _("Pole \"Rozmiar\" pokazuje tylko warianty, które dany model NAPRAWDĘ ma "
-              "opublikowane na ollama.com/library - appka nie zgaduje. Pole \"Kwantyzacja\" "
-              "jest równie ostrożne: Q8_0/F16 pokazują się tylko tam, gdzie sprawdzono "
-              "wprost, że taki tag istnieje. Część modeli (Llama, Gemma, Mistral, "
-              "Qwen-Coder, DeepSeek-Coder-V2) wymaga w tagu dodatkowego segmentu (np. "
-              "\"instruct\"/\"it\"/\"lite-instruct\") - appka dokleja go automatycznie, więc "
-              "wybór Q8_0/F16 dla nich realnie działa. Dla kilku innych (DeepSeek-R1, "
-              "GPT-OSS, warianty MoE Qwen3 30B/235B) zostaje tylko opcja domyślna, bo "
-              "format tagu jest zbyt niejednolity/niepewny albo taki wariant w ogóle nie "
-              "istnieje. Brak Q8_0/F16 przy wybranym modelu nie jest błędem - to appka "
-              "celowo nie proponuje tagu, który i tak by się nie pobrał.")
-        )
-        lbl_modele.setWordWrap(True)
-        uk_modele.addWidget(lbl_modele)
-        layout.addWidget(karta_modele)
+            uk_zrodla.addWidget(lbl_opis)
+        layout.addWidget(karta_zrodla)
 
         layout.addStretch(1)
 
@@ -2888,7 +2588,7 @@ class MainWindow(QMainWindow):
                     vram_tekst = "—"
                 else:
                     bpw = _QUANTIZATION_LEVEL_BPW.get(
-                        (m.get("quantization_level") or "").upper(), _KWANTYZACJA_BPW[""][1]
+                        (m.get("quantization_level") or "").upper(), _BPW_DOMYSLNE
                     )
                     oszacowanie = _oszacuj_pamiec_bpw(miliardy, bpw, "")
                     vram_tekst = _("~{gb:.1f} GB").format(gb=oszacowanie["zajete_realnie_gb"])
@@ -2908,13 +2608,13 @@ class MainWindow(QMainWindow):
             #       rozciągania kolumny wciąż się nie mieściła.
             tooltip = _zbuduj_tooltip_modelu(m)
             pozycja_nazwa.setToolTip(tooltip)
-            pozycja_rozmiar = QTableWidgetItem(f"{rozmiar_gb:.1f} GB")
-            pozycja_rozmiar.setToolTip(tooltip)
-            pozycja_vram = QTableWidgetItem(vram_tekst)
-            pozycja_vram.setToolTip(tooltip)
             self.lista_modeli.setItem(wiersz, 0, pozycja_nazwa)
-            self.lista_modeli.setItem(wiersz, 1, pozycja_rozmiar)
-            self.lista_modeli.setItem(wiersz, 2, pozycja_vram)
+            for kolumna, tekst in enumerate(
+                (_zrodlo_modelu(nazwa), f"{rozmiar_gb:.1f} GB", vram_tekst), start=1
+            ):
+                pozycja = QTableWidgetItem(tekst)
+                pozycja.setToolTip(tooltip)
+                self.lista_modeli.setItem(wiersz, kolumna, pozycja)
         if zaznaczony:
             for i in range(self.lista_modeli.rowCount()):
                 if self.lista_modeli.item(i, 0).data(Qt.ItemDataRole.UserRole) == zaznaczony:
@@ -2926,7 +2626,9 @@ class MainWindow(QMainWindow):
         for m in stan["zaladowane"]:
             nazwa = m.get("name", "?")
             vram_gb = m.get("size_vram", 0) / (1024 ** 3)
-            self.lista_zaladowane.addItem(f"{_skroc_nazwe_modelu_hf(nazwa)}  —  {vram_gb:.1f} GB VRAM")
+            self.lista_zaladowane.addItem(
+                f"{_skroc_nazwe_modelu_hf(nazwa)}  —  {_zrodlo_modelu(nazwa)}  —  {vram_gb:.1f} GB VRAM"
+            )
 
         # WHAT: jeden przycisk, trzy znaczenia - "Zainstaluj" / "Uruchom" / "Otwórz",
         #       zależnie od tego, czy binarka jest zainstalowana i czy WebUI
@@ -3528,7 +3230,7 @@ class MainWindow(QMainWindow):
         item = self.lista_modeli.item(wiersz, 0)
         # WHY: PRAWDZIWA nazwa modelu (do API/usuwania) leci jako dane wiersza,
         #      nie jako wyświetlany tekst - patrz _skroc_nazwe_modelu_hf w
-        #      _po_odswiezeniu (modele z HF wyświetlają skróconą nazwę + "(hf)").
+        #      _po_odswiezeniu (modele z HF wyświetlają skróconą nazwę).
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _aktualizuj_przycisk_usun(self):
@@ -3551,163 +3253,251 @@ class MainWindow(QMainWindow):
             lambda: self.client.delete_model(model), _("Usunięcie {model}").format(model=model)
         )
 
-    def _wypelnij_combo_modele(self):
-        # WHAT: wypełnia combo_modele modelami z POLECANE_MODELE_WG_KATEGORII,
-        #       z nazwą kategorii jako nieklikalnym, wyszarzonym nagłówkiem nad
-        #       każdą grupą (Qt.ItemFlag.NoItemFlags - nie da się go wybrać ani
-        #       kursorem, ani strzałkami).
-        # WHY:  sama nazwa modelu (np. "bge-m3") nic nie mówi, do czego służy -
-        #       nagłówek grupy ("Embeddingi (RAG)") daje to za darmo, bez
-        #       osobnego okna/tooltipa. Pełne wyjaśnienie każdej kategorii jest
-        #       w zakładce "Pomoc" (patrz _zakladka_pomoc) - tu w liście
-        #       widać tylko nazwy, żeby lista została krótka i czytelna.
-        model = QStandardItemModel(self.combo_modele)
-        for kategoria, modele in POLECANE_MODELE_WG_KATEGORII:
-            # WHY: _(kategoria) - te same klucze co w _zakladka_pomoc niżej
-            #      (dosłownie te same polskie stringi), więc nagłówek jest
-            #      przetłumaczony bez osobnych, zduplikowanych wpisów w lang/*.json.
-            naglowek = QStandardItem(f"— {_(kategoria)} —")
-            naglowek.setFlags(Qt.ItemFlag.NoItemFlags)
-            czcionka = naglowek.font()
-            czcionka.setBold(True)
-            naglowek.setFont(czcionka)
-            model.appendRow(naglowek)
-            for nazwa in modele:
-                model.appendRow(QStandardItem(nazwa))
-        self.combo_modele.setModel(model)
+    # --- Wyszukiwarka modeli (karta "Pobierz nowy model") ---
+    def _ustaw_tabele_wyboru(self, tabela):
+        # WHAT: wspólny wygląd tabel wyników i wariantów - bez edycji, wybór
+        #       całego wiersza, jeden naraz; pierwsza kolumna (nazwa) dostaje całą
+        #       wolną szerokość, reszta (krótki tekst) tyle, ile potrzebuje.
+        naglowek = tabela.horizontalHeader()
+        naglowek.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for kolumna in range(1, tabela.columnCount()):
+            naglowek.setSectionResizeMode(kolumna, QHeaderView.ResizeMode.ResizeToContents)
+        tabela.verticalHeader().setVisible(False)
+        tabela.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        tabela.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        tabela.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
-    def _aktualizuj_liste_rozmiarow(self):
-        # WHAT: podmienia podpowiedzi w polu "Rozmiar" na te NAPRAWDĘ dostępne
-        #       dla wybranego modelu (ROZMIARY_WG_MODELU), albo ogólny przekrój
-        #       (ROZMIARY_MODELI_OGOLNE), jeśli model nie jest na tej liście.
-        # WHY:  BUG naprawiony (dwukrotnie) - najpierw appka pokazywała TE SAME
-        #       podpowiedzi (1b-70b) dla każdego modelu (np. Ornith ma tylko
-        #       9b/35b). Potem, przy próbie "nie kasować tego, co user wpisał",
-        #       zostawialiśmy STARY tekst z POPRZEDNIEGO modelu w polu nawet
-        #       po zmianie modelu - więc np. "8b" z Llamy zostawało widoczne
-        #       (i wliczane do szacowania pamięci) po przełączeniu na Phi-4,
-        #       mimo że to zupełnie inny model. Teraz zostaje tylko, jeśli
-        #       jest NAPRAWDĘ poprawnym rozmiarem także dla nowego modelu -
-        #       w przeciwnym razie pole się czyści, żeby nie sugerować
-        #       nieaktualnej wartości.
-        model = self.combo_modele.currentText().strip()
-        rozmiary = ROZMIARY_WG_MODELU.get(model, ROZMIARY_MODELI_OGOLNE)
-        wpisany_tekst = self.combo_rozmiar.currentText().strip()
-        self.combo_rozmiar.blockSignals(True)
-        self.combo_rozmiar.clear()
-        self.combo_rozmiar.addItems(rozmiary)
-        self.combo_rozmiar.setCurrentText(wpisany_tekst if wpisany_tekst in rozmiary else "")
-        self.combo_rozmiar.blockSignals(False)
-
-    def _aktualizuj_liste_kwantyzacji(self):
-        # WHAT: podmienia opcje w combo_kwantyzacja na te NAPRAWDĘ pobieralne
-        #       dla wybranego modelu+rozmiaru (patrz KWANTYZACJE_WG_MODELU /
-        #       _dostepne_kwantyzacje) - "domyślna" jest zawsze dostępna,
-        #       Q8_0/F16 tylko gdy zweryfikowane.
-        # WHY:  BUG naprawiony - appka wcześniej pokazywała Q8_0/F16 dla
-        #       KAŻDEGO modelu, ale większość modeli wymaga dodatkowego
-        #       segmentu w tagu (np. "8b-instruct-q8_0"), którego appka nie
-        #       dokleja - wybranie takiej kwantyzacji kończyłoby się błędem
-        #       pobierania (404/"manifest unknown").
-        model = self.combo_modele.currentText().strip()
-        rozmiar = self.combo_rozmiar.currentText().strip()
-        dostepne = _dostepne_kwantyzacje(model, rozmiar)
-        poprzedni_wybor = self.combo_kwantyzacja.currentData()
-
-        self.combo_kwantyzacja.blockSignals(True)
-        self.combo_kwantyzacja.clear()
-        self.combo_kwantyzacja.addItem(_("domyślna (zwykle Q4_0)"), "")
-        if "q8_0" in dostepne:
-            self.combo_kwantyzacja.addItem("Q8_0", "q8_0")
-        if "fp16" in dostepne:
-            self.combo_kwantyzacja.addItem(_("F16 (pełna precyzja)"), "fp16")
-        indeks = self.combo_kwantyzacja.findData(poprzedni_wybor)
-        self.combo_kwantyzacja.setCurrentIndex(indeks if indeks >= 0 else 0)
-        self.combo_kwantyzacja.blockSignals(False)
-
-    def _zmien_model_pobierania(self):
-        self._aktualizuj_liste_rozmiarow()
-        self._aktualizuj_liste_kwantyzacji()
-        self._aktualizuj_szacowana_pamiec()
-
-    def _zmien_rozmiar_pobierania(self):
-        self._aktualizuj_liste_kwantyzacji()
-        self._aktualizuj_szacowana_pamiec()
-
-    def _aktualizuj_szacowana_pamiec(self):
-        # WHAT: przelicza i pokazuje orientacyjne zużycie pamięci dla aktualnie
-        #       wpisanego rozmiaru + kwantyzacji - na żywo, przy każdej zmianie.
-        # WHY:  rozmiar bierzemy najpierw z osobnego pola "Rozmiar"; jeśli puste,
-        #       próbujemy go wyciągnąć z samej nazwy modelu (np. gdy ktoś wybrał
-        #       z listy gotowe "llama3.1:8b" bez użycia pola Rozmiar).
-        miliardy = _parsuj_rozmiar_parametrow(self.combo_rozmiar.currentText())
-        if miliardy is None:
-            miliardy = _parsuj_rozmiar_parametrow(self.combo_modele.currentText())
-        if miliardy is None:
-            self.lbl_szacowana_pamiec.setText(
-                _("Szacowane zużycie pamięci: podaj rozmiar modelu (np. 8b), żeby zobaczyć wyliczenie.")
-            )
+    def szukaj_modeli(self):
+        # WHAT: tekst z "/" (link do HF, "użytkownik/repo" albo "hf.co/...") ->
+        #       od razu warianty tego repo, bez szukania; zwykła nazwa -> szukanie
+        #       naraz w bibliotece Ollamy i na Hugging Face (SzukajModeliWorker).
+        zapytanie = self.pole_szukaj_model.text().strip()
+        if not zapytanie or (self._szukaj_worker and self._szukaj_worker.isRunning()):
             return
-        kwantyzacja = self.combo_kwantyzacja.currentData()
-        w = _oszacuj_pamiec(miliardy, kwantyzacja)
+        if "/" in zapytanie:
+            # WHY: "hf.co/user/repo:Q4_K_M" to też poprawny odnośnik do repo -
+            #      zdejmujemy przedrostek i tag, reszta jak zwykły link do HF.
+            # BUG naprawiony: tag obcinamy dopiero z GOTOWEGO repo - obcięcie
+            #      po ":" z całego tekstu zostawiało z "https://..." samo "https".
+            repo = _hf_repo_z_linku(re.sub(r"^hf\.co/", "", zapytanie))
+            if repo:
+                repo = repo.split(":", 1)[0]
+                self._wypelnij_wyniki([{
+                    "zrodlo": "hf", "id": repo, "opis": "", "mozliwosci": [], "rozmiary": [], "pobrania": "",
+                }])
+                self.lbl_status_szukania.setText("")
+                self.tabela_wynikow.selectRow(0)  # WHY: od razu ładuje warianty (_wybrano_wynik_wyszukiwania)
+                return
 
-        tresc = _(
-            "Model: {p:.3g}B {kwant}, kontekst {ctx} ({kvq})\n"
-            "Wagi: {wagi:.1f} GB\n"
-            "KV cache: {kv_cache:.1f} GB\n"
-            "Bufory: {bufory:.1f} GB\n"
-            "Realnie zajęte: {zajete:.1f} GB\n"
-            "Z zapasem: {z_zapasem:.1f} GB\n"
-            "Rekomendowany RAM: {rekomendowany} GB"
+        self._wypelnij_wyniki([])
+        self.btn_szukaj_model.setEnabled(False)
+        self.lbl_status_szukania.setText(_("Szukam w bibliotece Ollamy i na Hugging Face..."))
+        worker = SzukajModeliWorker(zapytanie)
+        self._workers.append(worker)
+
+        def _po_szukaniu(wyniki, bledy, w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+            self.btn_szukaj_model.setEnabled(True)
+            self._wypelnij_wyniki(wyniki)
+            linie = [_("Znalezione modele: {n}").format(n=len(wyniki))]
+            linie += [_("Błąd wyszukiwania - {blad}").format(blad=b) for b in bledy]
+            self.lbl_status_szukania.setText("\n".join(linie))
+
+        worker.wynik.connect(_po_szukaniu)
+        self._szukaj_worker = worker
+        worker.start()
+
+    def _wypelnij_wyniki(self, wyniki):
+        # WHAT: tabela wyników - nazwa, źródło (Ollama/Hugging Face), pobrania;
+        #       cały słownik wyniku leci jako dane wiersza (UserRole). Czyści też
+        #       warianty - dotyczyły poprzedniego wyboru.
+        self.tabela_wynikow.blockSignals(True)
+        self.tabela_wynikow.setRowCount(0)
+        for wynik in wyniki:
+            zrodlo = "Hugging Face" if wynik["zrodlo"] == "hf" else "Ollama"
+            # WHY: dymek to HTML (pogrubienie, <br>) - tekst ze strony trzeba
+            #      zabezpieczyć, bo opis typu "<4GB VRAM" rozbiłby formatowanie.
+            linie = [f"<b>{html.escape(wynik['id'])}</b>", _("Źródło: {zrodlo}").format(zrodlo=zrodlo)]
+            if wynik["opis"]:
+                linie.append(html.escape(wynik["opis"]))
+            if wynik["mozliwosci"]:
+                linie.append(_("Możliwości: {lista}").format(lista=", ".join(wynik["mozliwosci"])))
+            if wynik["rozmiary"]:
+                linie.append(_("Rozmiary: {lista}").format(lista=", ".join(wynik["rozmiary"])))
+            dymek = "<br>".join(linie)
+
+            wiersz = self.tabela_wynikow.rowCount()
+            self.tabela_wynikow.insertRow(wiersz)
+            for kolumna, tekst in enumerate((wynik["id"], zrodlo, wynik["pobrania"])):
+                pozycja = QTableWidgetItem(tekst)
+                pozycja.setToolTip(dymek)
+                if kolumna == 0:
+                    pozycja.setData(Qt.ItemDataRole.UserRole, wynik)
+                self.tabela_wynikow.setItem(wiersz, kolumna, pozycja)
+        self.tabela_wynikow.blockSignals(False)
+        self._wyczysc_warianty()
+
+    def _wyczysc_warianty(self):
+        self._warianty_dla = None
+        self.tabela_wariantow.setRowCount(0)
+        self.lbl_do_pobrania.setText("")
+        self.lbl_szacowana_pamiec.setText("")
+        self.lbl_szacowana_pamiec.setToolTip("")
+        self._aktualizuj_przycisk_pobierz()
+
+    def _wybrano_wynik_wyszukiwania(self):
+        # WHAT: wybór modelu z wyników -> w tle wczytuje jego warianty
+        #       (WariantyModeluWorker) do tabeli wariantów.
+        # WHY:  spóźniona odpowiedź dla modelu, który użytkownik zdążył już
+        #       odznaczyć, jest ignorowana (patrz self._warianty_dla) - inaczej
+        #       szybkie klikanie mogło pokazać warianty nie tego modelu.
+        wiersz = self.tabela_wynikow.currentRow()
+        self._wyczysc_warianty()
+        if wiersz < 0:
+            return
+        wynik = self.tabela_wynikow.item(wiersz, 0).data(Qt.ItemDataRole.UserRole)
+        self._warianty_dla = (wynik["zrodlo"], wynik["id"])
+        self.lbl_status_szukania.setText(_("Szukam dostępnych wariantów..."))
+        worker = WariantyModeluWorker(wynik["zrodlo"], wynik["id"])
+        self._workers.append(worker)
+
+        def _sprzatnij(w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+
+        def _po_wariantach(zrodlo, model_id, warianty):
+            _sprzatnij()
+            if self._warianty_dla != (zrodlo, model_id):
+                return
+            self.lbl_status_szukania.setText(_("Znalezione warianty: {n}").format(n=len(warianty)))
+            for kwant, rozmiar_bajty, kontekst in warianty:
+                wiersz_w = self.tabela_wariantow.rowCount()
+                self.tabela_wariantow.insertRow(wiersz_w)
+                etykieta = kwant or _("domyślny (bez sufiksu)")
+                rozmiar = f"{rozmiar_bajty / (1024 ** 3):.1f} GB" if rozmiar_bajty else "—"
+                for kolumna, tekst in enumerate((etykieta, rozmiar, kontekst)):
+                    pozycja = QTableWidgetItem(tekst)
+                    if kolumna == 0:
+                        pozycja.setData(Qt.ItemDataRole.UserRole, (kwant, rozmiar_bajty))
+                    self.tabela_wariantow.setItem(wiersz_w, kolumna, pozycja)
+
+        def _po_bledzie(zrodlo, model_id, komunikat):
+            _sprzatnij()
+            if self._warianty_dla == (zrodlo, model_id):
+                self.lbl_status_szukania.setText(komunikat)
+
+        worker.wynik.connect(_po_wariantach)
+        worker.blad.connect(_po_bledzie)
+        worker.start()
+
+    def _pelna_nazwa_wariantu(self):
+        # WHAT: gotowa nazwa do 'ollama pull' dla zaznaczonego wariantu -
+        #       "model:tag" (Ollama) albo "hf.co/user/repo:kwant" (Hugging Face).
+        #       None, gdy nic nie zaznaczono.
+        wiersz = self.tabela_wariantow.currentRow()
+        if wiersz < 0 or not self._warianty_dla:
+            return None
+        zrodlo, model_id = self._warianty_dla
+        kwant, _rozmiar = self.tabela_wariantow.item(wiersz, 0).data(Qt.ItemDataRole.UserRole)
+        if zrodlo == "hf":
+            # WHY: bez rozpoznanej kwantyzacji (repo z jednym plikiem .gguf bez
+            #      dopisku) Ollama chce sam 'hf.co/user/repo', bez dwukropka.
+            return f"hf.co/{model_id}:{kwant}" if kwant else f"hf.co/{model_id}"
+        return f"{model_id}:{kwant}"
+
+    def _model_do_pobrania(self):
+        # WHAT: co pobierze przycisk "Pobierz" - zaznaczony wariant, a bez niego
+        #       dokładna nazwa wpisana w pole (musi mieć tag po ":" albo zaczynać
+        #       się od "hf.co/" - sama nazwa bez tagu to raczej zapytanie do
+        #       wyszukiwarki niż świadomy wybór konkretnego wariantu).
+        nazwa = self._pelna_nazwa_wariantu()
+        if nazwa:
+            return nazwa
+        tekst = self.pole_szukaj_model.text().strip()
+        if ":" in tekst or tekst.startswith("hf.co/"):
+            return tekst
+        return None
+
+    def _aktualizuj_przycisk_pobierz(self):
+        self.btn_pull.setEnabled(not self._pobieranie_trwa and self._model_do_pobrania() is not None)
+
+    def _wybrano_wariant(self):
+        # WHAT: pokazuje, co dokładnie zostanie pobrane, i szacuje pamięć dla
+        #       wybranego wariantu - wagi to PRAWDZIWY rozmiar pliku.
+        self._aktualizuj_przycisk_pobierz()
+        nazwa = self._pelna_nazwa_wariantu()
+        if not nazwa:
+            self.lbl_do_pobrania.setText("")
+            self.lbl_szacowana_pamiec.setText("")
+            return
+        self.lbl_do_pobrania.setText(_("Do pobrania: {model}").format(model=nazwa))
+        kwant, rozmiar_bajty = self.tabela_wariantow.item(
+            self.tabela_wariantow.currentRow(), 0
+        ).data(Qt.ItemDataRole.UserRole)
+        # WHY: liczbę parametrów bierzemy z tagu ("7b-instruct-q8_0"), a gdy jej
+        #      tam nie ma (np. "latest", kwantyzacja z HF) - z nazwy modelu/repo.
+        miliardy = _parsuj_rozmiar_parametrow(kwant or "") or _parsuj_rozmiar_parametrow(self._warianty_dla[1])
+        self._pokaz_szacowana_pamiec(rozmiar_bajty, miliardy, kwant or "")
+
+    def _pokaz_szacowana_pamiec(self, rozmiar_bajty, miliardy, etykieta):
+        self.lbl_szacowana_pamiec.setToolTip("")
+        if not rozmiar_bajty:
+            self.lbl_szacowana_pamiec.setText("")
+            return
+        wagi_gb = rozmiar_bajty / (1024 ** 3)
+        if miliardy is None:
+            # WHY: bez liczby parametrów nie da się oszacować KV cache - uczciwie
+            #      pokazujemy tylko to, co wiemy na pewno (rozmiar pliku).
+            self.lbl_szacowana_pamiec.setText(_(
+                "Wagi (rozmiar pliku): {wagi:.1f} GB - nie znam liczby parametrów, więc bez "
+                "szacowania cache kontekstu. Realne zużycie pamięci będzie wyższe."
+            ).format(wagi=wagi_gb))
+            return
+        w = _oszacuj_pamiec_z_wag(wagi_gb, miliardy, etykieta)
+        # WHAT: jedna zwięzła linia w karcie, szczegóły i ostrzeżenia w dymku.
+        # WHY:  pełny rozpis (kilkanaście linii) zabierał wysokość tabelom
+        #       wyników i wariantów - mieściły po 2 wiersze.
+        self.lbl_szacowana_pamiec.setText(_(
+            "Szacowana pamięć: ~{zajete:.1f} GB (wagi {wagi:.1f} + cache kontekstu {kv_cache:.1f} "
+            "+ bufory {bufory:.1f}), z zapasem {z_zapasem:.1f} GB - zalecany RAM {rekomendowany} GB. "
+            "Szczegóły w dymku."
         ).format(
-            p=miliardy, kwant=w["etykieta_q"], ctx=_KALKULATOR_CTX, kvq=_KALKULATOR_KVQ,
-            wagi=w["wagi_gb"], kv_cache=w["kv_cache_gb"], bufory=w["bufory_gb"],
-            zajete=w["zajete_realnie_gb"], z_zapasem=w["z_zapasem_gb"],
-            rekomendowany=w["rekomendowany_ram"],
-        )
+            zajete=w["zajete_realnie_gb"], wagi=w["wagi_gb"], kv_cache=w["kv_cache_gb"],
+            bufory=w["bufory_gb"], z_zapasem=w["z_zapasem_gb"], rekomendowany=w["rekomendowany_ram"],
+        ))
+        szczegoly = [_("Model: {p:.3g} mld parametrów, kontekst {ctx} tokenów, cache {kvq}.").format(
+            p=miliardy, ctx=_KALKULATOR_CTX, kvq=_KALKULATOR_KVQ)]
         if w["kv_cache_gb"] > w["wagi_gb"]:
-            tresc += "\n" + _(
+            szczegoly.append(_(
                 "Uwaga: cache kontekstu przewyższa wagi modelu — rozważ mniejszy "
                 "kontekst lub kwantyzację cache."
-            )
+            ))
         if _KALKULATOR_KVQ != "f16":
-            tresc += "\n" + _(
+            szczegoly.append(_(
                 "Cache {kvq} działa TYLKO z OLLAMA_FLASH_ATTENTION=1 (zakładka Zaawansowane) - "
                 "bez tego Ollama i tak liczy cache jak f16, czyli więcej niż wyliczono wyżej."
-            ).format(kvq=_KALKULATOR_KVQ)
-        tresc += "\n" + _(
+            ).format(kvq=_KALKULATOR_KVQ))
+        szczegoly.append(_(
             "Na APU / pamięci współdzielonej zarezerwuj pamięć dla systemu przez OLLAMA_GPU_OVERHEAD."
-        )
-        self.lbl_szacowana_pamiec.setText(tresc)
+        ))
+        self.lbl_szacowana_pamiec.setToolTip("\n".join(szczegoly))
 
     def pobierz_model(self):
-        model_wpisany = self.combo_modele.currentText().strip()
-        if not model_wpisany:
-            return
-        model = _zbuduj_tag_modelu(
-            model_wpisany, self.combo_rozmiar.currentText(), self.combo_kwantyzacja.currentData()
-        )
-        self._rozpocznij_pobieranie(model)
-
-    def pobierz_z_hf(self):
-        # WHAT: otwiera dialog wyszukiwania wariantów GGUF na Hugging Face -
-        #       dialog tylko SKŁADA string modelu ('hf.co/user/repo:kwant'),
-        #       samo pobieranie idzie tym samym _rozpocznij_pobieranie(), co
-        #       zwykły "Pobierz" wyżej (patrz DialogPobierzZHF).
-        dialog = DialogPobierzZHF(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.tag_modelu:
-            self._rozpocznij_pobieranie(dialog.tag_modelu)
+        nazwa = self._model_do_pobrania()
+        if nazwa:
+            self._rozpocznij_pobieranie(nazwa)
 
     def _rozpocznij_pobieranie(self, model):
-        # WHAT: wspólny start pobierania (PullWorker) - dzieli go zwykłe pole
-        #       modelu i dialog Hugging Face, żeby nie duplikować paska
-        #       postępu/logu/blokady "jedno pobieranie naraz".
+        # WHAT: start pobierania (PullWorker) - ten sam dla obu źródeł (Ollama/HF),
+        #       jeden pasek postępu/log/blokada "jedno pobieranie naraz".
         # WHY:  jedno pobieranie naraz - prościej i nie obciąża łącza/dysku podwójnie.
         if self.pull_worker and self.pull_worker.isRunning():
             self.wpis_log(_("Pobieranie już trwa - poczekaj na zakończenie."))
             return
 
-        self.btn_pull.setEnabled(False)
+        self._pobieranie_trwa = True
+        self._aktualizuj_przycisk_pobierz()
         self.pasek_postepu.setVisible(True)
         self.pasek_postepu.setRange(0, 100)
         self.pasek_postepu.setValue(0)
@@ -3734,7 +3524,8 @@ class MainWindow(QMainWindow):
 
     def _koniec_pull(self, sukces, komunikat):
         self.pasek_postepu.setVisible(False)
-        self.btn_pull.setEnabled(True)
+        self._pobieranie_trwa = False
+        self._aktualizuj_przycisk_pobierz()
         self.wpis_log(komunikat)
         self.odswiez()  # WHY: świeżo pobrany model powinien pojawić się na liście
 

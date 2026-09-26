@@ -71,32 +71,25 @@ python3 ollama_manager.py
   since newer models sometimes need a newer Ollama to even load
 
 **Models**
-- Table of installed models — name, disk size, and an estimated/live VRAM column each — + deletion
-- Downloading new models with suggestions of popular ones, grouped by what they're for right in
-  the dropdown — general/chat (Llama, Gemma, Mistral, Phi, Qwen3), code (Qwen-Coder,
-  DeepSeek-Coder-V2, Ornith), reasoning/agentic (DeepSeek-R1, GPT-OSS), embeddings for RAG (Nomic,
-  Mixedbread, BGE-M3, EmbeddingGemma), and vision (Qwen2.5-VL, Llama 3.2 Vision, Moondream) — with
-  a progress bar
-- Size and quantization picker (default/Q8_0/full F16) when pulling — both lists are specific to
-  the selected model (and size, for quantization), verified against ollama.com/library; for models
-  that need an extra tag segment for non-default quantization (e.g. "instruct"/"it"), the app adds
-  it automatically — Q8_0/F16 only show up at all where a working tag was confirmed to exist
-- Live, approximate memory-usage estimate (weights + KV cache + buffers, then a recommended-RAM
-  figure) as you pick a size/quantization
+- **One search for two sources** — type a model name and the app searches the official Ollama
+  library (ollama.com) and Hugging Face (GGUF models only) at once. Every result has a **Source**
+  column, so it's always clear where a model comes from. Pick a result to see all its variants
+  (tags/quantizations) with their **real file sizes**, pick a variant, click Download — with a
+  progress bar. You never need to know the exact tag up front. MLX variants (Apple-only) and
+  "cloud" models (not downloadable) are skipped
+- Pasting a Hugging Face link (or `user/repo`) jumps straight to that repo's variants; typing an
+  exact name (e.g. `llama3.2:3b` or `hf.co/...:Q4_K_M`) lets you download without searching
+- **Hugging Face is an optional, community source** — anyone can publish there and the app doesn't
+  vet repo contents, so a note in the card recommends sticking to well-known quantization
+  publishers (e.g. bartowski, mradermacher, unsloth)
+- Approximate memory-usage estimate for the chosen variant (real file size + KV cache + buffers,
+  then a recommended-RAM figure; details in a tooltip)
+- Table of installed models — name, **source** (Ollama / Hugging Face), disk size and an
+  estimated/live VRAM column — + deletion. Hover a row for its source (with the quantization
+  author for HF), model family, parameter size, quantization and download date
 - Preview of models currently loaded into memory (VRAM)
-- Hover a row in the installed-models table for a tooltip with its source (the official Ollama
-  library, or Hugging Face with the quantization author/publisher), model family, parameter size,
-  quantization, and download date — HF-sourced models also show a shortened name
-  (`<repo>:<quant> (hf)`) in the table itself instead of the full `hf.co/<user>/<repo>:<quant>`
-- **Download GGUF models straight from Hugging Face** — one field, two ways to use it: paste a
-  repo link (or `user/repo`) to list its available quantizations (with sizes) straight away, or
-  just type a model name to search Hugging Face for matching repos (sorted by downloads) and pick
-  one from the results. Either way, you never need to know the exact quantization string up
-  front. Only repos that actually contain `.gguf` files show up or work — most models on HF are
-  raw `safetensors`, which Ollama can't pull directly. **This is an optional, community source**
-  (unlike the official Ollama library above) — the app doesn't vet repo contents, so a note next
-  to the button recommends sticking to well-known quantization publishers (e.g. bartowski,
-  mradermacher, unsloth)
+- Note: ollama.com has no public search API, so the app reads its search/tags web pages — if the
+  site's layout changes, Ollama search may need a fix (Hugging Face uses a real API)
 
 **Open WebUI**
 - One-click install of the browser chat panel (no Docker)
