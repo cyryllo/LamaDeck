@@ -89,7 +89,9 @@ python3 ollama_manager.py
   author for HF), model family, parameter size, quantization and download date
 - Preview of models currently loaded into memory (VRAM)
 - Note: ollama.com has no public search API, so the app reads its search/tags web pages — if the
-  site's layout changes, Ollama search may need a fix (Hugging Face uses a real API)
+  site's layout changes, Ollama search may need a fix (Hugging Face uses a real API) — the app then
+  shows an error instead of silently listing only Hugging Face results. Ollama results are always
+  listed first; cloud-only Ollama models (not downloadable) are skipped
 
 **Open WebUI**
 - One-click install of the browser chat panel (no Docker)
@@ -109,6 +111,9 @@ python3 ollama_manager.py
 - Exposes a single endpoint (OpenAI-compatible) combining models from ALL
   servers on the switcher list — VS Code/Continue only needs to point at this one address
 - Preview of which models and hosts will end up in the config, before starting
+- Optional **API key (password)** for the aggregator — off by default, so anyone on your network can
+  use the models; turn it on and the app generates a random key once, shows it with a copy button
+  and puts it into the Continue config and the Unsloth Studio details automatically
 - Generates a ready-to-paste Continue.dev `config.yaml` for the exposed models — copy/paste only,
   the app never writes to your files
 - Connection details for **Unsloth Studio** — Studio has no config file (connections are added in
@@ -132,6 +137,11 @@ python3 ollama_manager.py
 **Stats bar**
 - Ollama and Open WebUI status
 - VRAM usage on the currently selected server
+- **RAM used by Ollama** and the **VRAM + RAM** total — the real memory use. Ollama keeps part of a
+  model in RAM (it maps model files into memory, especially when a model doesn't fit in VRAM). For
+  the local Ollama it's measured from its processes (process memory + mapped model files, details
+  in a tooltip); for a remote server it's the part of loaded models outside VRAM, from its API.
+  Loaded models also show their split, e.g. `20.0 GB VRAM + 16.0 GB RAM`
 - Number of installed models
 
 **Event log** — a log of all operations, always visible at the bottom of the window.

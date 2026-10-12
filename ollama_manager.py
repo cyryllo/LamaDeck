@@ -20,12 +20,15 @@ import json
 import html
 import os
 import re
+import secrets
 import shlex
+import socket
 import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
@@ -43,7 +46,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.5.12"
+WERSJA = "0.5.13"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -293,6 +296,64 @@ def usluga_zapisz_env(zmienne):
         f"systemctl restart {SERVICE_NAME}"
     )
     _pkexec(["sh", "-c", skrypt, "sh", str(_usluga_override_sciezka())], wejscie=tresc)
+
+
+def _ollama_pamiec_procesow():
+    # WHAT: ile RAM-u zajmuje lokalna Ollama - proces 'ollama serve' i WSZYSTKIE
+    #       jego procesy potomne (modele działają w osobnych procesach, np.
+    #       'llama-server'). Zwraca {"anon": bajty, "pliki": bajty, "procesy": n}
+    #       albo None, gdy Ollama nie działa.
+    # WHY:  na prośbę użytkownika - VRAM to nie całe zużycie: Ollama mapuje
+    #       pliki modeli do pamięci (mmap) i trzyma tam część modelu, zwłaszcza
+    #       gdy nie mieści się w VRAM. "pliki" = RssFile (zmapowane pliki modeli
+    #       w RAM), "anon" = RssAnon + RssShmem (zwykła pamięć procesów: bufory,
+    #       cache kontekstu po stronie CPU). Czytane z /proc/<pid>/status -
+    #       działa BEZ roota mimo że procesy należą do użytkownika 'ollama'.
+    #       Tylko lokalna maszyna - zdalnego serwera tak nie zmierzymy.
+    procesy = {}  # pid -> (ppid, comm, cmdline)
+    for katalog in Path("/proc").iterdir():
+        if not katalog.name.isdigit():
+            continue
+        try:
+            stat = (katalog / "stat").read_text()
+            ppid = int(stat.rsplit(")", 1)[1].split()[1])
+            comm = (katalog / "comm").read_text().strip()
+            cmdline = (katalog / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        except (OSError, ValueError, IndexError):
+            continue  # WHY: proces zdążył się zakończyć - pomijamy
+        procesy[int(katalog.name)] = (ppid, comm, cmdline)
+
+    nasze = {pid for pid, (_pp, comm, cmd) in procesy.items() if comm == "ollama" and " serve" in f" {cmd}"}
+    if not nasze:
+        return None
+    dolaczono = True
+    while dolaczono:  # WHY: potomkowie potomków (runner może mieć własne procesy)
+        dolaczono = False
+        for pid, (ppid, _comm, _cmd) in procesy.items():
+            if ppid in nasze and pid not in nasze:
+                nasze.add(pid)
+                dolaczono = True
+
+    anon = pliki = 0
+    for pid in nasze:
+        try:
+            for linia in Path(f"/proc/{pid}/status").read_text().splitlines():
+                klucz, _sep, wartosc = linia.partition(":")
+                if klucz in ("RssAnon", "RssShmem"):
+                    anon += int(wartosc.split()[0]) * 1024
+                elif klucz == "RssFile":
+                    pliki += int(wartosc.split()[0]) * 1024
+        except (OSError, ValueError, IndexError):
+            continue
+    return {"anon": anon, "pliki": pliki, "procesy": len(nasze)}
+
+
+def _adres_lokalny(adres):
+    # WHAT: czy adres serwera Ollamy wskazuje na TEN komputer.
+    # WHY:  pomiar RAM z /proc ma sens tylko dla lokalnej Ollamy - dla zdalnego
+    #       serwera (np. BC-250) pokazujemy zamiast tego dane z jego API.
+    host = (urlparse(adres).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1", socket.gethostname().lower())
 
 
 def ollama_zainstalowana():
@@ -710,6 +771,28 @@ def _wykryj_modele_na_serwerach(serwery):
     return wpisy
 
 
+def _litellm_klucz():
+    # WHAT: klucz API (master key) LiteLLM, gdy włączona opcja "Wymagaj klucza
+    #       API" - w przeciwnym razie None (agregator bez hasła).
+    # WHY:  opcja na wyraźną prośbę użytkownika ("jednym będzie potrzebne,
+    #       innym nie") - np. laptop w obcej sieci z kluczem, dom bez. Klucz
+    #       generowany RAZ (losowy, bezpieczny - moduł secrets) i zapamiętany w
+    #       QSettings, żeby nie zmieniał się przy każdym restarcie - inaczej
+    #       klienci (Continue, Unsloth Studio) traciliby połączenie co restart.
+    ustawienia = _ustawienia()
+    if not ustawienia.value("litellm/wymagaj_klucza", False, type=bool):
+        return None
+    klucz = ustawienia.value("litellm/klucz", "")
+    if not klucz:
+        klucz = "sk-" + secrets.token_hex(24)
+        ustawienia.setValue("litellm/klucz", klucz)
+    return klucz
+
+
+def _ustaw_litellm_wymagaj_klucza(wlacz):
+    _ustawienia().setValue("litellm/wymagaj_klucza", bool(wlacz))
+
+
 def _zbuduj_config_litellm(serwery):
     # WHAT: generuje treść config.yaml dla LiteLLM - jeden wpis w model_list
     #       na każdy model na każdym hoście.
@@ -718,11 +801,25 @@ def _zbuduj_config_litellm(serwery):
     def _yaml_str(tekst):
         return '"' + tekst.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
+    # WHY: LiteLLM od ok. 1.105 (2026-10) ODMAWIA startu bez master key
+    #      ("LiteLLM proxy refused to start: no master key is set") - na świeżej
+    #      instalacji (najnowsza wersja) usługa padała od razu, a starsze
+    #      instalacje (np. 1.100) działały dalej. Dwa tryby (opcja "Wymagaj
+    #      klucza API" w karcie LiteLLM, patrz _litellm_klucz): z kluczem -
+    #      master_key w configu, klienci muszą go podać; bez klucza (domyślnie,
+    #      jak dotąd) - jawnie zezwalamy na brak hasła. Uwaga: LiteLLM nasłuchuje
+    #      na 0.0.0.0:4000 - bez klucza każdy w LAN może używać modeli. Starsze
+    #      wersje ignorują nieznane im ustawienie (sprawdzone na 1.100).
+    klucz = _litellm_klucz()
+    if klucz:
+        naglowek = ["general_settings:", f"  master_key: {_yaml_str(klucz)}"]
+    else:
+        naglowek = ["general_settings:", "  dangerously_permit_weak_or_unset_master_key: true"]
     wpisy = _wykryj_modele_na_serwerach(serwery)
     if not wpisy:
-        return "model_list: []\n"
+        return "\n".join(naglowek + ["model_list: []"]) + "\n"
 
-    linie = ["model_list:"]
+    linie = naglowek + ["model_list:"]
     for _nazwa_hosta, model, adres in wpisy:
         linie.append(f"  - model_name: {_yaml_str(model)}")
         linie.append("    litellm_params:")
@@ -761,7 +858,9 @@ def _zbuduj_config_continue(modele):
         linie.append("    provider: openai")
         linie.append(f"    model: {_yaml_str(model)}")
         linie.append(f"    apiBase: {LITELLM_URL}/v1")
-        linie.append("    apiKey: sk-anything")
+        # WHY: z włączonym kluczem LiteLLM odrzuci zapytanie bez niego; bez
+        #      klucza wystarczy dowolny niepusty tekst (Continue wymaga pola).
+        linie.append(f"    apiKey: {_litellm_klucz() or 'sk-anything'}")
         linie.append("    roles:")
         linie.append("      - chat")
         linie.append("      - edit")
@@ -1096,22 +1195,50 @@ def ollama_wyszukaj_modele(zapytanie):
     #        parser przestanie znajdować wyniki (pusta lista, appka się nie
     #        wywali) i trzeba go będzie poprawić. Przy HF tego ryzyka nie ma
     #        (prawdziwe API, patrz hf_wyszukaj_repozytoria).
+    # BUG naprawiony (2026-10): ollama.com zmieniła klasy CSS przy wynikach
+    #      ("group w-full" -> "group flex ..."), stary parser szukał dokładnej
+    #      klasy i po cichu zwracał ZERO wyników - w wyszukiwarce widać było
+    #      tylko HF. Teraz parser nie zależy od klas linku: blok wyniku to link
+    #      do /library/<nazwa> zawierający nagłówek <h2> (to odróżnia kartę
+    #      wyniku od innych linków na stronie). Liczbę pobrań bierzemy najpierw
+    #      z atrybutu title="22,347,504 downloads" (dokładna liczba), a gdy go
+    #      nie ma - ze starego formatu "...&nbsp;Pulls".
     r = requests.get("https://ollama.com/search", params={"q": zapytanie}, timeout=10)
     r.raise_for_status()
-    czesci = re.split(r'<a href="/library/([^"]+)" class="group w-full">', r.text)
+    czesci = re.split(r'<a href="/library/([^"/:?#]+)"[^>]*>', r.text)
     wyniki = []
     for i in range(1, len(czesci), 2):
         blok = czesci[i + 1].split("</a>", 1)[0]
-        opis = re.search(r'<p class="max-w-lg[^"]*">(.*?)</p>', blok, re.S)
-        pobrania = re.search(r'>\s*([\d.,]+[KMB]?)\s*</span>\s*<span class="hidden sm:flex">&nbsp;Pulls', blok)
+        if "<h2" not in blok:
+            continue
+        rozmiary = re.findall(r'bg-\[#ddf4ff\][^>]*>\s*([^<]+?)\s*<', blok)
+        # WHY: modele TYLKO w chmurze Ollamy (znaczek "cloud", brak rozmiarów) nie
+        #      dadzą się pobrać - pomijamy je, zamiast pokazywać wynik, który po
+        #      kliknięciu kończy się "brak wariantów". Model z rozmiarami I wersją
+        #      cloud zostaje (lokalne tagi da się pobrać).
+        if not rozmiary and re.search(r">\s*cloud\s*<", blok):
+            continue
+        opis = re.search(r"<p[^>]*>(.*?)</p>", blok, re.S)
+        pobrania = ""
+        dokladnie = re.search(r'title="([\d,]+) (?:downloads|pulls)"', blok, re.IGNORECASE)
+        if dokladnie:
+            pobrania = _formatuj_liczbe(int(dokladnie.group(1).replace(",", "")))
+        else:
+            stary = re.search(r'>\s*([\d.,]+[KMB]?)\s*</span>\s*<span[^>]*>&nbsp;Pulls', blok)
+            pobrania = stary.group(1) if stary else ""
         wyniki.append({
             "zrodlo": "ollama",
             "id": czesci[i],
-            "opis": html.unescape(re.sub(r"\s+", " ", opis.group(1))).strip() if opis else "",
+            "opis": html.unescape(re.sub(r"<[^>]+>|\s+", " ", opis.group(1))).strip() if opis else "",
             "mozliwosci": re.findall(r'bg-indigo-50[^>]*>\s*([^<]+?)\s*<', blok),
-            "rozmiary": re.findall(r'bg-\[#ddf4ff\][^>]*>\s*([^<]+?)\s*<', blok),
-            "pobrania": pobrania.group(1) if pobrania else "",
+            "rozmiary": rozmiary,
+            "pobrania": pobrania,
         })
+    # WHY: strona ma linki do modeli, a parser nic z niej nie wyczytał = znowu
+    #      zmienił się jej wygląd. Zgłaszamy to jako błąd (SzukajModeliWorker
+    #      pokaże komunikat), zamiast po cichu pokazywać same wyniki z HF.
+    if not wyniki and "<h2" in r.text and 'href="/library/' in r.text and ">cloud<" not in r.text.replace(" ", ""):
+        raise ValueError(_("Nie udało się odczytać wyników z ollama.com - strona mogła zmienić wygląd."))
     return wyniki
 
 
@@ -1382,6 +1509,8 @@ class RefreshWorker(QThread):
         api = self.client.api_dziala()
         modele = self.client.list_models() if api else []
         zaladowane = self.client.list_loaded() if api else []
+        # WHY: RAM procesów mierzymy tylko, gdy wybrany serwer to ten komputer.
+        ram_ollamy = _ollama_pamiec_procesow() if _adres_lokalny(self.client.base_url) else None
         webui = webui_zainstalowane()
         webui_autostart = webui_autostart_wlaczony()
         # WHY: samo "zainstalowane" nie mówi, czy serwer akurat teraz odpowiada -
@@ -1400,6 +1529,8 @@ class RefreshWorker(QThread):
             "api": api,
             "models": modele,
             "zaladowane": zaladowane,
+            "ram_ollamy": ram_ollamy,
+            "lokalny": _adres_lokalny(self.client.base_url),
             "webui": webui,
             "webui_autostart": webui_autostart,
             "webui_dziala": webui_dziala,
@@ -1510,8 +1641,10 @@ class SzukajModeliWorker(QThread):
     def run(self):
         wyniki, bledy = [], []
         try:
+            # WHY: wyniki z Ollamy ZAWSZE na górze listy (oficjalna biblioteka),
+            #      wyniki z HF dopisywane dopiero pod nimi.
             wyniki += ollama_wyszukaj_modele(self.zapytanie)
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             bledy.append(_("Ollama: {blad}").format(blad=e))
         try:
             for wpis in hf_wyszukaj_repozytoria(self.zapytanie):
@@ -1730,12 +1863,12 @@ class DialogPolaczenieUnsloth(QDialog):
             "2. Typ: vLLM (to w Studio ogólne połączenie z serwerem zgodnym z API OpenAI, "
             "a takie API wystawia LiteLLM).\n"
             "3. Base URL: {adres}\n"
-            "4. API key: zostaw puste.\n"
+            "4. API key: {klucz}\n"
             "5. Kliknij Load Models i zaznacz modele. Jeśli lista się nie wczyta, wpisz "
             "ID modeli ręcznie z listy poniżej.\n"
             "Studio na innym komputerze w sieci: zamiast localhost podaj adres IP tego "
             "komputera. LiteLLM musi być uruchomione (karta wyżej)."
-        ).format(adres=self.adres))
+        ).format(adres=self.adres, klucz=_litellm_klucz() or _("zostaw puste.")))
         lbl_kroki.setWordWrap(True)
         lbl_kroki.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(lbl_kroki)
@@ -1867,6 +2000,14 @@ class MainWindow(QMainWindow):
         kafelek, self.lbl_stat_webui = self._kafelek_stat(_("WEBUI"))
         pasek_staty.addWidget(kafelek)
         kafelek, self.lbl_stat_vram_lokalnie = self._kafelek_stat(_("VRAM"))
+        pasek_staty.addWidget(kafelek)
+        # WHAT: RAM zajęty przez Ollamę + suma z VRAM - realne zużycie pamięci.
+        # WHY:  na prośbę użytkownika - Ollama trzyma część modelu w RAM (mapuje
+        #       pliki modeli, zwłaszcza gdy model nie mieści się w VRAM), więc
+        #       sam VRAM zaniżał faktyczne zużycie. Szczegóły w dymku kafelka.
+        kafelek, self.lbl_stat_ram = self._kafelek_stat(_("RAM"))
+        pasek_staty.addWidget(kafelek)
+        kafelek, self.lbl_stat_razem = self._kafelek_stat(_("VRAM + RAM"))
         pasek_staty.addWidget(kafelek)
         kafelek, self.lbl_stat_modele = self._kafelek_stat(_("MODELE"))
         pasek_staty.addWidget(kafelek)
@@ -2197,6 +2338,29 @@ class MainWindow(QMainWindow):
         self.chk_litellm_autostart.setEnabled(False)  # WHY: bez sensu, dopóki LiteLLM nie jest zainstalowane
         self.chk_litellm_autostart.toggled.connect(self.przelacz_litellm_autostart)
         uk_litellm.addWidget(self.chk_litellm_autostart)
+
+        # WHAT: opcja klucza API (master key) - patrz _litellm_klucz.
+        # WHY:  bez klucza każdy w sieci może używać modeli przez port 4000;
+        #       z kluczem - tylko klienci, którzy go znają. Zmiana działa po
+        #       ponownym uruchomieniu LiteLLM (config generowany przy starcie).
+        pasek_klucz = QHBoxLayout()
+        self.chk_litellm_klucz = QCheckBox(_("Wymagaj klucza API (hasła)"))
+        self.chk_litellm_klucz.setToolTip(_(
+            "Bez klucza każdy w Twojej sieci może korzystać z modeli przez LiteLLM. "
+            "Z kluczem - tylko klienci, którzy go podadzą (config Continue i dane "
+            "dla Unsloth Studio dostaną go automatycznie)."
+        ))
+        self.chk_litellm_klucz.setChecked(_litellm_klucz() is not None)
+        self.chk_litellm_klucz.toggled.connect(self.przelacz_litellm_klucz)
+        pasek_klucz.addWidget(self.chk_litellm_klucz)
+        self.lbl_litellm_klucz = QLabel("")
+        self.lbl_litellm_klucz.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        pasek_klucz.addWidget(self.lbl_litellm_klucz, 1)
+        self.btn_kopiuj_klucz = QPushButton(_("Kopiuj klucz"))
+        self.btn_kopiuj_klucz.clicked.connect(lambda: QApplication.clipboard().setText(_litellm_klucz() or ""))
+        pasek_klucz.addWidget(self.btn_kopiuj_klucz)
+        uk_litellm.addLayout(pasek_klucz)
+        self._pokaz_klucz_litellm()
 
         # WHAT: to samo co przy Ollamie/Open WebUI - sprawdzanie aktualizacji NA
         #       ŻĄDANIE (przycisk), nie w cyklicznym odświeżaniu co 10 s.
@@ -2638,6 +2802,11 @@ class MainWindow(QMainWindow):
         #      prawdziwych details.parameter_size/quantization_level z
         #      /api/tags, nie zgadywania rozmiaru z nazwy.
         vram_wg_nazwy = {m.get("name", "?"): m.get("size_vram", 0) for m in stan["zaladowane"]}
+        # WHY: size - size_vram = część modelu, której Ollama nie zmieściła w VRAM
+        #      i trzyma w zwykłym RAM (z API - działa też dla zdalnego serwera).
+        ram_wg_nazwy = {
+            m.get("name", "?"): max(0, m.get("size", 0) - m.get("size_vram", 0)) for m in stan["zaladowane"]
+        }
         zaznaczony = self._wybrany_model()
         self.lista_modeli.setRowCount(0)
         for m in stan["models"]:
@@ -2646,6 +2815,10 @@ class MainWindow(QMainWindow):
 
             if nazwa in vram_wg_nazwy:
                 vram_tekst = _("{gb:.1f} GB (załadowany)").format(gb=vram_wg_nazwy[nazwa] / (1024 ** 3))
+                if ram_wg_nazwy[nazwa] >= 0.05 * (1024 ** 3):
+                    # WHY: w DRUGIEJ linii - w jednej rozpychała kolumnę VRAM
+                    #      i ucinała nazwy modeli (kolumna "Model" się kurczyła).
+                    vram_tekst += "\n" + _(" + {gb:.1f} GB RAM").format(gb=ram_wg_nazwy[nazwa] / (1024 ** 3)).strip()
             else:
                 miliardy = _parsuj_rozmiar_parametrow(m.get("parameter_size", ""))
                 if miliardy is None:
@@ -2679,6 +2852,7 @@ class MainWindow(QMainWindow):
                 pozycja = QTableWidgetItem(tekst)
                 pozycja.setToolTip(tooltip)
                 self.lista_modeli.setItem(wiersz, kolumna, pozycja)
+        self.lista_modeli.resizeRowsToContents()  # WHY: wiersz z dwulinijkowym VRAM+RAM musi być wyższy
         if zaznaczony:
             for i in range(self.lista_modeli.rowCount()):
                 if self.lista_modeli.item(i, 0).data(Qt.ItemDataRole.UserRole) == zaznaczony:
@@ -2690,9 +2864,11 @@ class MainWindow(QMainWindow):
         for m in stan["zaladowane"]:
             nazwa = m.get("name", "?")
             vram_gb = m.get("size_vram", 0) / (1024 ** 3)
-            self.lista_zaladowane.addItem(
-                f"{_skroc_nazwe_modelu_hf(nazwa)}  —  {_zrodlo_modelu(nazwa)}  —  {vram_gb:.1f} GB VRAM"
-            )
+            ram_gb = max(0, m.get("size", 0) - m.get("size_vram", 0)) / (1024 ** 3)
+            tekst = f"{_skroc_nazwe_modelu_hf(nazwa)}  —  {_zrodlo_modelu(nazwa)}  —  {vram_gb:.1f} GB VRAM"
+            if ram_gb >= 0.05:
+                tekst += f" + {ram_gb:.1f} GB RAM"
+            self.lista_zaladowane.addItem(tekst)
 
         # WHAT: jeden przycisk, trzy znaczenia - "Zainstaluj" / "Uruchom" / "Otwórz",
         #       zależnie od tego, czy binarka jest zainstalowana i czy WebUI
@@ -2777,6 +2953,36 @@ class MainWindow(QMainWindow):
 
         vram_lokalnie_gb = sum(m.get("size_vram", 0) for m in stan["zaladowane"]) / (1024 ** 3)
         self.lbl_stat_vram_lokalnie.setText(f"{vram_lokalnie_gb:.1f} GB ({len(stan['zaladowane'])})")
+
+        # WHAT: RAM - dla lokalnej Ollamy zmierzony z procesów (_ollama_pamiec_
+        #       procesow: pamięć procesów + zmapowane pliki modeli); dla zdalnego
+        #       serwera tylko to, co podaje jego API (część modeli poza VRAM).
+        gib = 1024 ** 3
+        ram_api_gb = sum(max(0, m.get("size", 0) - m.get("size_vram", 0)) for m in stan["zaladowane"]) / gib
+        ram = stan["ram_ollamy"]
+        if ram is not None:
+            ram_gb = (ram["anon"] + ram["pliki"]) / gib
+            self.lbl_stat_ram.setToolTip(_(
+                "RAM zajęty przez lokalną Ollamę (procesy: {n}):\n"
+                "pamięć procesów: {anon:.2f} GB\n"
+                "zmapowane pliki modeli: {pliki:.2f} GB\n"
+                "Część modeli poza VRAM wg Ollamy: {api:.2f} GB"
+            ).format(n=ram["procesy"], anon=ram["anon"] / gib, pliki=ram["pliki"] / gib, api=ram_api_gb))
+        elif stan["lokalny"]:
+            ram_gb = 0.0
+            self.lbl_stat_ram.setToolTip(_("Ollama nie działa."))
+        else:
+            ram_gb = ram_api_gb
+            self.lbl_stat_ram.setToolTip(_(
+                "Serwer zdalny - procesów nie da się zmierzyć z tego komputera. Pokazana jest "
+                "tylko część modeli, którą Ollama trzyma poza VRAM (wg jej API)."
+            ))
+        self.lbl_stat_ram.setText(f"{ram_gb:.1f} GB")
+        self.lbl_stat_razem.setText(f"{vram_lokalnie_gb + ram_gb:.1f} GB")
+        self.lbl_stat_razem.setToolTip(_(
+            "Realne zużycie pamięci przez Ollamę: VRAM + RAM. Na komputerach ze wspólną pamięcią "
+            "(APU, np. BC-250) VRAM też jest wydzielany z RAM-u systemu."
+        ))
 
         self.lbl_stat_modele.setText(str(len(stan["models"])))
 
@@ -3222,6 +3428,29 @@ class MainWindow(QMainWindow):
         #      przy Open WebUI - BEZ auto-restartu usługi po aktualizacji, jeśli
         #      akurat działa; użytkownik restartuje ręcznie ("Uruchom ponownie").
         self._litellm_worker = self._uruchom_akcje(litellm_aktualizuj, _("Aktualizacja LiteLLM"))
+
+    def _pokaz_klucz_litellm(self):
+        klucz = _litellm_klucz()
+        self.lbl_litellm_klucz.setText(klucz or "")
+        self.btn_kopiuj_klucz.setVisible(klucz is not None)
+
+    def przelacz_litellm_klucz(self, wlacz):
+        # WHAT: zapisuje wybór i pokazuje klucz; nie restartuje LiteLLM sam.
+        # WHY:  tak jak przy aktualizacjach - bez nieoczekiwanego przestoju
+        #       agregatora; użytkownik restartuje świadomie "Uruchom ponownie".
+        _ustaw_litellm_wymagaj_klucza(wlacz)
+        self._pokaz_klucz_litellm()
+        if wlacz:
+            self.wpis_log(_(
+                "Klucz API LiteLLM włączony. Zadziała po ponownym uruchomieniu LiteLLM - "
+                "potem klienci muszą podać klucz (wygeneruj na nowo config Continue / "
+                "dane dla Unsloth Studio)."
+            ))
+        else:
+            self.wpis_log(_(
+                "Klucz API LiteLLM wyłączony. Zadziała po ponownym uruchomieniu LiteLLM - "
+                "potem każdy w sieci może korzystać z modeli bez hasła."
+            ))
 
     def przelacz_litellm_autostart(self, wlacz):
         # WHY: jw. co przy WebUI - usługa --user, ale i tak przez _uruchom_akcje (blokujące I/O).

@@ -89,7 +89,9 @@ python3 ollama_manager.py
 - Podgląd modeli aktualnie załadowanych do pamięci (VRAM)
 - Uwaga: ollama.com nie ma publicznego API wyszukiwania, więc appka czyta jej strony wyszukiwania
   i tagów — jeśli wygląd strony się zmieni, wyszukiwanie w Ollamie może wymagać poprawki (Hugging
-  Face ma prawdziwe API)
+  Face ma prawdziwe API); appka pokaże wtedy błąd, zamiast po cichu wyświetlać same wyniki z HF.
+  Wyniki z Ollamy są zawsze na górze; modele Ollamy dostępne tylko w chmurze (niepobieralne) są
+  pomijane
 
 **Open WebUI**
 - Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)
@@ -109,6 +111,9 @@ python3 ollama_manager.py
 - Wystawia jeden endpoint (zgodny z API OpenAI) łączący modele ze WSZYSTKICH
   serwerów z listy przełącznika — VS Code/Continue wskazuje tylko na ten adres
 - Podgląd, jakie modele i hosty trafią do configu, przed uruchomieniem
+- Opcjonalny **klucz API (hasło)** do agregatora — domyślnie wyłączony, więc każdy w Twojej sieci może
+  korzystać z modeli; po włączeniu appka raz generuje losowy klucz, pokazuje go z przyciskiem
+  kopiowania i sama wpisuje go do configu Continue i danych dla Unsloth Studio
 - Generuje gotowy do wklejenia `config.yaml` dla Continue.dev na podstawie wystawionych modeli —
   appka nigdy sama nie zapisuje tego pliku, tylko podgląd/kopiowanie
 - Dane połączenia dla **Unsloth Studio** — Studio nie ma pliku konfiguracyjnego (połączenia dodaje
@@ -133,6 +138,11 @@ python3 ollama_manager.py
 **Pasek statystyk**
 - Status Ollamy i Open WebUI
 - Zużycie VRAM na aktualnie wybranym serwerze
+- **RAM zajęty przez Ollamę** i suma **VRAM + RAM** — realne zużycie pamięci. Ollama trzyma część
+  modelu w RAM (mapuje pliki modeli do pamięci, zwłaszcza gdy model nie mieści się w VRAM). Dla
+  lokalnej Ollamy mierzone z jej procesów (pamięć procesów + zmapowane pliki modeli, szczegóły
+  w dymku); dla zdalnego serwera to część załadowanych modeli poza VRAM, z jego API. Załadowane
+  modele pokazują też podział, np. `20.0 GB VRAM + 16.0 GB RAM`
 - Liczba zainstalowanych modeli
 
 **Dziennik zdarzeń** — log wszystkich operacji, zawsze widoczny na dole okna.
