@@ -7,7 +7,7 @@ jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, oraz pan
 w przeglądarce (Open WebUI). Bez terminala, bez Dockera, bez chmury — wszystko działa
 lokalnie, w Twoim LAN.
 
-> **Status: stabilna (v0.5.0).** Używam jej na co dzień na własnym sprzęcie i działa
+> **Status: stabilna (v0.6.0).** Używam jej na co dzień na własnym sprzęcie i działa
 > zgodnie z oczekiwaniami. Nadal aktywnie rozwijana — regularnie dochodzą nowe opcje
 > i funkcjonalności; [zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
