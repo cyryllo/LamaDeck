@@ -1031,6 +1031,13 @@ _GGUF_KWANTYZACJA_WZORZEC = re.compile(
     re.IGNORECASE,
 )
 
+# WHAT: pliki .gguf, które NIE są wariantem modelu: projektor obrazu (mmproj),
+#       macierz ważności (imatrix) i głowice MTP do dekodowania spekulacyjnego.
+# BUG naprawiony: dawniej mmproj-BF16.gguf (0,9 GB) pokazywał się jako wariant
+#       "BF16" modelu 27B, a MTP/mtp-...-Q4_0.gguf doliczał się do rozmiaru Q4_0
+#       (sprawdzone na unsloth/Qwen3.8-27B-GGUF).
+_PLIK_POMOCNICZY_GGUF = re.compile(r"(^|[/_-])(mmproj|imatrix|mtp)([/_.-]|$)", re.IGNORECASE)
+
 
 def _hf_repo_z_linku(tekst):
     # WHAT: wyciąga "użytkownik/repo" z dowolnego wejścia - pełnego linku do
@@ -1168,7 +1175,7 @@ def hf_wyszukaj_warianty_gguf(repo):
     czesci = {}   # kwantyzacja -> suma rozmiarów części "-00001-of-0000N"
     for wpis in r.json():
         sciezka = wpis.get("path", "")
-        if not sciezka.lower().endswith(".gguf"):
+        if not sciezka.lower().endswith(".gguf") or _PLIK_POMOCNICZY_GGUF.search(sciezka):
             continue
         dopasowanie = _GGUF_KWANTYZACJA_WZORZEC.search(Path(sciezka).stem)
         # WHY: group(0), nie group(1) - przedrostki w regexie są teraz
