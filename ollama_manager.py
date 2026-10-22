@@ -47,7 +47,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.6.1"
+WERSJA = "0.6.2"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -2488,9 +2488,21 @@ class MainWindow(QMainWindow):
         self.pole_keep_alive.setPlaceholderText("np. 30m")
         formularz.addRow("OLLAMA_KEEP_ALIVE", self.pole_keep_alive)
 
-        self.pole_context_length = QLineEdit()
-        self.pole_context_length.setPlaceholderText("np. 16384")
-        formularz.addRow("OLLAMA_CONTEXT_LENGTH", self.pole_context_length)
+        # WHAT: typowe rozmiary kontekstu (potęgi dwójki, jak w modelach) do
+        #       wyboru z listy - ale pole jest edytowalne, więc dowolna liczba
+        #       też przejdzie (patrz _wartosc_kontekstu).
+        # WHY:  edytowalne, żeby nietypowa wartość wczytana z override.conf
+        #       (np. 24576) nie zgubiła się przy następnym zapisie. Bez 2k -
+        #       dla obecnych modeli to za mało, tylko zaśmiecałoby listę.
+        self.combo_context_length = QComboBox()
+        self.combo_context_length.setEditable(True)
+        for etykieta, wartosc in [
+            (_("domyślne (Ollama)"), ""),
+            ("4k (4096)", "4096"), ("8k (8192)", "8192"), ("16k (16384)", "16384"),
+            ("32k (32768)", "32768"), ("64k (65536)", "65536"), ("128k (131072)", "131072"),
+        ]:
+            self.combo_context_length.addItem(etykieta, wartosc)
+        formularz.addRow("OLLAMA_CONTEXT_LENGTH", self.combo_context_length)
 
         self.pole_max_loaded = QLineEdit()
         self.pole_max_loaded.setPlaceholderText("np. 1")
@@ -2777,6 +2789,22 @@ class MainWindow(QMainWindow):
         self.refresh_worker.wynik.connect(self._po_odswiezeniu)
         self.refresh_worker.start()
 
+    def _ustaw_kontekst(self, wartosc):
+        # WHY: wartość spoza listy (np. 24576) wpisujemy jako tekst, zamiast
+        #      po cichu przeskoczyć na "domyślne" jak _ustaw_combo_wg_wartosci.
+        indeks = self.combo_context_length.findData(wartosc)
+        if indeks >= 0:
+            self.combo_context_length.setCurrentIndex(indeks)
+        else:
+            self.combo_context_length.setEditText(wartosc)
+
+    def _wartosc_kontekstu(self):
+        # WHAT: wybrana pozycja z listy -> jej liczba ("32k (32768)" -> "32768"),
+        #       ręcznie wpisany tekst -> on sam.
+        tekst = self.combo_context_length.currentText().strip()
+        indeks = self.combo_context_length.findText(tekst)
+        return self.combo_context_length.itemData(indeks) if indeks >= 0 else tekst
+
     def _ustaw_combo_wg_wartosci(self, combo, wartosc):
         indeks = combo.findData(wartosc)
         combo.setCurrentIndex(indeks if indeks >= 0 else 0)
@@ -2790,7 +2818,7 @@ class MainWindow(QMainWindow):
         #       nadpisywałoby to, co user właśnie wpisuje, zanim zdąży kliknąć
         #       "Zapisz".
         for widget in (
-            self.pole_keep_alive, self.pole_context_length, self.pole_max_loaded,
+            self.pole_keep_alive, self.combo_context_length, self.pole_max_loaded,
             self.pole_num_parallel, self.combo_flash_attention, self.combo_kv_cache,
             self.chk_vulkan, self.chk_igpu, self.chk_host, self.pole_ip_allow, self.pole_ggml_vk_visible_devices,
             self.combo_gpu_overhead,
@@ -2804,7 +2832,7 @@ class MainWindow(QMainWindow):
 
         env = stan["env_ollama"]
         self.pole_keep_alive.setText(env.get("OLLAMA_KEEP_ALIVE", ""))
-        self.pole_context_length.setText(env.get("OLLAMA_CONTEXT_LENGTH", ""))
+        self._ustaw_kontekst(env.get("OLLAMA_CONTEXT_LENGTH", ""))
         self.pole_max_loaded.setText(env.get("OLLAMA_MAX_LOADED_MODELS", ""))
         self.pole_num_parallel.setText(env.get("OLLAMA_NUM_PARALLEL", ""))
         self._ustaw_combo_wg_wartosci(self.combo_flash_attention, env.get("OLLAMA_FLASH_ATTENTION", ""))
@@ -3302,7 +3330,7 @@ class MainWindow(QMainWindow):
         #       ewentualnej poprawki przed kliknięciem "Zapisz".
         z = OLLAMA_ZALECANE
         self.pole_keep_alive.setText(z["OLLAMA_KEEP_ALIVE"])
-        self.pole_context_length.setText(z["OLLAMA_CONTEXT_LENGTH"])
+        self._ustaw_kontekst(z["OLLAMA_CONTEXT_LENGTH"])
         self.pole_max_loaded.setText(z["OLLAMA_MAX_LOADED_MODELS"])
         self.pole_num_parallel.setText(z["OLLAMA_NUM_PARALLEL"])
         self._ustaw_combo_wg_wartosci(self.combo_flash_attention, z["OLLAMA_FLASH_ATTENTION"])
@@ -3322,7 +3350,14 @@ class MainWindow(QMainWindow):
         keep_alive = self.pole_keep_alive.text().strip()
         if keep_alive:
             zmienne["OLLAMA_KEEP_ALIVE"] = keep_alive
-        context_length = self.pole_context_length.text().strip()
+        context_length = self._wartosc_kontekstu()
+        if context_length and not context_length.isdigit():
+            QMessageBox.warning(
+                self, _("Błąd w OLLAMA_CONTEXT_LENGTH"),
+                _('"{wartosc}" to nie jest liczba tokenów - wybierz rozmiar z listy albo wpisz '
+                  'samą liczbę (np. 24576).').format(wartosc=context_length),
+            )
+            return
         if context_length:
             zmienne["OLLAMA_CONTEXT_LENGTH"] = context_length
         max_loaded = self.pole_max_loaded.text().strip()
