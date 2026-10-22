@@ -110,15 +110,15 @@ python3 ollama_manager.py
 - One-click install, start/stop and autostart for LiteLLM (no Docker)
 - Exposes a single endpoint (OpenAI-compatible) combining models from ALL
   servers on the switcher list — VS Code/Continue only needs to point at this one address
-- Preview of which models and hosts will end up in the config, before starting
+- Preview of which models and hosts will end up in the config, with a checkbox per model — uncheck
+  the ones LiteLLM shouldn't serve (remembered between restarts; new models are on by default)
 - Optional **API key (password)** for the aggregator — off by default, so anyone on your network can
   use the models; turn it on and the app generates a random key once, shows it with a copy button
-  and puts it into the Continue config and the Unsloth Studio details automatically
+  and puts it into the Continue config automatically
 - Generates a ready-to-paste Continue.dev `config.yaml` for the exposed models — copy/paste only,
   the app never writes to your files
-- Connection details for **Unsloth Studio** — Studio has no config file (connections are added in
-  its Settings → Connections), so the app shows exactly what to enter (connection type, Base URL,
-  API key) plus the list of model IDs to copy
+- Step-by-step instructions for connecting **Open WebUI** to the aggregator (address for this
+  computer and its LAN IP, with copy buttons) — one connection, and WebUI sees models from all hosts
 - On-demand update check against the latest PyPI release, with a prompt to upgrade via
   `uv tool upgrade` (no admin rights needed) if you're behind
 

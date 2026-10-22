@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QListWidget, QProgressBar, QTabWidget,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
-    QDialog, QLineEdit, QScrollArea,
+    QDialog, QLineEdit, QScrollArea, QListWidgetItem,
 )
 
 # --- Konfiguracja ---------------------------------------------------------
@@ -406,6 +406,20 @@ def _adres_lokalny(adres):
     #       serwera (np. BC-250) pokazujemy zamiast tego dane z jego API.
     host = (urlparse(adres).hostname or "").lower()
     return host in ("localhost", "127.0.0.1", "::1", socket.gethostname().lower())
+
+
+def _adres_ip_lan():
+    # WHAT: adres IP tego komputera w sieci lokalnej (np. "192.168.0.10") albo None.
+    # WHY:  "connect" na gnieździe UDP niczego nie wysyła - system tylko wybiera
+    #       interfejs, przez który poszedłby ruch, i wiemy, jaki ma adres. Pewniejsze
+    #       niż gethostbyname(hostname), które na Debianie często zwraca 127.0.1.1.
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.168.0.1", 9))
+            adres = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if adres.startswith("127.") else adres
 
 
 def ollama_zainstalowana():
@@ -823,6 +837,33 @@ def _wykryj_modele_na_serwerach(serwery):
     return wpisy
 
 
+def _litellm_wylaczone():
+    # WHAT: zbiór modeli ODZNACZONYCH w karcie "Modele w agregatorze", jako
+    #       klucze "adres|model" (np. "http://192.168.0.236:11434|qwen3:32b").
+    # WHY:  pamiętamy WYŁĄCZONE, a nie włączone - nowy model na hoście domyślnie
+    #       trafia do LiteLLM (jak dotąd), bez potrzeby zaznaczania go ręcznie.
+    #       Para adres+model, nie sama nazwa: ten sam model bywa na kilku hostach
+    #       i można chcieć serwować go np. tylko z BC-250.
+    return set(_ustawienia().value("litellm/wylaczone_modele", [], type=list))
+
+
+def _ustaw_litellm_model_wylaczony(adres, model, wylacz):
+    wylaczone = _litellm_wylaczone()
+    klucz = f"{adres}|{model}"
+    if wylacz:
+        wylaczone.add(klucz)
+    else:
+        wylaczone.discard(klucz)
+    _ustawienia().setValue("litellm/wylaczone_modele", sorted(wylaczone))
+
+
+def _modele_serwowane(wpisy):
+    # WHAT: z wykrytych (nazwa_hosta, model, adres) zostawia tylko te, których
+    #       użytkownik NIE odznaczył - to, co realnie trafia do configu LiteLLM.
+    wylaczone = _litellm_wylaczone()
+    return [w for w in wpisy if f"{w[2]}|{w[1]}" not in wylaczone]
+
+
 def _litellm_klucz():
     # WHAT: klucz API (master key) LiteLLM, gdy włączona opcja "Wymagaj klucza
     #       API" - w przeciwnym razie None (agregator bez hasła).
@@ -830,7 +871,7 @@ def _litellm_klucz():
     #       innym nie") - np. laptop w obcej sieci z kluczem, dom bez. Klucz
     #       generowany RAZ (losowy, bezpieczny - moduł secrets) i zapamiętany w
     #       QSettings, żeby nie zmieniał się przy każdym restarcie - inaczej
-    #       klienci (Continue, Unsloth Studio) traciliby połączenie co restart.
+    #       klienci (np. Continue) traciliby połączenie co restart.
     ustawienia = _ustawienia()
     if not ustawienia.value("litellm/wymagaj_klucza", False, type=bool):
         return None
@@ -867,7 +908,7 @@ def _zbuduj_config_litellm(serwery):
         naglowek = ["general_settings:", f"  master_key: {_yaml_str(klucz)}"]
     else:
         naglowek = ["general_settings:", "  dangerously_permit_weak_or_unset_master_key: true"]
-    wpisy = _wykryj_modele_na_serwerach(serwery)
+    wpisy = _modele_serwowane(_wykryj_modele_na_serwerach(serwery))
     if not wpisy:
         return "\n".join(naglowek + ["model_list: []"]) + "\n"
 
@@ -1896,61 +1937,78 @@ class DialogConfigContinue(QDialog):
         QApplication.clipboard().setText(self.pole_tresc.toPlainText())
 
 
-class DialogPolaczenieUnsloth(QDialog):
-    """Dane do ręcznego dodania agregatora LiteLLM jako połączenia w Unsloth Studio.
+class DialogPolaczenieWebUI(QDialog):
+    """Instrukcja ręcznego podłączenia agregatora LiteLLM w Open WebUI.
 
-    WHY: Unsloth Studio NIE ma pliku konfiguracyjnego, który dałoby się
-         wygenerować jak config.yaml dla Continue - połączenia dodaje się
-         w jego oknie (Settings -> Connections -> Add Connection; sprawdzone
-         w docs 2026-09: unsloth.ai/docs/integrations/connections). Typ
-         "vLLM" to w Studio ogólne połączenie z serwerem zgodnym z API
-         OpenAI (Base URL + opcjonalny klucz + "Load Models" z /v1/models) -
-         LiteLLM wystawia dokładnie takie API, więc to właściwy wybór. Dialog
-         pokazuje gotowe wartości do skopiowania + listę ID modeli na wypadek,
-         gdyby "Load Models" nic nie wczytało (Studio pozwala wpisać je ręcznie).
+    WHY: appka NIE wpisuje tego sama. Open WebUI trzyma połączenia w swojej bazie
+         (webui.db) i zmienne środowiskowe (OPENAI_API_BASE_URLS) traktuje tylko
+         jako wartości domyślne - po pierwszym starcie wygrywa baza, więc wpis
+         w usłudze nic by nie zmienił (sprawdzone w kodzie Open WebUI 0.11.3,
+         models/config.py). Zapis wprost do bazy byłby kruchy przy aktualizacjach
+         WebUI. Wystarczy JEDEN wpis - LiteLLM zbiera modele ze wszystkich hostów,
+         więc nowy host to tylko "Uruchom ponownie" LiteLLM, bez ruszania WebUI.
     """
 
-    def __init__(self, modele, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(_("Połączenie dla Unsloth Studio"))
-        self.setMinimumSize(560, 420)
+        self.setWindowTitle(_("Połączenie dla Open WebUI"))
+        self.setMinimumWidth(560)
         self.adres = f"{LITELLM_URL}/v1"
+        ip = _adres_ip_lan()
+        # WHY: WebUI na innym komputerze w sieci nie dosięgnie "localhost" -
+        #      dla niego trzeba podać IP tego komputera (LiteLLM słucha na 0.0.0.0).
+        self.adres_lan = f"http://{ip}:{urlparse(LITELLM_URL).port or 4000}/v1" if ip else None
         layout = QVBoxLayout(self)
 
         lbl_kroki = QLabel(_(
-            "Unsloth Studio nie ma pliku konfiguracyjnego - połączenie dodaje się w jego "
-            "oknie:\n"
-            "1. Settings → Connections → Add Connection.\n"
-            "2. Typ: vLLM (to w Studio ogólne połączenie z serwerem zgodnym z API OpenAI, "
-            "a takie API wystawia LiteLLM).\n"
-            "3. Base URL: {adres}\n"
-            "4. API key: {klucz}\n"
-            "5. Kliknij Load Models i zaznacz modele. Jeśli lista się nie wczyta, wpisz "
-            "ID modeli ręcznie z listy poniżej.\n"
-            "Studio na innym komputerze w sieci: zamiast localhost podaj adres IP tego "
-            "komputera. LiteLLM musi być uruchomione (karta wyżej)."
-        ).format(adres=self.adres, klucz=_litellm_klucz() or _("zostaw puste.")))
+            "Open WebUI pokaże modele ze wszystkich hostów, gdy podłączysz je raz do "
+            "agregatora LiteLLM:\n"
+            "1. W Open WebUI otwórz: Panel administratora → Ustawienia → Połączenia "
+            "(Admin Panel → Settings → Connections).\n"
+            "2. W sekcji \"OpenAI API\" kliknij \"+\" (dodaj połączenie).\n"
+            "3. URL: {adres}\n"
+            "4. Klucz: {klucz}\n"
+            "5. Zapisz i odśwież stronę WebUI - modele pojawią się na liście wyboru.\n"
+            "Nowy host? Dodaj go do listy serwerów u góry okna i kliknij \"Uruchom ponownie\" "
+            "przy LiteLLM - w WebUI wystarczy odświeżyć stronę. LiteLLM musi być "
+            "uruchomione (karta wyżej)."
+        ).format(
+            adres=self.adres,
+            klucz=_litellm_klucz() or _(
+                "zostaw puste (jeśli WebUI nie pozwoli zapisać bez klucza, wpisz cokolwiek, "
+                "np. none - LiteLLM bez hasła go nie sprawdza)."
+            ),
+        ))
         lbl_kroki.setWordWrap(True)
         lbl_kroki.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(lbl_kroki)
 
-        layout.addWidget(QLabel(_("ID modeli w agregatorze:")))
-        self.pole_modele = QPlainTextEdit()
-        self.pole_modele.setPlainText("\n".join(modele))
-        self.pole_modele.setReadOnly(True)
-        czcionka = self.pole_modele.font()
-        czcionka.setFamily("monospace")
-        self.pole_modele.setFont(czcionka)
-        layout.addWidget(self.pole_modele, 1)
+        if self.adres_lan:
+            lbl_lan = QLabel(_(
+                "Open WebUI na innym komputerze w sieci? Zamiast localhost wpisz: <b>{adres}</b>"
+            ).format(adres=self.adres_lan))
+            lbl_lan.setWordWrap(True)
+            lbl_lan.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(lbl_lan)
+
+        # WHY: WebUI łączy się też wprost z lokalną Ollamą (OLLAMA_BASE_URL w usłudze),
+        #      więc lokalne modele widać dwa razy - raz z Ollamy, raz przez LiteLLM.
+        lbl_duplikaty = QLabel(_(
+            "Wskazówka: lokalne modele mogą pojawić się dwa razy (z Ollamy i z LiteLLM). "
+            "Żeby tego uniknąć, wyłącz w tym samym miejscu połączenie \"Ollama API\"."
+        ))
+        lbl_duplikaty.setWordWrap(True)
+        layout.addWidget(lbl_duplikaty)
 
         pasek = QHBoxLayout()
         pasek.addStretch(1)
         btn_adres = QPushButton(_("Kopiuj adres"))
         btn_adres.clicked.connect(lambda: QApplication.clipboard().setText(self.adres))
         pasek.addWidget(btn_adres)
-        btn_modele = QPushButton(_("Kopiuj listę modeli"))
-        btn_modele.clicked.connect(lambda: QApplication.clipboard().setText(self.pole_modele.toPlainText()))
-        pasek.addWidget(btn_modele)
+        if self.adres_lan:
+            btn_adres_lan = QPushButton(_("Kopiuj adres w sieci"))
+            btn_adres_lan.clicked.connect(lambda: QApplication.clipboard().setText(self.adres_lan))
+            pasek.addWidget(btn_adres_lan)
         btn_zamknij = QPushButton(_("Zamknij"))
         btn_zamknij.clicked.connect(self.accept)
         pasek.addWidget(btn_zamknij)
@@ -2408,8 +2466,8 @@ class MainWindow(QMainWindow):
         self.chk_litellm_klucz = QCheckBox(_("Wymagaj klucza API (hasła)"))
         self.chk_litellm_klucz.setToolTip(_(
             "Bez klucza każdy w Twojej sieci może korzystać z modeli przez LiteLLM. "
-            "Z kluczem - tylko klienci, którzy go podadzą (config Continue i dane "
-            "dla Unsloth Studio dostaną go automatycznie)."
+            "Z kluczem - tylko klienci, którzy go podadzą (config Continue "
+            "dostanie go automatycznie)."
         ))
         self.chk_litellm_klucz.setChecked(_litellm_klucz() is not None)
         self.chk_litellm_klucz.toggled.connect(self.przelacz_litellm_klucz)
@@ -2440,8 +2498,8 @@ class MainWindow(QMainWindow):
         uk_agregator = QVBoxLayout(karta_agregator)
         pasek_agregator = QHBoxLayout()
         lbl_agregator = QLabel(
-            _("Podgląd modeli i hostów, które trafią do configu LiteLLM - na "
-              "podstawie listy serwerów u góry okna.")
+            _("Modele i hosty z listy serwerów u góry okna. Odznacz te, których "
+              "LiteLLM ma nie serwować - zmiana zadziała po \"Uruchom ponownie\".")
         )
         lbl_agregator.setWordWrap(True)
         pasek_agregator.addWidget(lbl_agregator, 1)
@@ -2451,11 +2509,12 @@ class MainWindow(QMainWindow):
         self.btn_config_continue = QPushButton(_("Config dla Continue..."))
         self.btn_config_continue.clicked.connect(self.generuj_config_continue)
         pasek_agregator.addWidget(self.btn_config_continue)
-        self.btn_polaczenie_unsloth = QPushButton(_("Połączenie dla Unsloth Studio..."))
-        self.btn_polaczenie_unsloth.clicked.connect(self.pokaz_polaczenie_unsloth)
-        pasek_agregator.addWidget(self.btn_polaczenie_unsloth)
+        self.btn_polaczenie_webui = QPushButton(_("Połączenie dla Open WebUI..."))
+        self.btn_polaczenie_webui.clicked.connect(self.pokaz_polaczenie_webui)
+        pasek_agregator.addWidget(self.btn_polaczenie_webui)
         uk_agregator.addLayout(pasek_agregator)
         self.lista_agregator = QListWidget()
+        self.lista_agregator.itemChanged.connect(self._zmiana_modelu_agregatora)
         uk_agregator.addWidget(self.lista_agregator)
         layout.addWidget(karta_agregator, 1)
 
@@ -3563,8 +3622,7 @@ class MainWindow(QMainWindow):
         if wlacz:
             self.wpis_log(_(
                 "Klucz API LiteLLM włączony. Zadziała po ponownym uruchomieniu LiteLLM - "
-                "potem klienci muszą podać klucz (wygeneruj na nowo config Continue / "
-                "dane dla Unsloth Studio)."
+                "potem klienci muszą podać klucz (wygeneruj na nowo config Continue)."
             ))
         else:
             self.wpis_log(_(
@@ -3599,16 +3657,43 @@ class MainWindow(QMainWindow):
             if not wpisy:
                 self.lista_agregator.addItem(_("Brak dostępnych modeli (hosty nieosiągalne albo puste)."))
                 return
+            wylaczone = _litellm_wylaczone()
             for nazwa_hosta, model, adres in wpisy:
-                self.lista_agregator.addItem(f"{model}  —  {nazwa_hosta} ({adres})")
+                item = QListWidgetItem(f"{model}  —  {nazwa_hosta} ({adres})")
+                # WHY: flagi i stan ustawiamy PRZED addItem - wtedy itemChanged
+                #      jeszcze nie odpala (element nie jest w liście), więc samo
+                #      wypełnianie listy niczego nie zapisuje.
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(
+                    Qt.CheckState.Unchecked if f"{adres}|{model}" in wylaczone else Qt.CheckState.Checked
+                )
+                item.setData(Qt.ItemDataRole.UserRole, (adres, model))
+                self.lista_agregator.addItem(item)
 
         worker.wynik.connect(_po_sprawdzeniu)
         worker.start()
 
+    def _zmiana_modelu_agregatora(self, item):
+        # WHAT: zaznaczenie/odznaczenie modelu w karcie "Modele w agregatorze" -
+        #       zapisuje wybór od razu (QSettings), config LiteLLM bierze go przy
+        #       następnym (re)starcie.
+        # WHY:  bez auto-restartu LiteLLM - tak samo jak przy kluczu API, żeby
+        #       klikanie kilku pól pod rząd nie restartowało agregatora za każdym razem.
+        dane = item.data(Qt.ItemDataRole.UserRole)
+        if not dane:
+            return  # WHY: wiersze informacyjne ("Sprawdzam hosty...") nie mają danych
+        adres, model = dane
+        wylacz = item.checkState() != Qt.CheckState.Checked
+        _ustaw_litellm_model_wylaczony(adres, model, wylacz)
+        szablon = (_("LiteLLM nie będzie serwować: {model} ({adres})") if wylacz
+                   else _("LiteLLM będzie serwować: {model} ({adres})"))
+        self.wpis_log(szablon.format(model=model, adres=adres) + " - "
+                      + _("zadziała po ponownym uruchomieniu LiteLLM."))
+
     def _z_modelami_agregatora(self, przycisk, akcja):
         # WHAT: odpytuje hosty (jak odswiez_liste_agregatora), deduplikuje
-        #       wykryte modele i woła `akcja(modele)` - wspólne dla eksportu
-        #       configu Continue i połączenia Unsloth Studio.
+        #       wykryte modele i woła `akcja(modele)` - używane przez eksport
+        #       configu Continue.
         # WHY:  model może być na kilku hostach naraz (LiteLLM sam routuje) -
         #       klient widzi tylko nazwę, więc listę deduplikujemy.
         if self._agregator_worker and self._agregator_worker.isRunning():
@@ -3619,7 +3704,7 @@ class MainWindow(QMainWindow):
 
         def _po_sprawdzeniu(wpisy, w=worker):
             przycisk.setEnabled(True)
-            modele = sorted({model for _nazwa_hosta, model, _adres in wpisy})
+            modele = sorted({model for _nazwa_hosta, model, _adres in _modele_serwowane(wpisy)})
             if not modele:
                 QMessageBox.information(
                     self, _("Brak modeli"),
@@ -3642,13 +3727,11 @@ class MainWindow(QMainWindow):
             lambda modele: DialogConfigContinue(_zbuduj_config_continue(modele), self).exec(),
         )
 
-    def pokaz_polaczenie_unsloth(self):
-        # WHAT: dane do dodania agregatora jako połączenia w Unsloth Studio
-        #       (patrz DialogPolaczenieUnsloth - Studio nie ma pliku configu).
-        self._z_modelami_agregatora(
-            self.btn_polaczenie_unsloth,
-            lambda modele: DialogPolaczenieUnsloth(modele, self).exec(),
-        )
+    def pokaz_polaczenie_webui(self):
+        # WHAT: instrukcja podłączenia agregatora w Open WebUI (DialogPolaczenieWebUI).
+        # WHY:  bez odpytywania hostów (inaczej niż Continue) - WebUI sam pobiera
+        #       listę modeli z LiteLLM, więc nie trzeba mu jej podawać.
+        DialogPolaczenieWebUI(self).exec()
 
     # --- Modele ---
     def _wybrany_model(self):
