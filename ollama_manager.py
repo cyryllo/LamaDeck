@@ -16,6 +16,7 @@
 # =============================================================================
 
 import sys
+import ipaddress
 import json
 import html
 import os
@@ -46,7 +47,7 @@ from PyQt6.QtWidgets import (
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
-WERSJA = "0.6.0"
+WERSJA = "0.6.1"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -92,6 +93,18 @@ OLLAMA_ZALECANE = {
 #       w formularzu, ale świadomie NIE ma zalecanej wartości (zależy od tego,
 #       czy na danym hoście jest środowisko graficzne, appka tego nie zgaduje).
 OLLAMA_ZNANE_ZMIENNE = frozenset(OLLAMA_ZALECANE.keys()) | {"OLLAMA_GPU_OVERHEAD"}
+
+# WHAT: zakresy blokowane przez IPAddressDeny=, gdy pole IPAddressAllow w
+#       zakładce Zaawansowane NIE jest puste - wtedy z sieci lokalnej łączą się
+#       tylko adresy z listy (localhost nie jest tu wymieniony, więc i tak
+#       zawsze działa).
+# WHY:  NIE "IPAddressDeny=any" - filtr systemd działa w OBIE strony (ruch
+#       przychodzący i wychodzący usługi), więc "any" odcięłoby też Ollamie
+#       registry.ollama.ai i pobieranie modeli. Blokujemy więc tylko prywatne
+#       zakresy LAN - internet (pobieranie modeli) dalej działa.
+OLLAMA_IP_DENY_LAN = "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fc00::/7 link-local"
+# WHY: słowa kluczowe, które systemd.resource-control(5) przyjmuje obok adresów/CIDR.
+_IP_SLOWA_KLUCZOWE = {"any", "localhost", "link-local", "multicast"}
 
 
 # =============================================================================
@@ -277,7 +290,41 @@ def _usluga_env_wszystkie():
     return zmienne
 
 
-def usluga_zapisz_env(zmienne):
+def _usluga_ip_allow():
+    # WHAT: czyta listę adresów z IPAddressAllow= w override.conf (pusty
+    #       tekst = brak ograniczenia, dostęp dla wszystkich z LAN).
+    try:
+        tresc = _usluga_override_sciezka().read_text()
+    except OSError:
+        return ""
+    adresy = []
+    for linia in tresc.splitlines():
+        linia = linia.strip()
+        if linia.startswith("IPAddressAllow="):
+            wartosc = linia.removeprefix("IPAddressAllow=").split()
+            # WHY: puste przypisanie w systemd resetuje listę - tak samo tutaj.
+            adresy = adresy + wartosc if wartosc else []
+    return " ".join(adresy)
+
+
+def _sprawdz_ip_allow(tekst):
+    # WHAT: normalizuje listę z pola IPAddressAllow (spacje/przecinki) i
+    #       zwraca (lista, błędny_wpis) - błędny_wpis=None, gdy wszystko OK.
+    # WHY:  wartość trafia prosto do override.conf - walidacja adres/CIDR/słowo
+    #       kluczowe wyklucza literówki (systemd po cichu zignorowałby całą
+    #       linię) i przemycenie nowej linii z inną dyrektywą.
+    adresy = tekst.replace(",", " ").split()
+    for adres in adresy:
+        if adres in _IP_SLOWA_KLUCZOWE:
+            continue
+        try:
+            ipaddress.ip_network(adres, strict=False)
+        except ValueError:
+            return adresy, adres
+    return adresy, None
+
+
+def usluga_zapisz_env(zmienne, ip_allow=""):
     # WHAT: nadpisuje CAŁY override.conf zadanym słownikiem zmiennych (jeden
     #       zapis, jedna zmiana pliku) i restartuje usługę.
     # WHY:  zakładka "Zaawansowane" ma jeden przycisk "Zapisz" dla wszystkich
@@ -290,6 +337,11 @@ def usluga_zapisz_env(zmienne):
     #       żaden wpisany tekst nie ma szansy dotknąć parsera 'sh', bo w ogóle
     #       nie trafia do wiersza poleceń.
     tresc = "[Service]\n" + "".join(f'Environment="{k}={v}"\n' for k, v in zmienne.items())
+    # WHY: IPAddressAllow= samo z siebie niczego nie blokuje - działa dopiero w
+    #      parze z IPAddressDeny= (patrz OLLAMA_IP_DENY_LAN). Pusta lista = brak
+    #      obu linii, czyli dostęp dla wszystkich (zależnie od OLLAMA_HOST).
+    if ip_allow:
+        tresc += f"IPAddressAllow={ip_allow}\nIPAddressDeny={OLLAMA_IP_DENY_LAN}\n"
     skrypt = (
         'mkdir -p "$(dirname "$1")" && cat > "$1" && '
         "systemctl daemon-reload && "
@@ -1506,6 +1558,7 @@ class RefreshWorker(QThread):
         active = _systemctl_query("is-active") == "active"
         enabled = _systemctl_query("is-enabled") == "enabled"
         env_ollama = _usluga_env_wszystkie()  # WHY: jedno czytanie override.conf - zakładka "Zaawansowane"
+        ip_allow = _usluga_ip_allow()
         api = self.client.api_dziala()
         modele = self.client.list_models() if api else []
         zaladowane = self.client.list_loaded() if api else []
@@ -1526,6 +1579,7 @@ class RefreshWorker(QThread):
             "active": active,
             "enabled": enabled,
             "env_ollama": env_ollama,
+            "ip_allow": ip_allow,
             "api": api,
             "models": modele,
             "zaladowane": zaladowane,
@@ -2465,6 +2519,12 @@ class MainWindow(QMainWindow):
         self.chk_host = QCheckBox()
         formularz.addRow("OLLAMA_HOST", self.chk_host)
 
+        # WHY: obok OLLAMA_HOST, bo ma sens dopiero przy nasłuchu w LAN -
+        #      puste = dostęp dla wszystkich z sieci lokalnej.
+        self.pole_ip_allow = QLineEdit()
+        self.pole_ip_allow.setPlaceholderText(_("np. localhost 192.168.8.20 (puste = cały LAN)"))
+        formularz.addRow("IPAddressAllow", self.pole_ip_allow)
+
         self.pole_ggml_vk_visible_devices = QLineEdit()
         self.pole_ggml_vk_visible_devices.setPlaceholderText("np. 0")
         formularz.addRow("GGML_VK_VISIBLE_DEVICES", self.pole_ggml_vk_visible_devices)
@@ -2561,6 +2621,13 @@ class MainWindow(QMainWindow):
                                "w sieci nie mogą się połączyć. Włącz (w zakładce Zaawansowane), żeby "
                                "nasłuchiwała na wszystkich interfejsach (0.0.0.0) i była dostępna spoza tego "
                                "komputera (np. z innego PC albo dla BC-250 pracującego jako klient).")),
+            ("IPAddressAllow", _("Lista adresów IP / podsieci (oddzielonych spacją), które mogą łączyć się z "
+                                  "Ollamą z sieci lokalnej, np. \"localhost 192.168.8.20 192.168.8.0/24\". "
+                                  "Puste = dostęp dla wszystkich z LAN. Ustawienie systemd (nie zmienna "
+                                  "środowiskowa) - pozostałe adresy prywatne (10.x, 172.16-31.x, 192.168.x) są "
+                                  "blokowane, a internet działa dalej, więc pobieranie modeli nie przestaje "
+                                  "działać. Blokada dotyczy ruchu w obie strony - jeśli DNS to router w LAN "
+                                  "(np. 192.168.8.1), dopisz go do listy. Ma sens razem z OLLAMA_HOST.")),
             ("GGML_VK_VISIBLE_DEVICES", _("Który indeks urządzenia Vulkan ma być widoczny dla backendu "
                                            "(0 = pierwsze) - niezbędne na niektórych APU (np. BC-250), gdzie "
                                            "Vulkan wylicza kilka urządzeń naraz i bez tego Ollama może wybrać "
@@ -2725,7 +2792,7 @@ class MainWindow(QMainWindow):
         for widget in (
             self.pole_keep_alive, self.pole_context_length, self.pole_max_loaded,
             self.pole_num_parallel, self.combo_flash_attention, self.combo_kv_cache,
-            self.chk_vulkan, self.chk_igpu, self.chk_host, self.pole_ggml_vk_visible_devices,
+            self.chk_vulkan, self.chk_igpu, self.chk_host, self.pole_ip_allow, self.pole_ggml_vk_visible_devices,
             self.combo_gpu_overhead,
             self.pole_wlasne_zmienne, self.btn_zalecane_zaawansowane, self.btn_zapisz_zaawansowane,
         ):
@@ -2749,6 +2816,7 @@ class MainWindow(QMainWindow):
         #      sprzed przebudowy tej zakładki na jeden formularz).
         self.chk_igpu.setChecked(env.get("OLLAMA_IGPU_ENABLE") not in ("0", "false"))
         self.chk_host.setChecked(bool(env.get("OLLAMA_HOST")))
+        self.pole_ip_allow.setText(stan["ip_allow"])
         self.pole_ggml_vk_visible_devices.setText(env.get("GGML_VK_VISIBLE_DEVICES", ""))
         self._ustaw_combo_wg_wartosci(self.combo_gpu_overhead, env.get("OLLAMA_GPU_OVERHEAD", ""))
 
@@ -3303,6 +3371,16 @@ class MainWindow(QMainWindow):
             if klucz:
                 zmienne[klucz] = wartosc.strip()
 
+        ip_allow, bledny = _sprawdz_ip_allow(self.pole_ip_allow.text())
+        if bledny:
+            QMessageBox.warning(
+                self, _("Błąd w IPAddressAllow"),
+                _('"{adres}" to nie jest poprawny adres IP, podsieć (CIDR) ani słowo kluczowe '
+                  '(localhost, link-local, multicast, any) - popraw przed zapisem.').format(adres=bledny),
+            )
+            return
+        ip_allow = " ".join(ip_allow)
+
         odp = QMessageBox.question(
             self, _("Zapisanie ustawień Ollamy"),
             _("Zapisać wszystkie pola z tej zakładki i zrestartować usługę Ollama?") + "\n\n" + _(
@@ -3314,7 +3392,7 @@ class MainWindow(QMainWindow):
             return
         self.wpis_log(_("Zapisuję ustawienia Ollamy..."))
         self._zaawansowane_wczytane = False  # WHY: po restarcie odśwież formularz faktycznie zapisanym stanem
-        self._uruchom_akcje(lambda: usluga_zapisz_env(zmienne), _("Zapisanie ustawień Ollamy"))
+        self._uruchom_akcje(lambda: usluga_zapisz_env(zmienne, ip_allow), _("Zapisanie ustawień Ollamy"))
 
     def przelacz_webui_autostart(self, wlacz):
         # WHAT: reakcja na kliknięcie checkboxa autostartu WebUI.

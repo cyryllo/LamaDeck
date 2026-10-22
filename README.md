@@ -127,6 +127,8 @@ python3 ollama_manager.py
   `OLLAMA_MAX_LOADED_MODELS`, `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`,
   `OLLAMA_VULKAN` (Vulkan backend instead of ROCm, useful on AMD cards without full ROCm support
   e.g. BC-250), `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST` (listen on the LAN instead of localhost-only),
+  `IPAddressAllow` (systemd allow-list, e.g. `localhost 192.168.8.20` — only those LAN hosts may connect;
+  empty = whole LAN, model downloads from the internet keep working),
   `GGML_VK_VISIBLE_DEVICES` (Vulkan device index — needed on some APUs), `OLLAMA_GPU_OVERHEAD`
   (VRAM reserved for the rest of the system — desktop/server preset picker)
 - A single "Save" applies every field at once and restarts the service once, plus an "Apply
