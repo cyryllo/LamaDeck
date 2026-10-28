@@ -1,0 +1,320 @@
+/*
+ * Ollama Manager - motyw Breeze Dark zgodny z makietami (docs/mockups).
+ *
+ * CO: arkusz stylów Qt dla całego okna.
+ * DLACZEGO: jeden plik z kolorami zamiast kolorów rozsianych po kodzie,
+ * łatwo zmienić wygląd bez ruszania Pythona.
+ *
+ * Kopia wzoru z Wyglad/docs/mockups/theme.qss, rozszerzona o elementy
+ * potrzebne w aplikacji (pasek boczny, ekran "Hosty Ollama", zwykłe widżety
+ * starszych zakładek). Leży obok ollama_manager.py - install.sh i
+ * build-deb.sh kopiują go razem ze skryptem.
+ *
+ * Użycie w Pythonie: _wczytaj_motyw(app) w ollama_manager.py
+ * Elementy wybieramy przez objectName, np. frame.setObjectName("card"),
+ * albo przez właściwości, np. label.setProperty("state", "ok").
+ */
+
+/* --- Podstawa okna ---
+ * DLACZEGO reguła dla każdego QWidget: motyw jest zawsze ciemny, także gdy
+ * KDE ma jasny Breeze - bez tego zwykłe widżety (pola wyboru, ramki grup,
+ * okna dialogowe) brałyby jasne kolory z systemu i tekst znikałby na tle. */
+QWidget {
+    background: #1b1e22;
+    color: #e8eaed;
+    font-family: "Noto Sans";
+    font-size: 10pt;
+}
+QMainWindow, QWidget#central, QDialog { background: #1b1e22; }
+QToolTip {
+    background: #262a30;
+    color: #e8eaed;
+    border: 1px solid #444c56;
+    padding: 4px 8px;
+}
+QLabel { color: #e8eaed; background: transparent; }
+
+/* Tekst drugorzędny: podpisy, opisy pod tytułami */
+QLabel[role="muted"] { color: #a3abb5; }
+/* Adresy, nazwy modeli, logi */
+QLabel[role="mono"] { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }
+QLabel[role="mono"][muted="true"] { color: #a3abb5; }
+/* Tytuł ekranu */
+QLabel[role="h1"] { font-size: 20pt; font-weight: 700; }
+/* Tytuł karty */
+QLabel[role="h2"] { font-size: 13pt; font-weight: 600; }
+/* Nagłówek sekcji w karcie ("Modele na tym hoście") */
+QLabel[role="h3"] { font-size: 10pt; font-weight: 600; color: #c9cfd6; }
+/* Duża liczba w kafelku statystyki */
+QLabel[role="value"] { font-size: 13pt; font-weight: 700; }
+/* Kolor stanu w tekście (np. "online", "w pamięci") */
+QLabel[state="ok"]      { color: #5fd38d; }
+QLabel[state="warn"]    { color: #f0b453; }
+QLabel[state="error"]   { color: #f47c84; }
+QLabel[state="off"]     { color: #a3abb5; }
+
+/* --- Pasek boczny: ramka z logo, listą sekcji i linkiem na dole --- */
+QFrame#sidebarPanel {
+    background: #202429;
+    border: none;
+    border-right: 1px solid #30363d;
+}
+QFrame#sidebarPanel QLabel { background: transparent; }
+QLabel#brandIcon { background: #1d3a4f; border-radius: 9px; }
+QLabel#brandName { font-size: 11pt; font-weight: 700; }
+QLabel#brandVersion { font-size: 8pt; color: #a3abb5; }
+/* Link do repozytorium na dole paska - przycisk, bo koloru linku w QLabel
+ * nie da się ustawić z QSS (bierze go z palety systemu) */
+QPushButton#sidebarLink {
+    min-height: 0;
+    padding: 10px 8px 0 20px;
+    border: none;
+    background: transparent;
+    color: #a3abb5;
+    font-size: 8pt;
+    font-weight: 400;
+    text-align: left;
+}
+QPushButton#sidebarLink:hover { background: transparent; color: #3daee9; }
+
+/* --- Pasek boczny ---
+ * DLACZEGO QListWidget: daje gotową obsługę klawiatury i zaznaczenia,
+ * wystarczy go ostylować. */
+QListWidget#sidebar {
+    background: #202429;
+    border: none;
+    padding: 0 12px;
+    outline: 0;
+}
+QListWidget#sidebar::item {
+    height: 44px;
+    padding-left: 12px;
+    border-radius: 8px;
+    color: #c9cfd6;
+}
+QListWidget#sidebar::item:hover { background: #2a2f36; color: #ffffff; }
+QListWidget#sidebar::item:selected { background: #1d3a4f; color: #7cc8f0; }
+
+/* --- Karty --- */
+QFrame#card {
+    background: #262a30;
+    border: 1px solid #353b43;
+    border-radius: 12px;
+}
+/* Wiersz lub blok wewnątrz karty (lista hostów, kafelek statystyki) */
+QFrame#cardRow {
+    background: #2c3138;
+    border: 1px solid #3a4048;
+    border-radius: 8px;
+}
+/* Wybrana karta na liście (np. zaznaczony host) */
+QFrame#card[selected="true"] {
+    background: #1d3a4f;
+    border: 1px solid #3daee9;
+}
+QFrame#card QLabel, QFrame#cardRow QLabel { background: transparent; }
+/* Karta hosta na liście - klikalna */
+QFrame#card[clickable="true"]:hover { border-color: #444c56; }
+QFrame#card[clickable="true"][selected="true"]:hover { border-color: #3daee9; }
+/* Kafelek statystyki w szczegółach hosta - bez ramki, jak w makiecie */
+QFrame#statTile { background: #2c3138; border: none; border-radius: 10px; }
+QFrame#statTile QLabel { background: transparent; }
+/* Kropka stanu przy nazwie hosta.
+ * DLACZEGO z "QFrame#card" na początku: reguła "QFrame#card QLabel" (tło
+ * przezroczyste) jest bardziej szczegółowa niż samo "QLabel#dot" i by wygrała. */
+QFrame#card QLabel#dot { border-radius: 5px; background: #6b737d; }
+QFrame#card QLabel#dot[state="ok"] { background: #5fd38d; }
+/* Podpowiedź z przerywaną ramką pod listą hostów */
+QLabel#hint {
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px dashed #444c56;
+    color: #a3abb5;
+}
+/* Ostrzeżenie w karcie ("Host nie odpowiada...") */
+QFrame#card QLabel#notice {
+    padding: 14px;
+    border-radius: 10px;
+    background: #3a3020;
+    color: #f0d29a;
+}
+/* Pasek zajętości VRAM; [state="error"] gdy powyżej 80% */
+QProgressBar#meter { max-height: 6px; border-radius: 3px; }
+QProgressBar#meter::chunk { border-radius: 3px; }
+QProgressBar#meter[state="error"]::chunk { background: #f47c84; }
+
+/* --- Przyciski --- */
+QPushButton {
+    min-height: 34px;
+    padding: 0 16px;
+    border-radius: 6px;
+    border: 1px solid #444c56;
+    background: #2f353d;
+    color: #e8eaed;
+    font-weight: 500;
+}
+QPushButton:hover { background: #38404a; }
+QPushButton:pressed { background: #2a2f36; }
+QPushButton:disabled { color: #6b737d; border-color: #353b43; }
+
+/* Główna akcja ekranu (Dodaj host, Pobierz, Otwórz Open WebUI) */
+QPushButton#primary {
+    background: #3daee9;
+    border-color: #3daee9;
+    color: #0b1a24;
+    font-weight: 700;
+}
+QPushButton#primary:hover { background: #5bbcee; }
+
+/* Duży przycisk uruchomienia Open WebUI */
+QPushButton#launch {
+    min-height: 56px;
+    border-radius: 12px;
+    background: #3daee9;
+    border: none;
+    color: #0b1a24;
+    font-size: 13pt;
+    font-weight: 700;
+}
+
+/* Akcje niszczące (Zatrzymaj, Usuń) */
+QPushButton#danger { color: #f47c84; border-color: #6b3a3f; }
+QPushButton#danger:hover { background: #3a2326; }
+
+/* --- Plakietki stanu usług ---
+ * DLACZEGO właściwość "state": ten sam QLabel zmienia wygląd po
+ * setProperty("state", ...); potem trzeba wywołać
+ * label.style().unpolish(label); label.style().polish(label) */
+QLabel#pill {
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 9pt;
+    font-weight: 600;
+}
+QLabel#pill[state="ok"]      { background: #1c3a29; color: #5fd38d; }
+QLabel#pill[state="warn"]    { background: #3a3020; color: #f0d29a; }
+QLabel#pill[state="error"]   { background: #3a2326; color: #f47c84; }
+QLabel#pill[state="stopped"] { background: #3a2326; color: #f47c84; }
+
+/* Etykiety modeli (chipy) */
+QLabel#chip {
+    padding: 3px 10px;
+    border-radius: 10px;
+    background: #1d3a4f;
+    color: #9fd6f3;
+    font-family: "JetBrains Mono";
+    font-size: 9pt;
+}
+
+/* --- Pola formularzy --- */
+QLineEdit, QComboBox, QSpinBox {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid #444c56;
+    background: #1b1e22;
+    color: #e8eaed;
+    selection-background-color: #3daee9;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #3daee9; }
+QComboBox QAbstractItemView {
+    background: #262a30;
+    border: 1px solid #353b43;
+    selection-background-color: #1d3a4f;
+}
+
+/* --- Pasek postępu (pobieranie modelu) --- */
+QProgressBar {
+    max-height: 8px;
+    border: none;
+    border-radius: 4px;
+    background: #353b43;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk { border-radius: 4px; background: #3daee9; }
+
+/* --- Tabele (aliasy, modele na hoście) --- */
+QTableView, QTableWidget {
+    background: #262a30;
+    alternate-background-color: #2a2e34;
+    border: 1px solid #3a4048;
+    border-radius: 10px;
+    gridline-color: #353b43;
+    selection-background-color: #1d3a4f;
+}
+QHeaderView::section {
+    background: #2c3138;
+    color: #a3abb5;
+    border: none;
+    padding: 8px 12px;
+}
+QTableWidget::item { padding: 0 12px; border-top: 1px solid #353b43; }
+QTableWidget QLabel { background: transparent; padding: 0 12px; }
+QTableCornerButton::section { background: #2c3138; border: none; }
+
+/* --- Dziennik --- */
+QPlainTextEdit#log, QListView#log {
+    background: #15181b;
+    border: 1px solid #353b43;
+    border-radius: 12px;
+    font-family: "JetBrains Mono";
+    color: #d5dadf;
+}
+
+/* --- Zwykłe widżety starszych zakładek (Usługi, Modele, Agregator...) --- */
+QGroupBox {
+    background: #262a30;
+    border: 1px solid #353b43;
+    border-radius: 12px;
+    margin-top: 14px;
+    padding: 12px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+    color: #c9cfd6;
+    font-weight: 600;
+}
+QGroupBox QLabel, QGroupBox QCheckBox { background: transparent; }
+QListWidget {
+    background: #262a30;
+    border: 1px solid #3a4048;
+    border-radius: 10px;
+    outline: 0;
+}
+QListWidget::item:selected { background: #1d3a4f; color: #e8eaed; }
+QPlainTextEdit, QTextEdit {
+    background: #15181b;
+    border: 1px solid #353b43;
+    border-radius: 10px;
+    color: #d5dadf;
+}
+QCheckBox { background: transparent; spacing: 8px; }
+/* DLACZEGO własny wskaźnik: przy jasnym motywie KDE systemowy kwadracik jest
+ * rysowany jasno i na ciemnym tle niezaznaczone pole znika. Zaznaczone =
+ * wypełnione akcentem (QSS nie narysuje "ptaszka" bez pliku obrazka). */
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid #6b737d;
+    background: #1b1e22;
+}
+QCheckBox::indicator:hover { border-color: #3daee9; }
+QCheckBox::indicator:checked { background: #3daee9; border-color: #3daee9; }
+QCheckBox::indicator:disabled { border-color: #353b43; background: #202429; }
+QCheckBox::indicator:checked:disabled { background: #2f4a5c; border-color: #2f4a5c; }
+QCheckBox:disabled { color: #6b737d; }
+QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
+QMenu { background: #262a30; border: 1px solid #353b43; }
+QMenu::item:selected { background: #1d3a4f; }
+
+/* --- Paski przewijania: cienkie, jak w Breeze --- */
+QScrollBar:vertical { width: 10px; background: transparent; }
+QScrollBar::handle:vertical { background: #444c56; border-radius: 5px; min-height: 30px; }
+QScrollBar:horizontal { height: 10px; background: transparent; }
+QScrollBar::handle:horizontal { background: #444c56; border-radius: 5px; min-width: 30px; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }

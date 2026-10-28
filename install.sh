@@ -23,6 +23,7 @@ DESKTOP_FILE="$HOME/.local/share/applications/ollama-manager.desktop"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 SOURCE_SCRIPT="$SCRIPT_DIR/ollama_manager.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
+SOURCE_THEME="$SCRIPT_DIR/theme.qss"
 TARGET_SCRIPT="$TARGET_DIR/ollama_manager.py"
 
 _version_from_file() {
@@ -194,6 +195,12 @@ chmod +x "$TARGET_SCRIPT"
 #      _KATALOG_LANG in the code is resolved relative to ollama_manager.py, not the CWD.
 if [ -d "$SOURCE_LANG_DIR" ]; then
     cp -r "$SOURCE_LANG_DIR" "$TARGET_DIR/"
+fi
+
+# WHY: the window stylesheet (dark Breeze from the mockups) is also loaded from
+#      next to the script - without it the app falls back to the system theme.
+if [ -f "$SOURCE_THEME" ]; then
+    cp "$SOURCE_THEME" "$TARGET_DIR/"
 fi
 
 # 3) Application menu entry - Categories=Utility is the "Utilities" section in KDE.

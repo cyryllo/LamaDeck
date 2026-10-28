@@ -102,9 +102,18 @@ python3 ollama_manager.py
 - Po udanej instalacji appka proponuje doinstalowanie opcjonalnych pakietów `ffmpeg`/`pandoc`/`zstd`
   potrzebnych do transkrypcji głosu i importu dokumentów do RAG (jedyny krok wymagający roota)
 
+**Hosty Ollama**
+- Osobny ekran ze wszystkimi hostami Ollamy (ten komputer i dowolne w LAN, np. BC-250): stan
+  online/offline, wersja Ollamy, czas odpowiedzi, VRAM zajęty przez modele (dla tego komputera
+  także rozmiar karty) i modele na każdym hoście — na dysku albo w pamięci
+- Dodawanie hosta przez sam adres (`http://` i domyślny port 11434 program dopisze sam), usuwanie
+  jednym kliknięciem; lista zapamiętana między uruchomieniami i wspólna z agregatorem LiteLLM
+- Dla tego komputera: ponowne uruchomienie usługi Ollama i podgląd jej dziennika systemd w okienku —
+  bez terminala
+- Gdy host nie odpowiada, program podpowiada, co sprawdzić (`OLLAMA_HOST=0.0.0.0`)
+
 **Przełącznik serwera**
 - Wybór hosta Ollama (localhost albo dowolny w LAN, np. BC-250) dla operacji na modelach
-- Dodawanie/usuwanie serwerów z poziomu okna, zapamiętywane między uruchomieniami
 
 **Agregator modeli (LiteLLM)**
 - Instalacja, start/stop i autostart LiteLLM jednym przyciskiem (bez Dockera)

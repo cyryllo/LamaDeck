@@ -2,7 +2,7 @@
 # =============================================================================
 #  Build a .deb package for Ollama Manager.
 #
-#  WHAT: packs ollama_manager.py + lang/ into /usr/share, adds a launcher
+#  WHAT: packs ollama_manager.py + lang/ + theme.qss into /usr/share, adds a launcher
 #        script in /usr/bin and a .desktop entry in /usr/share/applications,
 #        then assembles it all into a single .deb via dpkg-deb.
 #  WHY:  a plain hand-written DEBIAN/control + dpkg-deb --build instead of
@@ -51,10 +51,11 @@ mkdir -p "$BUILD_DIR/usr/bin"
 mkdir -p "$BUILD_DIR/usr/share/$PACKAGE_NAME"
 mkdir -p "$BUILD_DIR/usr/share/applications"
 
-# App + translations (see CLAUDE.md - lang/ MUST travel with the script,
-# _KATALOG_LANG in the code is resolved relative to ollama_manager.py's location)
+# App + translations + stylesheet (see CLAUDE.md - lang/ and theme.qss MUST
+# travel with the script, both are resolved relative to ollama_manager.py's location)
 cp ollama_manager.py "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp -r lang "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+cp theme.qss "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 
 # WHY: a small wrapper instead of calling the full path straight from
 #      .desktop - this also lets `ollama-manager` be run from a terminal.

@@ -102,9 +102,17 @@ python3 ollama_manager.py
 - After a fresh install, offers to install the optional `ffmpeg`/`pandoc`/`zstd` packages
   needed for voice transcription and document RAG (the only step that needs admin rights)
 
+**Ollama hosts**
+- A dedicated screen with all Ollama hosts (this computer and any on the LAN, e.g. BC-250):
+  online/offline status, Ollama version, response time, VRAM used by models (with the card's total
+  for this computer), and the models on each host — on disk or loaded into memory
+- Add a host by just typing its address (`http://` and the default port 11434 are added for you),
+  remove it with one click; the list is remembered between runs and shared with the LiteLLM aggregator
+- For this computer: restart the Ollama service and view its systemd log in a window — no terminal
+- A host that doesn't respond gets a hint on what to check (`OLLAMA_HOST=0.0.0.0`)
+
 **Server switcher**
 - Choose the Ollama host (localhost or any host on the LAN, e.g. BC-250) for model operations
-- Add/remove servers from the window, remembered between runs
 
 **Model aggregator (LiteLLM)**
 - One-click install, start/stop and autostart for LiteLLM (no Docker)

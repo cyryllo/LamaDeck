@@ -33,14 +33,15 @@ from urllib.parse import urlparse
 
 import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QUrl, QSettings
-from PyQt6.QtGui import QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QUrl, QSettings, QSize
+from PyQt6.QtGui import QIcon, QDesktopServices, QFontDatabase
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QPushButton, QListWidget, QProgressBar, QTabWidget,
+    QLabel, QPushButton, QListWidget, QProgressBar,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
+    QFrame, QStackedWidget, QGridLayout, QSizePolicy,
 )
 
 # --- Konfiguracja ---------------------------------------------------------
@@ -251,6 +252,28 @@ def usluga_autostart(wlacz):
     _pkexec(["systemctl", akcja, SERVICE_NAME])
 
 
+def usluga_restart():
+    # WHAT: "Uruchom ponownie" na ekranie "Hosty Ollama" (tylko ten komputer).
+    _pkexec(["systemctl", "restart", SERVICE_NAME])
+
+
+def usluga_dziennik(linie=200):
+    # WHAT: ostatnie wpisy dziennika systemd usługi Ollama (journalctl).
+    # WHY:  najpierw bez roota - działa, gdy użytkownik jest w grupie
+    #       adm/systemd-journal. Inaczej journalctl zwraca tylko "-- No entries --"
+    #       (bez błędu), więc wtedy pytamy o hasło przez pkexec, zamiast pokazać
+    #       pusty dziennik i kazać szukać przyczyny w terminalu.
+    polecenie = ["journalctl", "-u", SERVICE_NAME, "-n", str(linie), "--no-pager"]
+    r = subprocess.run(polecenie, capture_output=True, text=True, timeout=15)
+    wpisy = [l for l in r.stdout.splitlines() if l.strip() and not l.startswith("-- No entries --")]
+    if wpisy:
+        return "\n".join(wpisy)
+    r = subprocess.run(["pkexec"] + polecenie, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or _("pkexec: kod wyjścia {kod}").format(kod=r.returncode))
+    return r.stdout.strip() or _("Dziennik usługi jest pusty.")
+
+
 def _usluga_override_sciezka():
     return Path("/etc/systemd/system") / f"{SERVICE_NAME}.service.d" / "override.conf"
 
@@ -420,6 +443,73 @@ def _adres_ip_lan():
     except OSError:
         return None
     return None if adres.startswith("127.") else adres
+
+
+def _vram_lokalnie_calkowita():
+    # WHAT: całkowita pamięć karty graficznej TEGO komputera w bajtach, albo None.
+    # WHY:  API Ollamy podaje tylko, ile VRAM zajmują modele (/api/ps), a nie ile
+    #       ma karta - bez tego pasek "7,5 / 12 GB" z makiety nie ma mianownika.
+    #       AMD: sysfs, czytelny bez roota (bierzemy cardN, nie renderD - to ta
+    #       sama karta drugi raz). NVIDIA: nvidia-smi, jeśli jest. Zdalnych
+    #       hostów nie da się tak zmierzyć, tam pokazujemy samo zużycie.
+    suma = 0
+    for plik in Path("/sys/class/drm").glob("card[0-9]*/device/mem_info_vram_total"):
+        try:
+            suma += int(plik.read_text().strip())
+        except (OSError, ValueError):
+            pass
+    if suma:
+        return suma
+    if shutil.which("nvidia-smi"):
+        try:
+            r = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5,
+            )
+            mib = sum(int(l) for l in r.stdout.split() if l.isdigit())
+            if mib:
+                return mib * 1024 ** 2
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return None
+
+
+def sprawdz_host(serwer):
+    # WHAT: stan jednego hosta z listy serwerów do ekranu "Hosty Ollama":
+    #       czy odpowiada, wersja Ollamy, czas odpowiedzi, modele (na dysku /
+    #       w pamięci), zajęty VRAM, a dla tego komputera także stan usługi systemd.
+    # WHY:  czas odpowiedzi mierzymy na /api/version - najlżejsze zapytanie API,
+    #       więc liczba to głównie sieć, a nie praca serwera.
+    adres = serwer["adres"].rstrip("/")
+    wynik = {
+        "nazwa": serwer["nazwa"], "adres": adres, "lokalny": _adres_lokalny(adres),
+        "online": False, "wersja": None, "ping_ms": None, "modele": [],
+        "vram_uzyte": 0, "vram_calkowite": None, "usluga_aktywna": None,
+        "usluga_autostart": None, "sprawdzono": time.time(),
+    }
+    if wynik["lokalny"]:
+        wynik["vram_calkowite"] = _vram_lokalnie_calkowita()
+        wynik["usluga_aktywna"] = _systemctl_query("is-active") == "active"
+        wynik["usluga_autostart"] = _systemctl_query("is-enabled") == "enabled"
+    try:
+        start = time.monotonic()
+        r = requests.get(f"{adres}/api/version", timeout=3)
+        r.raise_for_status()
+        wynik["ping_ms"] = (time.monotonic() - start) * 1000
+        wynik["wersja"] = r.json().get("version")
+        wynik["online"] = True
+        klient = OllamaClient(base_url=adres)
+        zaladowane = klient.list_loaded()
+        w_pamieci = {m.get("name") for m in zaladowane}
+        wynik["vram_uzyte"] = sum(m.get("size_vram", 0) for m in zaladowane)
+        for m in klient.list_models():
+            wynik["modele"].append({
+                "nazwa": m["name"], "rozmiar": m["size"],
+                "kwantyzacja": m["quantization_level"], "w_pamieci": m["name"] in w_pamieci,
+            })
+    except (requests.RequestException, ValueError):
+        pass  # WHY: host nie odpowiada - zostaje "offline", ekran pokaże podpowiedź
+    return wynik
 
 
 def ollama_zainstalowana():
@@ -1805,72 +1895,213 @@ class AgregatorWorker(QThread):
 # =============================================================================
 #  Zarządzanie listą serwerów (dialog otwierany z paska w głównym oknie)
 # =============================================================================
-class DialogZarzadzajSerwerami(QDialog):
-    """Dodawanie/usuwanie wpisów z listy serwerów Ollama do przełącznika."""
+class HostyWorker(QThread):
+    """Sprawdza w tle wszystkie hosty z listy serwerów (ekran "Hosty Ollama").
+
+    WHY: kilka zapytań na host, a nieosiągalny host czeka do końca timeoutu -
+         w wątku GUI okno by się zawiesiło. Hosty sprawdzamy po kolei: to kilka
+         komputerów w LAN, równoległość nie jest warta dodatkowej złożoności.
+    """
+    wynik = pyqtSignal(list)  # lista słowników z sprawdz_host()
+
+    def __init__(self, serwery):
+        super().__init__()
+        self.serwery = [dict(s) for s in serwery]
+
+    def run(self):
+        self.wynik.emit([sprawdz_host(s) for s in self.serwery])
+
+
+class FunkcjaWorker(QThread):
+    """Uruchamia w tle funkcję, która ZWRACA wynik (np. tekst dziennika).
+
+    WHY: ActionWorker oddaje tylko "OK"/błąd do dziennika aplikacji - tu wynik
+         trzeba pokazać w oknie, więc oddajemy go sygnałem.
+    """
+    zakonczono = pyqtSignal(bool, object)  # (sukces, wynik albo tekst błędu)
+
+    def __init__(self, funkcja):
+        super().__init__()
+        self.funkcja = funkcja
+
+    def run(self):
+        try:
+            self.zakonczono.emit(True, self.funkcja())
+        except Exception as e:
+            self.zakonczono.emit(False, str(e))
+
+
+def _normalizuj_adres_hosta(tekst):
+    # WHAT: "192.168.0.236" / "bc250:11434" / "http://bc250" -> "http://bc250:11434".
+    # WHY:  podpowiedź na ekranie mówi "wpisz adres i port" - nie każemy pamiętać
+    #       o "http://" ani o domyślnym porcie Ollamy.
+    tekst = tekst.strip().rstrip("/")
+    if not tekst:
+        return ""
+    if "://" not in tekst:
+        tekst = "http://" + tekst
+    url = urlparse(tekst)
+    if not url.hostname:
+        return ""
+    if url.port is None:
+        tekst = f"{url.scheme}://{url.hostname}:11434{url.path}"
+    return tekst
+
+
+class DialogDodajHost(QDialog):
+    """Nazwa + adres nowego hosta Ollama (przycisk "Dodaj host")."""
 
     def __init__(self, serwery, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(_("Zarządzaj serwerami"))
-        self.setMinimumWidth(420)
-        # WHY: kopia robocza - lista trafia do wywołującego dopiero po zamknięciu.
-        self.serwery = [dict(s) for s in serwery]
+        self.setWindowTitle(_("Dodaj host"))
+        self.setMinimumWidth(460)
+        self._zajete = {s["adres"] for s in serwery}
+        self.serwer = None  # WHY: wynik dla wywołującego, gdy dialog zamknięto "Dodaj"
 
         layout = QVBoxLayout(self)
-
-        self.lista = QListWidget()
-        layout.addWidget(self.lista)
-
-        pasek_usun = QHBoxLayout()
-        pasek_usun.addStretch(1)
-        btn_usun = QPushButton(_("Usuń zaznaczony"))
-        btn_usun.clicked.connect(self._usun)
-        pasek_usun.addWidget(btn_usun)
-        layout.addLayout(pasek_usun)
-
-        formularz = QHBoxLayout()
+        layout.setSpacing(12)
+        formularz = QFormLayout()
         self.pole_nazwa = QLineEdit()
-        self.pole_nazwa.setPlaceholderText(_("Nazwa (np. BC-250)"))
+        self.pole_nazwa.setPlaceholderText(_("np. Serwer GPU"))
         self.pole_adres = QLineEdit()
-        self.pole_adres.setPlaceholderText(_("Adres (np. http://192.168.0.236:11434)"))
-        btn_dodaj = QPushButton(_("Dodaj"))
-        btn_dodaj.clicked.connect(self._dodaj)
-        formularz.addWidget(self.pole_nazwa)
-        formularz.addWidget(self.pole_adres, 1)
-        formularz.addWidget(btn_dodaj)
+        self.pole_adres.setPlaceholderText(_("np. 192.168.0.236:11434"))
+        formularz.addRow(_("Nazwa:"), self.pole_nazwa)
+        formularz.addRow(_("Adres:"), self.pole_adres)
         layout.addLayout(formularz)
+        opis = QLabel(_(
+            "Wystarczy adres i port - \"http://\" i domyślny port 11434 program dopisze sam. "
+            "Po dodaniu sprawdzi połączenie i listę modeli."
+        ))
+        opis.setWordWrap(True)
+        opis.setProperty("role", "muted")
+        layout.addWidget(opis)
 
-        btn_zamknij = QPushButton(_("Zamknij"))
-        btn_zamknij.clicked.connect(self.accept)
-        layout.addWidget(btn_zamknij, alignment=Qt.AlignmentFlag.AlignRight)
-
-        self._odswiez_liste()
-
-    def _odswiez_liste(self):
-        self.lista.clear()
-        for s in self.serwery:
-            self.lista.addItem(f"{s['nazwa']}  —  {s['adres']}")
+        pasek = QHBoxLayout()
+        pasek.addStretch(1)
+        btn_anuluj = QPushButton(_("Anuluj"))
+        btn_anuluj.clicked.connect(self.reject)
+        pasek.addWidget(btn_anuluj)
+        btn_dodaj = QPushButton(_("Dodaj"))
+        btn_dodaj.setObjectName("primary")
+        btn_dodaj.setDefault(True)
+        btn_dodaj.clicked.connect(self._dodaj)
+        pasek.addWidget(btn_dodaj)
+        layout.addLayout(pasek)
 
     def _dodaj(self):
         nazwa = self.pole_nazwa.text().strip()
-        adres = self.pole_adres.text().strip().rstrip("/")
+        adres = _normalizuj_adres_hosta(self.pole_adres.text())
         if not nazwa or not adres:
             QMessageBox.warning(self, _("Brak danych"), _("Podaj nazwę i adres serwera."))
             return
-        self.serwery.append({"nazwa": nazwa, "adres": adres})
-        self.pole_nazwa.clear()
-        self.pole_adres.clear()
-        self._odswiez_liste()
+        if adres in self._zajete:
+            QMessageBox.warning(self, _("Host już jest"), _("Ten adres jest już na liście: {adres}").format(adres=adres))
+            return
+        self.serwer = {"nazwa": nazwa, "adres": adres}
+        self.accept()
 
-    def _usun(self):
-        wiersz = self.lista.currentRow()
-        if wiersz < 0:
-            return
-        # WHY: przełącznik zawsze potrzebuje przynajmniej jednej pozycji do wyboru.
-        if len(self.serwery) <= 1:
-            QMessageBox.warning(self, _("Nie można usunąć"), _("Musi zostać co najmniej jeden serwer."))
-            return
-        del self.serwery[wiersz]
-        self._odswiez_liste()
+
+class DialogTekst(QDialog):
+    """Długi tekst tylko do odczytu (np. dziennik usługi) z przyciskiem kopiowania."""
+
+    def __init__(self, tytul, tresc, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tytul)
+        self.resize(820, 520)
+        layout = QVBoxLayout(self)
+        pole = QPlainTextEdit()
+        pole.setObjectName("log")
+        pole.setReadOnly(True)
+        pole.setPlainText(tresc)
+        # WHY: najnowsze wpisy są na końcu - od razu tam przewijamy
+        pole.moveCursor(pole.textCursor().MoveOperation.End)
+        layout.addWidget(pole, 1)
+        pasek = QHBoxLayout()
+        pasek.addStretch(1)
+        btn_kopiuj = QPushButton(_("Kopiuj do schowka"))
+        btn_kopiuj.clicked.connect(lambda: QApplication.clipboard().setText(pole.toPlainText()))
+        pasek.addWidget(btn_kopiuj)
+        btn_zamknij = QPushButton(_("Zamknij"))
+        btn_zamknij.clicked.connect(self.accept)
+        pasek.addWidget(btn_zamknij)
+        layout.addLayout(pasek)
+
+
+def _odswiez_styl(widget):
+    # WHAT: przelicza QSS po zmianie właściwości (np. setProperty("state", "ok")).
+    # WHY:  Qt nie stosuje reguł typu QLabel[state="ok"] sam z siebie po zmianie
+    #       właściwości - trzeba odpiąć i przypiąć styl (patrz theme.qss).
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+def _etykieta(tekst="", rola=None, **wlasciwosci):
+    # WHAT: QLabel z rolą z theme.qss (muted / mono / h1 / h2 / h3 / value).
+    lbl = QLabel(tekst)
+    if rola:
+        lbl.setProperty("role", rola)
+    for nazwa, wartosc in wlasciwosci.items():
+        lbl.setProperty(nazwa, wartosc)
+    return lbl
+
+
+class KartaHosta(QFrame):
+    """Jeden host na liście ekranu "Hosty Ollama" - klikalna karta z makiety."""
+    kliknieto = pyqtSignal(str)  # adres hosta
+
+    def __init__(self, serwer, parent=None):
+        super().__init__(parent)
+        self.adres = serwer["adres"]
+        self.setObjectName("card")
+        self.setProperty("clickable", "true")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(serwer["nazwa"])
+        v = QVBoxLayout(self)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(6)
+        wiersz = QHBoxLayout()
+        wiersz.setSpacing(10)
+        self.kropka = QLabel()
+        self.kropka.setObjectName("dot")
+        self.kropka.setFixedSize(10, 10)
+        wiersz.addWidget(self.kropka)
+        nazwa = QLabel(serwer["nazwa"])
+        czcionka = nazwa.font()
+        czcionka.setPointSizeF(czcionka.pointSizeF() * 1.1)
+        czcionka.setWeight(czcionka.Weight.DemiBold)
+        nazwa.setFont(czcionka)
+        wiersz.addWidget(nazwa, 1)
+        self.lbl_stan = _etykieta(_("sprawdzam..."), "muted")
+        wiersz.addWidget(self.lbl_stan)
+        v.addLayout(wiersz)
+        v.addWidget(_etykieta(self.adres, "mono", muted="true"))
+        self.lbl_info = _etykieta("", "muted")
+        v.addWidget(self.lbl_info)
+
+    def ustaw_stan(self, stan):
+        # WHAT: wypełnia kartę wynikiem sprawdz_host().
+        if stan["online"]:
+            self.lbl_stan.setText("online")
+            self.lbl_stan.setProperty("state", "ok")
+            self.kropka.setProperty("state", "ok")
+            vram = stan["vram_uzyte"] / 1024 ** 3
+            self.lbl_info.setText(_("VRAM {vram:.1f} GB · modele: {n}").format(vram=vram, n=len(stan["modele"])))
+        else:
+            self.lbl_stan.setText("offline")
+            self.lbl_stan.setProperty("state", "warn")
+            self.kropka.setProperty("state", "off")
+            self.lbl_info.setText(_("brak połączenia"))
+        _odswiez_styl(self.lbl_stan)
+        _odswiez_styl(self.kropka)
+
+    def ustaw_wybrana(self, wybrana):
+        self.setProperty("selected", "true" if wybrana else "false")
+        _odswiez_styl(self)
+
+    def mousePressEvent(self, zdarzenie):
+        if zdarzenie.button() == Qt.MouseButton.LeftButton:
+            self.kliknieto.emit(self.adres)
+        super().mousePressEvent(zdarzenie)
 
 
 class DialogConfigContinue(QDialog):
@@ -2039,6 +2270,10 @@ class MainWindow(QMainWindow):
         self._litellm_worker = None     # WHY: to samo dla instalacji/uruchomienia LiteLLM
         self._litellm_zainstalowany = False  # WHY: potrzebne w klik_litellm, żeby wiedzieć co robi przycisk
         self._agregator_worker = None   # WHY: osobny wątek na podgląd modeli (zakładka "Agregator modeli")
+        self._hosty_worker = None       # WHY: sprawdzanie hostów (ekran "Hosty Ollama") - jedno naraz
+        self._hosty_stan = {}           # WHY: adres -> wynik sprawdz_host(); przeżywa przebudowę UI (zmiana języka)
+        self._host_wybrany = self._serwer_aktywny_adres  # WHY: który host pokazują szczegóły
+        self._strona = 0                # WHY: wybrana sekcja paska bocznego; przeżywa przebudowę UI
         self._workers = []            # WHY: trzymamy referencje, by wątki nie zniknęły w trakcie
         self._ostatni_status = None   # WHY: żeby nie spamować logu tym samym statusem pull
 
@@ -2060,13 +2295,15 @@ class MainWindow(QMainWindow):
         #      dłuższe niż krótkie tagi z ollama.com/library i przy dwóch
         #      kolumnach obok siebie ("Pobierz nowy model" + "Zainstalowane
         #      modele") ucinały się w tabeli przy starej szerokości.
-        self.setMinimumSize(960, 910)
+        #      Od paska bocznego (makiety z Wyglad/) dochodzi jego 232 px szerokości.
+        self.setMinimumSize(1200, 910)
         self._buduj_ui()
 
         # WHAT: cykliczne odświeżanie co 10 s.
         # WHY:  stan usługi/API może zmienić się poza aplikacją (terminal, reboot).
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.odswiez)
+        self.timer.timeout.connect(self._odswiez_hosty_jesli_widoczne)
         self.timer.start(10000)
         self.odswiez()
 
@@ -2085,10 +2322,31 @@ class MainWindow(QMainWindow):
         #      niezapisanych zmian w trakcie edycji, pola wypełniamy z
         #      rzeczywistego stanu TYLKO raz po (prze)budowaniu UI i zaraz po
         #      zapisaniu (patrz _odswiez_zakladke_zaawansowane/zapisz_zaawansowane).
+        # WHY pasek boczny (2026-10-28): nowy wygląd z makiet w Wyglad/docs/mockups
+        #      (theme.qss, ciemny Breeze). Ekrany przechodzą na nowy wygląd po
+        #      kolei - na razie "Hosty Ollama"; pozostałe sekcje to dawne zakładki
+        #      bez zmian w środku, dopóki nie powstaną ich wersje z makiet.
         self._zaawansowane_wczytane = False
         centralny = QWidget()
+        centralny.setObjectName("central")
         self.setCentralWidget(centralny)
-        layout = QVBoxLayout(centralny)
+        glowny = QHBoxLayout(centralny)
+        glowny.setContentsMargins(0, 0, 0, 0)
+        glowny.setSpacing(0)
+        self.lista_sekcji = QListWidget()
+        glowny.addWidget(self._pasek_boczny())
+        prawa = QWidget()
+        layout = QVBoxLayout(prawa)
+        layout.setContentsMargins(20, 16, 20, 16)
+        glowny.addWidget(prawa, 1)
+
+        # WHY: pasek serwera i statystyk dotyczą dawnych zakładek (jeden wybrany
+        #      serwer) - ekran "Hosty Ollama" pokazuje wszystkie hosty naraz,
+        #      więc tam ten pasek chowamy (patrz _zmien_sekcje).
+        self._pasek_gorny = QWidget()
+        layout_gorny = QVBoxLayout(self._pasek_gorny)
+        layout_gorny.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._pasek_gorny)
 
         # === Pasek serwera ===============================================
         # WHY: przełącza, do którego hosta Ollama idą operacje na modelach
@@ -2099,16 +2357,13 @@ class MainWindow(QMainWindow):
         self.combo_serwer = QComboBox()
         self.combo_serwer.currentIndexChanged.connect(self._zmien_serwer)
         pasek_serwer.addWidget(self.combo_serwer, 1)
-        btn_zarzadzaj_serwerami = QPushButton(_("Zarządzaj serwerami..."))
-        btn_zarzadzaj_serwerami.clicked.connect(self._zarzadzaj_serwerami)
-        pasek_serwer.addWidget(btn_zarzadzaj_serwerami)
         # WHY: przełącznik języka obok serwerów - jedyne dwa "globalne" ustawienia
         #      okna, więc żyją w tym samym górnym pasku zamiast osobnego wiersza.
         pasek_serwer.addWidget(QLabel(_("Język:")))
         self.combo_jezyk = QComboBox()
         self.combo_jezyk.currentIndexChanged.connect(self._zmien_jezyk)
         pasek_serwer.addWidget(self.combo_jezyk)
-        layout.addLayout(pasek_serwer)
+        layout_gorny.addLayout(pasek_serwer)
         self._wypelnij_combo_serwer()
         self._wypelnij_combo_jezyk()
 
@@ -2131,21 +2386,33 @@ class MainWindow(QMainWindow):
         kafelek, self.lbl_stat_modele = self._kafelek_stat(_("MODELE"))
         pasek_staty.addWidget(kafelek)
         pasek_staty.addStretch(1)
-        layout.addLayout(pasek_staty)
+        layout_gorny.addLayout(pasek_staty)
 
-        # === Zakładki ====================================================
-        zakladki = QTabWidget()
-        zakladki.addTab(self._zakladka_uslugi(), _("Usługi"))
-        zakladki.addTab(self._zakladka_modele_lokalne(), _("Modele"))
-        zakladki.addTab(self._zakladka_agregator(), _("Agregator modeli"))
-        zakladki.addTab(self._zakladka_zaawansowane(), _("Zaawansowane"))
-        zakladki.addTab(self._zakladka_pomoc(), _("Pomoc"))
-        layout.addWidget(zakladki, 1)
+        # === Sekcje (pasek boczny po lewej przełącza strony) ============
+        # WHY: kolejność jak w makiecie (Panel główny, Hosty, Router, Modele...);
+        #      "Usługi" to na razie odpowiednik "Panelu głównego", a "Agregator
+        #      modeli" - "Routera LiteLLM".
+        self.strony = QStackedWidget()
+        sekcje = [
+            ("preferences-system-services", _("Usługi"), self._zakladka_uslugi()),
+            ("network-server", _("Hosty Ollama"), self._strona_hosty()),
+            ("network-workgroup", _("Agregator modeli"), self._zakladka_agregator()),
+            ("package-x-generic", _("Modele"), self._zakladka_modele_lokalne()),
+            ("configure", _("Zaawansowane"), self._zakladka_zaawansowane()),
+            ("help-contents", _("Pomoc"), self._zakladka_pomoc()),
+        ]
+        for ikona, nazwa, strona in sekcje:
+            self.lista_sekcji.addItem(QListWidgetItem(QIcon.fromTheme(ikona), nazwa))
+            self.strony.addWidget(strona)
+        layout.addWidget(self.strony, 1)
+        self.lista_sekcji.currentRowChanged.connect(self._zmien_sekcje)
+        self.lista_sekcji.setCurrentRow(self._strona)
 
         # === Dziennik - na dole, pod zakładkami =========================
         # WHY: log ma być widoczny bez względu na to, którą zakładkę oglądasz
         #      (np. postęp pobierania modelu widać, nawet patrząc na Usługi).
         karta_log = QGroupBox(_("Dziennik"))
+        self._karta_log = karta_log
         uk_log = QVBoxLayout(karta_log)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -2153,6 +2420,58 @@ class MainWindow(QMainWindow):
         self.log.setMaximumHeight(120)  # WHY: dziennik to podgląd, nie ma zdominować okna
         uk_log.addWidget(self.log)
         layout.addWidget(karta_log)
+
+    def _pasek_boczny(self):
+        # WHAT: lewy pasek z makiety - logo z nazwą i wersją, lista sekcji,
+        #       na dole link do repozytorium.
+        panel = QFrame()
+        panel.setObjectName("sidebarPanel")
+        panel.setFixedWidth(232)
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(0, 16, 0, 16)
+        v.setSpacing(4)
+
+        marka = QHBoxLayout()
+        marka.setContentsMargins(20, 4, 20, 18)
+        marka.setSpacing(10)
+        ikona = QLabel()
+        ikona.setObjectName("brandIcon")
+        ikona.setFixedSize(36, 36)
+        ikona.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ikona.setPixmap(QIcon.fromTheme("applications-system").pixmap(22, 22))
+        marka.addWidget(ikona)
+        napisy = QVBoxLayout()
+        napisy.setSpacing(0)
+        nazwa = QLabel("Ollama Manager")
+        nazwa.setObjectName("brandName")
+        napisy.addWidget(nazwa)
+        wersja = QLabel(f"v{WERSJA} · KDE / Qt6")
+        wersja.setObjectName("brandVersion")
+        napisy.addWidget(wersja)
+        marka.addLayout(napisy, 1)
+        v.addLayout(marka)
+
+        self.lista_sekcji.setObjectName("sidebar")
+        self.lista_sekcji.setIconSize(QSize(18, 18))
+        self.lista_sekcji.setAccessibleName(_("Sekcje programu"))
+        v.addWidget(self.lista_sekcji, 1)
+
+        link = QPushButton("github.com/cyryllo/Ollama-manager")
+        link.setObjectName("sidebarLink")
+        link.setCursor(Qt.CursorShape.PointingHandCursor)
+        link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/cyryllo/Ollama-manager")))
+        v.addWidget(link)
+        return panel
+
+    def _zmien_sekcje(self, index):
+        if index < 0:
+            return
+        self._strona = index
+        self.strony.setCurrentIndex(index)
+        na_hostach = self.strony.currentWidget() is self._strona_hostow
+        self._pasek_gorny.setVisible(not na_hostach)
+        if na_hostach:
+            self.odswiez_hosty()
 
     def _kafelek_stat(self, podpis):
         # WHAT: mały kafelek "podpis nad wartością" do paska statystyk.
@@ -2763,6 +3082,368 @@ class MainWindow(QMainWindow):
         przewijanie.setFrameShape(QScrollArea.Shape.NoFrame)
         return przewijanie
 
+    # --- Ekran "Hosty Ollama" (makieta Wyglad/docs/mockups/Hosts.dc.html) ---
+    def _strona_hosty(self):
+        # WHAT: nagłówek z przyciskami, po lewej lista hostów (karty), po prawej
+        #       szczegóły wybranego: kafelki VRAM / czas odpowiedzi / usługa,
+        #       tabela modeli i ostrzeżenie, gdy host nie odpowiada.
+        # WHY:  zastępuje dawne okno "Zarządzaj serwerami..." - ta sama lista
+        #       serwerów (self.serwery), z której korzysta przełącznik i LiteLLM.
+        strona = QWidget()
+        self._strona_hostow = strona
+        v = QVBoxLayout(strona)
+        v.setContentsMargins(8, 8, 8, 0)
+        v.setSpacing(20)
+
+        naglowek = QHBoxLayout()
+        tytuly = QVBoxLayout()
+        tytuly.setSpacing(4)
+        tytuly.addWidget(_etykieta(_("Hosty Ollama"), "h1"))
+        tytuly.addWidget(_etykieta(
+            _("Komputery z Ollamą, które widzi router. Lokalny jest zarządzany przez systemd."), "muted"))
+        naglowek.addLayout(tytuly, 1)
+        self.btn_sprawdz_hosty = QPushButton(QIcon.fromTheme("view-refresh"), _("Sprawdź wszystkie"))
+        self.btn_sprawdz_hosty.clicked.connect(self.odswiez_hosty)
+        naglowek.addWidget(self.btn_sprawdz_hosty, alignment=Qt.AlignmentFlag.AlignVCenter)
+        btn_dodaj = QPushButton(QIcon.fromTheme("list-add"), _("Dodaj host"))
+        btn_dodaj.setObjectName("primary")
+        btn_dodaj.clicked.connect(self.dodaj_host)
+        naglowek.addWidget(btn_dodaj, alignment=Qt.AlignmentFlag.AlignVCenter)
+        v.addLayout(naglowek)
+
+        tresc = QHBoxLayout()
+        tresc.setSpacing(18)
+        v.addLayout(tresc, 1)
+
+        # --- Lista hostów ---
+        lewa = QVBoxLayout()
+        lewa.setSpacing(10)
+        przewijanie = QScrollArea()
+        przewijanie.setWidgetResizable(True)
+        przewijanie.setFrameShape(QScrollArea.Shape.NoFrame)
+        przewijanie.setFixedWidth(330)
+        przewijanie.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        kontener = QWidget()
+        self._lista_hostow = QVBoxLayout(kontener)
+        self._lista_hostow.setContentsMargins(0, 0, 0, 0)
+        self._lista_hostow.setSpacing(10)
+        przewijanie.setWidget(kontener)
+        lewa.addWidget(przewijanie, 1)
+        podpowiedz = QLabel(_("Dodajesz zdalny host? Wpisz adres i port. Program sam sprawdzi "
+                              "połączenie i listę modeli."))
+        podpowiedz.setObjectName("hint")
+        podpowiedz.setWordWrap(True)
+        podpowiedz.setFixedWidth(330)
+        lewa.addWidget(podpowiedz)
+        tresc.addLayout(lewa)
+
+        # --- Szczegóły wybranego hosta ---
+        karta = QFrame()
+        karta.setObjectName("card")
+        uk = QVBoxLayout(karta)
+        uk.setContentsMargins(24, 22, 24, 22)
+        uk.setSpacing(18)
+        tresc.addWidget(karta, 1)
+
+        gora = QHBoxLayout()
+        nazwy = QVBoxLayout()
+        nazwy.setSpacing(4)
+        self.lbl_host_nazwa = _etykieta("", "h2")
+        nazwy.addWidget(self.lbl_host_nazwa)
+        self.lbl_host_adres = _etykieta("", "mono", muted="true")
+        # WHY: po polsku przyciski obok są szersze - bez zawijania wersja Ollamy się ucinała
+        self.lbl_host_adres.setWordWrap(True)
+        nazwy.addWidget(self.lbl_host_adres)
+        gora.addLayout(nazwy, 1)
+        self.btn_host_restart = QPushButton(_("Uruchom ponownie"))
+        self.btn_host_restart.clicked.connect(self.restart_hosta)
+        gora.addWidget(self.btn_host_restart, alignment=Qt.AlignmentFlag.AlignTop)
+        self.btn_host_dziennik = QPushButton(_("Dziennik"))
+        self.btn_host_dziennik.clicked.connect(self.pokaz_dziennik_hosta)
+        gora.addWidget(self.btn_host_dziennik, alignment=Qt.AlignmentFlag.AlignTop)
+        ikona_usun = QIcon.fromTheme("edit-delete")
+        # WHY: bez ikony w motywie (inne środowisko niż KDE) przycisk byłby pusty
+        self.btn_host_usun = QPushButton(ikona_usun, "" if not ikona_usun.isNull() else _("Usuń"))
+        self.btn_host_usun.setObjectName("danger")
+        self.btn_host_usun.setToolTip(_("Usuń host"))
+        self.btn_host_usun.setAccessibleName(_("Usuń host"))
+        self.btn_host_usun.clicked.connect(self.usun_host)
+        gora.addWidget(self.btn_host_usun, alignment=Qt.AlignmentFlag.AlignTop)
+        uk.addLayout(gora)
+
+        kafelki = QGridLayout()
+        kafelki.setSpacing(14)
+        kafelek, self.lbl_host_vram, self.lbl_host_vram_opis = self._kafelek_hosta(_("Pamięć karty (VRAM)"))
+        self.pasek_host_vram = QProgressBar()
+        self.pasek_host_vram.setObjectName("meter")
+        self.pasek_host_vram.setTextVisible(False)
+        self.pasek_host_vram.setFixedHeight(6)
+        kafelek.layout().addWidget(self.pasek_host_vram)
+        kafelki.addWidget(kafelek, 0, 0)
+        kafelek, self.lbl_host_ping, self.lbl_host_ping_opis = self._kafelek_hosta(_("Czas odpowiedzi"))
+        kafelki.addWidget(kafelek, 0, 1)
+        kafelek, self.lbl_host_usluga, self.lbl_host_usluga_opis = self._kafelek_hosta(_("Usługa"))
+        self.lbl_host_usluga.setProperty("role", "mono")
+        kafelki.addWidget(kafelek, 0, 2)
+        for kolumna in range(3):
+            kafelki.setColumnStretch(kolumna, 1)
+        uk.addLayout(kafelki)
+
+        uk.addWidget(_etykieta(_("Modele na tym hoście"), "h3"))
+        self.tabela_host_modele = QTableWidget(0, 4)
+        self.tabela_host_modele.setHorizontalHeaderLabels(
+            [_("Nazwa"), _("Rozmiar"), _("Kwantyzacja"), _("Stan")])
+        naglowki = self.tabela_host_modele.horizontalHeader()
+        naglowki.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        naglowki.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for kolumna in (1, 2):
+            naglowki.setSectionResizeMode(kolumna, QHeaderView.ResizeMode.ResizeToContents)
+        # WHY: w kolumnie "Stan" są etykiety (setCellWidget), których szerokości
+        #      ResizeToContents nie widzi - stała szerokość na dłuższy z napisów.
+        naglowki.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        metryka = self.tabela_host_modele.fontMetrics()
+        self.tabela_host_modele.setColumnWidth(3, 40 + max(
+            metryka.horizontalAdvance(t) for t in (_("Stan"), _("w pamięci"), _("na dysku"))))
+        self.tabela_host_modele.verticalHeader().setVisible(False)
+        self.tabela_host_modele.verticalHeader().setDefaultSectionSize(40)
+        self.tabela_host_modele.setShowGrid(False)
+        self.tabela_host_modele.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tabela_host_modele.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.tabela_host_modele.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        uk.addWidget(self.tabela_host_modele, 1)
+
+        self.lbl_host_ostrzezenie = QLabel(_(
+            "Host nie odpowiada. Sprawdź, czy komputer jest włączony i czy Ollama nasłuchuje "
+            "na adresie sieciowym (OLLAMA_HOST=0.0.0.0)."))
+        self.lbl_host_ostrzezenie.setObjectName("notice")
+        self.lbl_host_ostrzezenie.setWordWrap(True)
+        uk.addWidget(self.lbl_host_ostrzezenie)
+
+        self._wypelnij_liste_hostow()
+        return strona
+
+    def _kafelek_hosta(self, podpis):
+        # WHAT: kafelek statystyki z makiety: podpis, duża wartość, linia opisu.
+        kafelek = QFrame()
+        kafelek.setObjectName("statTile")
+        v = QVBoxLayout(kafelek)
+        v.setContentsMargins(14, 14, 14, 14)
+        v.setSpacing(8)
+        v.addWidget(_etykieta(podpis, "muted"))
+        wartosc = _etykieta("—", "value")
+        v.addWidget(wartosc)
+        opis = _etykieta("", "muted")
+        opis.setWordWrap(True)
+        v.addWidget(opis)
+        return kafelek, wartosc, opis
+
+    def _wypelnij_liste_hostow(self):
+        # WHAT: karty hostów od nowa z self.serwery (po dodaniu/usunięciu hosta).
+        while self._lista_hostow.count():
+            element = self._lista_hostow.takeAt(0)
+            if element.widget():
+                element.widget().deleteLater()
+        self._karty_hostow = {}
+        adresy = [s["adres"] for s in self.serwery]
+        if self._host_wybrany not in adresy:
+            self._host_wybrany = adresy[0]
+        for serwer in self.serwery:
+            karta = KartaHosta(serwer)
+            karta.kliknieto.connect(self._wybierz_host)
+            if serwer["adres"] in self._hosty_stan:
+                karta.ustaw_stan(self._hosty_stan[serwer["adres"]])
+            karta.ustaw_wybrana(serwer["adres"] == self._host_wybrany)
+            self._karty_hostow[serwer["adres"]] = karta
+            self._lista_hostow.addWidget(karta)
+        self._lista_hostow.addStretch(1)
+        self._pokaz_szczegoly_hosta()
+
+    def _wybierz_host(self, adres):
+        self._host_wybrany = adres
+        for adres_karty, karta in self._karty_hostow.items():
+            karta.ustaw_wybrana(adres_karty == adres)
+        self._pokaz_szczegoly_hosta()
+
+    def _pokaz_szczegoly_hosta(self):
+        # WHAT: wypełnia prawą kartę danymi wybranego hosta (z ostatniego sprawdzenia).
+        serwer = next((s for s in self.serwery if s["adres"] == self._host_wybrany), self.serwery[0])
+        adres = serwer["adres"]
+        stan = self._hosty_stan.get(adres)
+        lokalny = _adres_lokalny(adres)
+        self.lbl_host_nazwa.setText(serwer["nazwa"])
+        # WHY: adres bez "http://", jak w makiecie - krócej, a i tak jednoznacznie
+        adres_krotki = urlparse(adres).netloc or adres
+        wersja = stan["wersja"] if stan and stan["wersja"] else "?"
+        self.lbl_host_adres.setText(f"{adres_krotki} · Ollama {wersja}")
+
+        self.btn_host_restart.setEnabled(lokalny)
+        self.btn_host_dziennik.setEnabled(lokalny)
+        # WHY: systemctl/journalctl działają tylko na tym komputerze - zdalnej
+        #      usługi nie da się stąd uruchomić ponownie (patrz CLAUDE.md,
+        #      "Sterowanie usługą zawsze dotyczy LOKALNEGO systemd").
+        podpowiedz = "" if lokalny else _("Dostępne tylko dla tego komputera - zdalną usługą steruje się na tamtym komputerze.")
+        self.btn_host_restart.setToolTip(podpowiedz)
+        self.btn_host_dziennik.setToolTip(podpowiedz)
+        self.btn_host_usun.setEnabled(len(self.serwery) > 1)
+
+        gib = 1024 ** 3
+        online = bool(stan and stan["online"])
+        if not stan:
+            self.lbl_host_vram.setText("—")
+            self.lbl_host_vram_opis.setText(_("sprawdzam..."))
+            self.pasek_host_vram.hide()
+        elif not online:
+            self.lbl_host_vram.setText(_("brak danych"))
+            self.lbl_host_vram_opis.setText("")
+            self.pasek_host_vram.hide()
+        elif stan["vram_calkowite"]:
+            uzyte, calkowite = stan["vram_uzyte"] / gib, stan["vram_calkowite"] / gib
+            procent = round(100 * stan["vram_uzyte"] / stan["vram_calkowite"])
+            self.lbl_host_vram.setText(f"{uzyte:.1f} / {calkowite:.1f} GB")
+            self.lbl_host_vram_opis.setText(_("zajęte przez modele: {procent}%").format(procent=procent))
+            self.pasek_host_vram.setValue(min(100, procent))
+            self.pasek_host_vram.setProperty("state", "error" if procent > 80 else "")
+            _odswiez_styl(self.pasek_host_vram)
+            self.pasek_host_vram.show()
+        else:
+            self.lbl_host_vram.setText(f"{stan['vram_uzyte'] / gib:.1f} GB")
+            # WHY: API Ollamy nie podaje, ile pamięci ma karta zdalnego hosta
+            self.lbl_host_vram_opis.setText(_("zajęte przez modele (rozmiaru karty zdalnego hosta API nie podaje)"))
+            self.pasek_host_vram.hide()
+
+        if stan and stan["ping_ms"] is not None:
+            self.lbl_host_ping.setText(f"{stan['ping_ms']:.0f} ms")
+        else:
+            self.lbl_host_ping.setText(_("brak") if stan else "—")
+        self.lbl_host_ping_opis.setText(
+            _("sprawdzono o {godzina}").format(godzina=time.strftime("%H:%M:%S", time.localtime(stan["sprawdzono"])))
+            if stan else "")
+
+        if lokalny:
+            self.lbl_host_usluga.setText(f"{SERVICE_NAME}.service")
+            if stan and stan["usluga_aktywna"] is not None:
+                czesci = [_("systemd"),
+                          _("działa") if stan["usluga_aktywna"] else _("zatrzymana"),
+                          _("start z systemem") if stan["usluga_autostart"] else _("bez autostartu")]
+                self.lbl_host_usluga_opis.setText(", ".join(czesci))
+            else:
+                self.lbl_host_usluga_opis.setText(_("systemd"))
+        else:
+            self.lbl_host_usluga.setText(_("zdalny"))
+            self.lbl_host_usluga_opis.setText(_("tylko odczyt stanu przez API"))
+
+        modele = stan["modele"] if online else []
+        self.tabela_host_modele.setRowCount(len(modele))
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        for wiersz, m in enumerate(modele):
+            nazwa = QTableWidgetItem(m["nazwa"])
+            nazwa.setFont(mono)
+            nazwa.setToolTip(m["nazwa"])
+            self.tabela_host_modele.setItem(wiersz, 0, nazwa)
+            rozmiar = m["rozmiar"]
+            tekst = f"{rozmiar / gib:.1f} GB" if rozmiar >= gib else f"{rozmiar / 1024 ** 2:.0f} MB"
+            self.tabela_host_modele.setItem(wiersz, 1, QTableWidgetItem(tekst))
+            # WHY: modele z HF potrafią mieć w API "unknown" - to nic nie mówi
+            kwant = QTableWidgetItem(m["kwantyzacja"] if m["kwantyzacja"] not in ("", "unknown") else "—")
+            kwant.setFont(mono)
+            self.tabela_host_modele.setItem(wiersz, 2, kwant)
+            # WHY: QLabel zamiast zwykłej komórki - kolor stanu bierze z theme.qss
+            #      (QLabel[state=...]), więc w kodzie nie ma żadnego koloru.
+            lbl = _etykieta(_("w pamięci") if m["w_pamieci"] else _("na dysku"),
+                            state="ok" if m["w_pamieci"] else "off")
+            self.tabela_host_modele.setCellWidget(wiersz, 3, lbl)
+        self.lbl_host_ostrzezenie.setVisible(bool(stan) and not online)
+
+    def _odswiez_hosty_jesli_widoczne(self):
+        # WHY: inne hosty odpytujemy co 10 s TYLKO gdy ktoś patrzy na ten ekran -
+        #      ta sama zasada co przy podglądzie agregatora (nie obciążać LAN w tle).
+        if self.strony.currentWidget() is self._strona_hostow and self.isVisible():
+            self.odswiez_hosty()
+
+    def odswiez_hosty(self):
+        if self._hosty_worker and self._hosty_worker.isRunning():
+            return
+        self.btn_sprawdz_hosty.setEnabled(False)
+        worker = HostyWorker(self.serwery)
+        self._hosty_worker = worker
+        worker.wynik.connect(self._po_sprawdzeniu_hostow)
+        worker.start()
+
+    def _po_sprawdzeniu_hostow(self, wyniki):
+        self.btn_sprawdz_hosty.setEnabled(True)
+        for stan in wyniki:
+            self._hosty_stan[stan["adres"]] = stan
+            karta = self._karty_hostow.get(stan["adres"])
+            if karta:
+                karta.ustaw_stan(stan)
+        self._pokaz_szczegoly_hosta()
+
+    def dodaj_host(self):
+        dialog = DialogDodajHost(self.serwery, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.serwer:
+            return
+        self.serwery.append(dialog.serwer)
+        self._host_wybrany = dialog.serwer["adres"]
+        self.wpis_log(_("Dodano host: {nazwa} ({adres})").format(**dialog.serwer))
+        self._po_zmianie_listy_serwerow()
+        self.odswiez_hosty()
+
+    def usun_host(self):
+        serwer = next((s for s in self.serwery if s["adres"] == self._host_wybrany), None)
+        if not serwer:
+            return
+        # WHY: przełącznik serwera zawsze potrzebuje przynajmniej jednej pozycji.
+        if len(self.serwery) <= 1:
+            QMessageBox.warning(self, _("Nie można usunąć"), _("Musi zostać co najmniej jeden serwer."))
+            return
+        odpowiedz = QMessageBox.question(
+            self, _("Usuń host"),
+            _("Usunąć host {nazwa} ({adres}) z listy? Modele na nim zostaną - znika tylko wpis "
+              "w tym programie i w agregatorze LiteLLM (po ponownym uruchomieniu).").format(**serwer))
+        if odpowiedz != QMessageBox.StandardButton.Yes:
+            return
+        self.serwery.remove(serwer)
+        self._hosty_stan.pop(serwer["adres"], None)
+        self.wpis_log(_("Usunięto host: {nazwa} ({adres})").format(**serwer))
+        self._po_zmianie_listy_serwerow()
+
+    def _po_zmianie_listy_serwerow(self):
+        # WHAT: zapis listy + odświeżenie wszystkiego, co z niej korzysta
+        #       (przełącznik serwera, karty hostów, stan okna).
+        _zapisz_serwery(self.serwery)
+        # WHY: jeśli aktywny adres zniknął z listy (usunięty host), wracamy na pierwszy.
+        if self._serwer_aktywny_adres not in [s["adres"] for s in self.serwery]:
+            self._serwer_aktywny_adres = self.serwery[0]["adres"]
+            self.client.base_url = self._serwer_aktywny_adres
+            _zapisz_serwer_aktywny(self._serwer_aktywny_adres)
+        self._wypelnij_combo_serwer()
+        self._wypelnij_liste_hostow()
+        self.odswiez()
+
+    def restart_hosta(self):
+        self.wpis_log(_("Ponowne uruchomienie Ollamy..."))
+        self._uruchom_akcje(usluga_restart, _("Ponowne uruchomienie Ollamy"))
+        # WHY: usługa wstaje kilka sekund - sprawdzamy hosty dopiero po chwili
+        QTimer.singleShot(4000, self.odswiez_hosty)
+
+    def pokaz_dziennik_hosta(self):
+        # WHAT: dziennik systemd usługi Ollama w okienku - bez terminala.
+        self.btn_host_dziennik.setEnabled(False)
+        worker = FunkcjaWorker(usluga_dziennik)
+        self._workers.append(worker)
+
+        def _gotowe(sukces, wynik, w=worker):
+            if w in self._workers:
+                self._workers.remove(w)
+            self.btn_host_dziennik.setEnabled(_adres_lokalny(self._host_wybrany))
+            if sukces:
+                DialogTekst(_("Dziennik usługi {usluga}").format(usluga=SERVICE_NAME), wynik, self).exec()
+            else:
+                self.wpis_log(_("Nie udało się odczytać dziennika usługi: {blad}").format(blad=wynik))
+
+        worker.zakonczono.connect(_gotowe)
+        worker.start()
+
     # --- Przełącznik serwera ---
     def _wypelnij_combo_serwer(self):
         # WHY: blokujemy sygnały na czas wypełniania - inaczej samo dodawanie
@@ -2787,19 +3468,6 @@ class MainWindow(QMainWindow):
         self._serwer_aktywny_adres = adres
         _zapisz_serwer_aktywny(adres)
         self.wpis_log(_("Przełączono na serwer: {serwer}").format(serwer=self.combo_serwer.itemText(index)))
-        self.odswiez()
-
-    def _zarzadzaj_serwerami(self):
-        dialog = DialogZarzadzajSerwerami(self.serwery, self)
-        dialog.exec()
-        self.serwery = dialog.serwery
-        _zapisz_serwery(self.serwery)
-        # WHY: jeśli aktywny adres zniknął z listy (usunięty w dialogu), wracamy na pierwszy.
-        if self._serwer_aktywny_adres not in [s["adres"] for s in self.serwery]:
-            self._serwer_aktywny_adres = self.serwery[0]["adres"]
-            self.client.base_url = self._serwer_aktywny_adres
-            _zapisz_serwer_aktywny(self._serwer_aktywny_adres)
-        self._wypelnij_combo_serwer()
         self.odswiez()
 
     # --- Przełącznik języka ---
@@ -4041,9 +4709,25 @@ class MainWindow(QMainWindow):
         self.odswiez()  # WHY: świeżo pobrany model powinien pojawić się na liście
 
 
+_PLIK_MOTYWU = Path(__file__).resolve().parent / "theme.qss"
+
+
+def _wczytaj_motyw(app):
+    # WHAT: arkusz stylów z theme.qss (ciemny Breeze z makiet w Wyglad/docs/mockups).
+    # WHY:  wszystkie kolory są w pliku .qss, nie w Pythonie - wygląd zmienia
+    #       się bez ruszania kodu. Plik leży obok skryptu (jak lang/), więc
+    #       install.sh i build-deb.sh kopiują go razem z nim. Brak pliku = okno
+    #       w zwykłym motywie systemu, bez wywracania programu.
+    try:
+        app.setStyleSheet(_PLIK_MOTYWU.read_text(encoding="utf-8"))
+    except OSError:
+        pass
+
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Ollama Manager")
+    _wczytaj_motyw(app)
     # WHY: ikona z motywu systemowego - spójny wygląd w Breeze, bez własnych zasobów.
     app.setWindowIcon(QIcon.fromTheme("applications-system"))
     okno = MainWindow()
