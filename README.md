@@ -12,7 +12,7 @@ everything runs on your LAN.
 > actively developed — new options and features keep coming; [bug reports and
 > feedback](../../issues) are welcome.
 
-![Ollama Manager — Models tab](om.png)
+![Ollama Manager — Dashboard](om.png)
 
 ## Requirements
 
@@ -62,101 +62,79 @@ python3 ollama_manager.py
 
 ## Features
 
-**Ollama service**
-- Start / stop the systemd service, live status detection
-- Autostart on system boot
-- Detects a missing install + a one-click install button
-- On-demand update check against the latest GitHub release, with a prompt to reinstall
-  (the official install script updates an existing install in place) if you're behind — useful
-  since newer models sometimes need a newer Ollama to even load
+The window has a sidebar with seven screens, in a dark Breeze look (Inter + JetBrains Mono
+fonts are bundled, so it looks the same everywhere).
 
-**Models**
-- **One search for two sources** — type a model name and the app searches the official Ollama
-  library (ollama.com) and Hugging Face (GGUF models only) at once. Every result has a **Source**
-  column, so it's always clear where a model comes from. Pick a result to see all its variants
-  (tags/quantizations) with their **real file sizes**, pick a variant, click Download — with a
-  progress bar. You never need to know the exact tag up front. MLX variants (Apple-only) and
-  "cloud" models (not downloadable) are skipped
-- Pasting a Hugging Face link (or `user/repo`) jumps straight to that repo's variants; typing an
-  exact name (e.g. `llama3.2:3b` or `hf.co/...:Q4_K_M`) lets you download without searching
-- **Hugging Face is an optional, community source** — anyone can publish there and the app doesn't
-  vet repo contents, so a note in the card recommends sticking to well-known quantization
-  publishers (e.g. bartowski, mradermacher, unsloth)
-- Approximate memory-usage estimate for the chosen variant (real file size + KV cache + buffers,
-  then a recommended-RAM figure; details in a tooltip)
-- Table of installed models — name, **source** (Ollama / Hugging Face), disk size and an
-  estimated/live VRAM column — + deletion. Hover a row for its source (with the quantization
-  author for HF), model family, parameter size, quantization and download date
-- Preview of models currently loaded into memory (VRAM)
-- Note: ollama.com has no public search API, so the app reads its search/tags web pages — if the
-  site's layout changes, Ollama search may need a fix (Hugging Face uses a real API) — the app then
-  shows an error instead of silently listing only Hugging Face results. Ollama results are always
-  listed first; cloud-only Ollama models (not downloadable) are skipped
-
-**Open WebUI**
-- One-click install of the browser chat panel (no Docker)
-- Start / stop, autostart on login
-- The "Open WebUI" button opens the panel in the browser (no automatic opening)
-- On-demand update check against the latest PyPI release, with a prompt to upgrade via
-  `uv tool upgrade` (no admin rights needed) if you're behind
-- After a fresh install, offers to install the optional `ffmpeg`/`pandoc`/`zstd` packages
-  needed for voice transcription and document RAG (the only step that needs admin rights)
+**Dashboard**
+- One switch for all services (Ollama, LiteLLM router, Open WebUI) plus "Restart" and "Stop all"
+- A card per service with its status and its own on/off switch — or an "Install" button if it's
+  missing (Ollama via its official script, the others via `uv`, no Docker, no admin rights)
+- Ollama card: which hosts are online, which models are loaded in memory, live GPU load
+- Router card: the routes (alias → model @ hosts) at a glance
+- Open WebUI card: one big button — install / start / open in the browser
+- Computer resources: CPU, VRAM and RAM gauges, network and CPU charts
 
 **Ollama hosts**
-- A dedicated screen with all Ollama hosts (this computer and any on the LAN, e.g. BC-250):
-  online/offline status, Ollama version, response time, VRAM used by models (with the card's total
-  for this computer), and the models on each host — on disk or loaded into memory
-- Add a host by just typing its address (`http://` and the default port 11434 are added for you),
-  remove it with one click; the list is remembered between runs and shared with the LiteLLM aggregator
-- For this computer: restart the Ollama service and view its systemd log in a window — no terminal
+- All Ollama hosts (this computer and any on the LAN, e.g. BC-250): online/offline, Ollama
+  version, response time, VRAM used by models (with the card's total for this computer) and the
+  models on each host — on disk or loaded into memory
+- Add a host by just typing its address (`http://` and port 11434 are added for you), remove it
+  with one click; the list is shared by the router and the Models screen
+- For this computer: restart the Ollama service and jump to its log
 - A host that doesn't respond gets a hint on what to check (`OLLAMA_HOST=0.0.0.0`)
 
-**Server switcher**
-- Choose the Ollama host (localhost or any host on the LAN, e.g. BC-250) for model operations
+**LiteLLM router**
+- One OpenAI-compatible address (`http://localhost:4000/v1`) for all programs, combining the
+  models of every host
+- A live route diagram: programs → LiteLLM → aliases → hosts
+- **Aliases** — fixed names such as `chat` or `code` for a model on chosen hosts; programs use the
+  alias, so you can swap the model behind it without touching them
+- What to do when a model is on several hosts: take turns, least busy, or fastest
+- Choose which models the router offers under their own names (checkbox per model and host)
+- Optional **API key** — off by default (anyone on your network can use the models)
+- Ready-made settings for **Continue.dev** (a `config.yaml` to copy) and step-by-step instructions
+  for connecting **Open WebUI**
+- Changes wait for "Restart the router" — no surprise downtime
 
-**Model aggregator (LiteLLM)**
-- One-click install, start/stop and autostart for LiteLLM (no Docker)
-- Exposes a single endpoint (OpenAI-compatible) combining models from ALL
-  servers on the switcher list — VS Code/Continue only needs to point at this one address
-- Preview of which models and hosts will end up in the config, with a checkbox per model — uncheck
-  the ones LiteLLM shouldn't serve (remembered between restarts; new models are on by default)
-- Optional **API key (password)** for the aggregator — off by default, so anyone on your network can
-  use the models; turn it on and the app generates a random key once, shows it with a copy button
-  and puts it into the Continue config automatically
-- Generates a ready-to-paste Continue.dev `config.yaml` for the exposed models — copy/paste only,
-  the app never writes to your files
-- Step-by-step instructions for connecting **Open WebUI** to the aggregator (address for this
-  computer and its LAN IP, with copy buttons) — one connection, and WebUI sees models from all hosts
-- On-demand update check against the latest PyPI release, with a prompt to upgrade via
-  `uv tool upgrade` (no admin rights needed) if you're behind
+**Models**
+- **One search for two sources** — the official Ollama library and Hugging Face (GGUF only);
+  results unfold under the field with every variant and its **real file size**, plus a memory
+  estimate. Type an exact name (`llama3.2:3b`, `hf.co/...:Q4_K_M`) and press Enter to download
+  right away; pick the target host
+- Download progress with size and speed, and a "Cancel" button (resumes later where it stopped)
+- Tiles for the models on **all hosts**, filterable by kind (chat, code, embedding, vision): size,
+  quantization, context length and on which hosts the model is (green = loaded in memory)
+- "Load" / "Unload" a model to/from memory, "Copy to host" (downloads the same model on another
+  host), delete from one or all hosts
+- Hugging Face is a community source — the app suggests well-known quantization authors
 
-**Advanced (Ollama environment variables)**
-- `OLLAMA_KEEP_ALIVE`, `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work),
-  `OLLAMA_MAX_LOADED_MODELS`, `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`,
-  `OLLAMA_VULKAN` (Vulkan backend instead of ROCm, useful on AMD cards without full ROCm support
-  e.g. BC-250), `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST` (listen on the LAN instead of localhost-only),
-  `IPAddressAllow` (systemd allow-list, e.g. `localhost 192.168.8.20` — only those LAN hosts may connect;
-  empty = whole LAN, model downloads from the internet keep working),
-  `GGML_VK_VISIBLE_DEVICES` (Vulkan device index — needed on some APUs), `OLLAMA_GPU_OVERHEAD`
-  (VRAM reserved for the rest of the system — desktop/server preset picker)
-- A single "Save" applies every field at once and restarts the service once, plus an "Apply
-  recommended values" button that pre-fills a sane starting profile for review before saving
-- A free-form field for any other environment variable not covered by the form above
-- Full descriptions of each variable live in a separate "Help" tab, keeping this tab compact
+**Open WebUI**
+- Start, restart, stop, open in the browser, copy the address
+- Settings: start with the system, open the browser after start, require login (only switchable
+  off while there are no accounts — otherwise Open WebUI would lock existing users out), port
+- Installation details: version, environment, where chats are stored, whether it's connected to
+  the router; update check and **one-click backup** of all chat data (a ZIP file)
+- After a fresh install, offers the optional `ffmpeg`/`pandoc`/`zstd` packages (voice, document
+  RAG — the only step that needs admin rights)
 
-**Stats bar**
-- Ollama and Open WebUI status
-- VRAM usage on the currently selected server
-- **RAM used by Ollama** and the **VRAM + RAM** total — the real memory use. Ollama keeps part of a
-  model in RAM (it maps model files into memory, especially when a model doesn't fit in VRAM). For
-  the local Ollama it's measured from its processes (process memory + mapped model files, details
-  in a tooltip); for a remote server it's the part of loaded models outside VRAM, from its API.
-  Loaded models also show their split, e.g. `20.0 GB VRAM + 16.0 GB RAM`
-- Number of installed models
+**Log**
+- Messages from Ollama, LiteLLM, Open WebUI and the app itself in one place, filterable per service
+- Errors come with a **plain explanation** of what they mean and, where it applies, a "Show host"
+  link
+- Save to a file, clear the view, auto-scroll
+- The Ollama service log needs permission: load it once (password) or allow it permanently
 
-**Event log** — a log of all operations, always visible at the bottom of the window.
-
-**Interface language** — Polish, English, German, Spanish, French, Portuguese and Italian, switchable from the window, remembered between runs.
+**Settings**
+- Interface language — Polish, English, German, Spanish, French, Portuguese, Italian; switches
+  instantly, remembered between runs
+- Start Ollama with the system, start the router after login
+- Versions and on-demand update checks for Ollama and LiteLLM
+- Ollama environment variables, each with a short description: `OLLAMA_KEEP_ALIVE`,
+  `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work), `OLLAMA_MAX_LOADED_MODELS`,
+  `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,
+  `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST`, `IPAddressAllow` (limit LAN access),
+  `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD`, plus free-form extra variables — one "Save"
+  applies everything with a single service restart
 
 ## Notes
 

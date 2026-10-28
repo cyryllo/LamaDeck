@@ -2,7 +2,7 @@
 # =============================================================================
 #  Build a .deb package for Ollama Manager.
 #
-#  WHAT: packs ollama_manager.py + lang/ + theme.qss into /usr/share, adds a launcher
+#  WHAT: packs ollama_manager.py + lang/ + theme.qss + fonts/ into /usr/share, adds a launcher
 #        script in /usr/bin and a .desktop entry in /usr/share/applications,
 #        then assembles it all into a single .deb via dpkg-deb.
 #  WHY:  a plain hand-written DEBIAN/control + dpkg-deb --build instead of
@@ -56,6 +56,9 @@ mkdir -p "$BUILD_DIR/usr/share/applications"
 cp ollama_manager.py "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp -r lang "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp theme.qss "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+# WHY: bundled Inter + JetBrains Mono (SIL OFL, licenses in fonts/) - loaded by the app
+#      from next to the script, so the UI looks the same on every machine
+cp -r fonts "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 
 # WHY: a small wrapper instead of calling the full path straight from
 #      .desktop - this also lets `ollama-manager` be run from a terminal.
@@ -88,13 +91,15 @@ EOF
 #      'curl' as Depends too - not every system has it by default, but the
 #      app's own install buttons need it (Ollama's official installer, and
 #      the uv bootstrap used for Open WebUI/LiteLLM).
+#      'python3-pyqt6.qtsvg' - on Debian QtSvg is a separate package, and the
+#      app draws its sidebar/button icons from SVG shapes (QSvgRenderer).
 cat > "$BUILD_DIR/DEBIAN/control" <<EOF
 Package: $PACKAGE_NAME
 Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-pyqt6, python3-requests, pkexec, systemd, curl
+Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-requests, pkexec, systemd, curl
 Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
 Homepage: https://github.com/cyryllo/Ollama-manager
 Description: Ollama service and model manager for KDE (PyQt6)

@@ -22,7 +22,7 @@
 QWidget {
     background: #1b1e22;
     color: #e8eaed;
-    font-family: "Noto Sans";
+    font-family: "Inter";
     font-size: 10pt;
 }
 QMainWindow, QWidget#central, QDialog { background: #1b1e22; }
@@ -37,7 +37,7 @@ QLabel { color: #e8eaed; background: transparent; }
 /* Tekst drugorzędny: podpisy, opisy pod tytułami */
 QLabel[role="muted"] { color: #a3abb5; }
 /* Adresy, nazwy modeli, logi */
-QLabel[role="mono"] { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }
+QLabel[role="mono"] { font-family: "JetBrains Mono"; }
 QLabel[role="mono"][muted="true"] { color: #a3abb5; }
 /* Tytuł ekranu */
 QLabel[role="h1"] { font-size: 20pt; font-weight: 700; }
@@ -47,6 +47,14 @@ QLabel[role="h2"] { font-size: 13pt; font-weight: 600; }
 QLabel[role="h3"] { font-size: 10pt; font-weight: 600; color: #c9cfd6; }
 /* Duża liczba w kafelku statystyki */
 QLabel[role="value"] { font-size: 13pt; font-weight: 700; }
+QLabel[role="monoValue"] { font-family: "JetBrains Mono"; font-size: 11pt; font-weight: 500; }
+QLabel#subtitle { font-size: 10.5pt; }
+QLabel#caption { font-size: 8pt; color: #a3abb5; letter-spacing: 1px; }
+QLabel#allState { font-size: 10pt; font-weight: 600; }
+QLabel#allState[state="ok"] { color: #5fd38d; }
+QLabel#allState[state="warn"] { color: #f0b453; }
+QLabel#allState[state="error"] { color: #f47c84; }
+QLabel#stateTitle { font-size: 11.5pt; font-weight: 600; }
 /* Kolor stanu w tekście (np. "online", "w pamięci") */
 QLabel[state="ok"]      { color: #5fd38d; }
 QLabel[state="warn"]    { color: #f0b453; }
@@ -251,6 +259,7 @@ QHeaderView::section {
 }
 QTableWidget::item { padding: 0 12px; border-top: 1px solid #353b43; }
 QTableWidget QLabel { background: transparent; padding: 0 12px; }
+QTableWidget QWidget { background: transparent; }
 QTableCornerButton::section { background: #2c3138; border: none; }
 
 /* --- Dziennik --- */
@@ -318,3 +327,182 @@ QScrollBar:horizontal { height: 10px; background: transparent; }
 QScrollBar::handle:horizontal { background: #444c56; border-radius: 5px; min-width: 30px; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+
+/* =====================================================================
+ * Elementy rysowane w kodzie - kolory przez qproperty (Paleta, Przelacznik,
+ * Pierscien, Wykres, SchematRoutera w ollama_manager.py)
+ * ===================================================================== */
+Paleta {
+    qproperty-tekst: #e8eaed;
+    qproperty-wyciszony: #a3abb5;
+    qproperty-akcent: #3daee9;
+    qproperty-naAkcencie: #0b1a24;
+    qproperty-blad: #f47c84;
+    qproperty-boczny: #c9cfd6;
+    qproperty-bocznyWybrany: #7cc8f0;
+}
+Przelacznik {
+    qproperty-kolorWlaczony: #3daee9;
+    qproperty-kolorWylaczony: #444c56;
+    qproperty-kolorGalki: #ffffff;
+}
+Pierscien {
+    qproperty-kolorTla: #353b43;
+    qproperty-kolorPodpisu: #a3abb5;
+    font-size: 10pt;
+    color: #e8eaed;
+}
+Pierscien[rodzaj="cpu"]  { qproperty-kolorLuku: #3daee9; }
+Pierscien[rodzaj="vram"] { qproperty-kolorLuku: #f0b453; }
+Pierscien[rodzaj="ram"]  { qproperty-kolorLuku: #5fd38d; }
+Wykres { background: transparent; }
+Wykres[rodzaj="gpu"]  { qproperty-kolorLinii: #3daee9; }
+Wykres[rodzaj="siec"] { qproperty-kolorLinii: #3daee9; }
+Wykres[rodzaj="cpu"]  { qproperty-kolorLinii: #5fd38d; }
+SchematRoutera {
+    background: transparent;
+    qproperty-kolorLinii: #4f5862;
+    qproperty-kolorWezla: #2c3138;
+    qproperty-kolorRamki: #3a4048;
+    qproperty-kolorRoutera: #1d3a4f;
+    qproperty-kolorAkcentu: #3daee9;
+    qproperty-kolorAkcentuJasny: #9fd6f3;
+    qproperty-kolorTekstu: #e8eaed;
+    qproperty-kolorWyciszony: #a3abb5;
+    qproperty-kolorOnline: #5fd38d;
+    qproperty-kolorOffline: #6b737d;
+    qproperty-kolorTrasy1: #3daee9;
+    qproperty-kolorTrasy2: #c792ea;
+    qproperty-kolorTrasy3: #5fd38d;
+}
+
+/* --- Przyciski z makiet --- */
+QPushButton { padding: 0 16px; }
+QPushButton:focus { outline: none; }
+QPushButton#primarySmall {
+    min-height: 28px; padding: 0 12px;
+    background: #3daee9; border-color: #3daee9; color: #0b1a24; font-weight: 700;
+}
+QPushButton#small, QPushButton#smallDanger { min-height: 28px; padding: 0 10px; font-size: 9pt; }
+QPushButton#smallDanger { color: #f47c84; border-color: #6b3a3f; }
+QPushButton#smallDanger:hover { background: #3a2326; }
+QPushButton#launchSmall {
+    min-height: 52px; border-radius: 10px; border: none;
+    background: #3daee9; color: #0b1a24; font-size: 11pt; font-weight: 700;
+}
+QPushButton#launchSmall:hover, QPushButton#launch:hover { background: #5bbcee; }
+QPushButton#launch { min-height: 60px; font-size: 12.5pt; }
+QPushButton#primary:disabled, QPushButton#launch:disabled, QPushButton#launchSmall:disabled {
+    background: #2f4a5c; border-color: #2f4a5c; color: #6b8396;
+}
+QPushButton#link {
+    min-height: 0; padding: 0; border: none; background: transparent;
+    color: #3daee9; font-weight: 500;
+}
+QPushButton#link:hover { color: #7cc8f0; background: transparent; }
+/* Filtry i przełączniki widoku - "pigułki" */
+QPushButton#chip {
+    min-height: 32px; padding: 0 14px; border-radius: 16px;
+    background: #262a30; color: #c9cfd6; border: 1px solid #444c56;
+}
+QPushButton#chip:hover { background: #2f353d; }
+QPushButton#chip:checked { background: #3daee9; color: #0b1a24; border-color: #3daee9; }
+
+/* --- Karty panelu głównego --- */
+QFrame#cardRow QFrame#hostRow { background: transparent; border: none; border-bottom: 1px solid #3a4048; border-radius: 0; }
+QFrame#cardRow QFrame#hostRow[last="true"] { border-bottom: none; }
+QFrame#cardRow QLabel { background: transparent; }
+QFrame#card QLabel#dotSmall { border-radius: 4px; background: #6b737d; }
+QFrame#card QLabel#dotSmall[state="ok"] { background: #5fd38d; }
+QFrame#card QLabel#dotBig { border-radius: 5px; background: #6b737d; }
+QFrame#card QLabel#dotBig[state="ok"] { background: #5fd38d; }
+QFrame#card QLabel#chip, QFrame#card QLabel#chipMuted {
+    padding: 4px 10px; border-radius: 11px;
+    font-family: "JetBrains Mono"; font-size: 9pt;
+}
+QFrame#card QLabel#chip { background: #1d3a4f; color: #9fd6f3; }
+QFrame#card QLabel#chipMuted { background: #2c3138; color: #c9cfd6; }
+QFrame#card QLabel#routeAlias {
+    padding: 6px 10px; border-radius: 6px; background: #2c3138;
+    font-family: "JetBrains Mono";
+}
+QFrame#cardFooter { background: transparent; border: none; border-top: 1px solid #353b43; }
+QFrame#cardFooter QLabel { background: transparent; }
+QFrame#card QLabel#pill { padding: 3px 12px; border-radius: 10px; font-size: 9pt; font-weight: 600; }
+QFrame#card QLabel#pill[state="ok"]      { background: #1c3a29; color: #5fd38d; }
+QFrame#card QLabel#pill[state="warn"]    { background: #3a3020; color: #f0d29a; }
+QFrame#card QLabel#pill[state="stopped"] { background: #3a2326; color: #f47c84; }
+QLabel#pill { padding: 4px 12px; border-radius: 11px; font-size: 9pt; font-weight: 600; }
+
+/* --- Miniatura okna czatu --- */
+QFrame#thumb { background: #15181b; border: 1px solid #3a4048; border-radius: 8px; }
+QFrame#thumb QFrame { border: none; }
+QFrame#thumbBar { background: #202429; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+QFrame#thumbDot { background: #444c56; border-radius: 4px; }
+QFrame#thumbUrl, QFrame#thumbBubble { background: #2c3138; border-radius: 6px; }
+QFrame#thumbSide { background: #1d2024; border-bottom-left-radius: 8px; }
+QFrame#thumbLine { background: #3a4048; border-radius: 3px; }
+QFrame#thumbLineStrong { background: #3a4048; border-radius: 4px; }
+QFrame#thumbBubble { background: #262a30; border-radius: 4px; }
+QFrame#thumbBubbleMine { background: #1d3a4f; border-radius: 4px; }
+QFrame#thumbInput { background: #262a30; border: 1px solid #3a4048; border-radius: 6px; }
+QLabel#thumbCaption { font-family: "JetBrains Mono"; font-size: 7.5pt; color: #a3abb5; background: transparent; }
+
+/* --- Router: wybór strategii, pasek "zmiany czekają" --- */
+QFrame#choice { background: #2c3138; border: 1px solid #3a4048; border-radius: 8px; }
+QFrame#choice[selected="true"] { background: #1d3a4f; border-color: #3daee9; }
+QFrame#choice QLabel { background: transparent; }
+QLabel#choiceTitle { font-weight: 600; }
+QFrame#choice QLabel#radioDot { border-radius: 7px; border: 2px solid #6b737d; background: transparent; }
+QFrame#choice QLabel#radioDot[selected="true"] { border: 4px solid #3daee9; background: #ffffff; }
+QFrame#noticeBar { background: #3a3020; border-radius: 10px; }
+QFrame#noticeBar QLabel { background: transparent; color: #f0d29a; }
+QLineEdit#monoField { font-family: "JetBrains Mono"; font-size: 9.5pt; }
+QLineEdit:read-only { border-color: #3a4048; }
+
+/* --- Modele: kafelki, wyniki, pobieranie --- */
+QFrame#card QLabel#modelName { font-size: 10.5pt; font-weight: 500; }
+QFrame#card QLabel#badge { padding: 2px 8px; border-radius: 9px; background: #2c3138; color: #c9cfd6; font-size: 8pt; }
+QFrame#card QLabel#hostChip { padding: 3px 8px; border-radius: 6px; background: #1d3a4f; color: #9fd6f3; font-size: 8pt; }
+QFrame#card QLabel#hostChip[loaded="true"] { background: #1c3a29; color: #5fd38d; }
+QFrame#progressRow { background: #2c3138; border-radius: 8px; }
+QFrame#progressRow QLabel { background: transparent; }
+QLabel#progressText { color: #c9cfd6; font-size: 9pt; }
+QFrame#searchPanel { background: transparent; }
+QFrame#searchPanel QLabel { background: transparent; }
+
+/* --- Ustawienia: wiersze z kreską u góry, jak w makiecie WebUI --- */
+QFrame#settingRow { background: transparent; border: none; border-top: 1px solid #353b43; }
+QFrame#settingRow QLabel { background: transparent; }
+
+/* --- Dziennik --- */
+QListWidget#logList {
+    background: #15181b; border: 1px solid #353b43; border-radius: 12px; padding: 6px 0;
+}
+QListWidget#logList::item { border: none; padding: 0; }
+QListWidget#logList::item:selected, QListWidget#logList::item:hover { background: transparent; }
+QFrame#logRow { background: transparent; border: none; border-bottom: 1px solid #22262b; }
+QFrame#logRow QLabel { background: transparent; }
+QLabel#logTime { font-family: "JetBrains Mono"; color: #8a929c; font-size: 9.5pt; }
+QLabel#logService { font-size: 9pt; font-weight: 600; color: #c9cfd6; }
+QLabel#logService[usluga="Ollama"]     { color: #9fd6f3; }
+QLabel#logService[usluga="LiteLLM"]    { color: #d9b8f0; }
+QLabel#logService[usluga="Open WebUI"] { color: #a6e6bf; }
+QFrame#logRow QLabel#logLevel { font-size: 8pt; font-weight: 700; padding: 2px 0; border-radius: 4px; background: #2c3138; color: #c9cfd6; }
+QFrame#logRow QLabel#logLevel[poziom="warn"]  { background: #3a3020; color: #f0d29a; }
+QFrame#logRow QLabel#logLevel[poziom="error"] { background: #3a2326; color: #f6a5ab; }
+QLabel#logText { font-family: "JetBrains Mono"; color: #d5dadf; font-size: 9.5pt; }
+QFrame#logHelp { background: #3a2326; border-radius: 8px; }
+QFrame#logRow QFrame#logHelp { background: #3a2326; border-radius: 8px; }
+QFrame#logHelp QLabel { color: #f6c3c7; }
+QPushButton#logHelpLink {
+    min-height: 0; padding: 0; border: none; background: transparent;
+    color: #ffd9dc; font-weight: 600;
+}
+QPushButton#logHelpLink:hover { background: transparent; text-decoration: underline; }
+
+/* --- Pasek stanu na dole okna (ostatni komunikat programu) --- */
+QStatusBar { background: #16191d; color: #a3abb5; border-top: 1px solid #2a2f36; }
+QStatusBar QLabel { background: transparent; }
+QMenu::item { padding: 6px 16px; }

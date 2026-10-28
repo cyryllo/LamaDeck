@@ -11,7 +11,7 @@ lokalnie, w Twoim LAN.
 > zgodnie z oczekiwaniami. Nadal aktywnie rozwijana — regularnie dochodzą nowe opcje
 > i funkcjonalności; [zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
-![Ollama Manager — zakładka Modele](om.png)
+![Ollama Manager — panel główny](om_pl.png)
 
 ## Wymagania
 
@@ -61,104 +61,81 @@ python3 ollama_manager.py
 
 ## Funkcje
 
-**Usługa Ollama**
-- Start / stop usługi systemd, wykrywanie stanu na bieżąco
-- Autostart przy starcie systemu
-- Wykrywanie braku instalacji + przycisk instalującej ją jednym kliknięciem
-- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na GitHubie, z propozycją
-  reinstalacji (oficjalny skrypt instalacyjny aktualizuje istniejącą instalację w miejscu),
-  gdy masz starszą wersję — przydatne, bo niektóre modele wymagają nowszej Ollamy, żeby w ogóle się wczytać
+Okno ma pasek boczny z siedmioma ekranami, w ciemnym wyglądzie Breeze (czcionki Inter
+i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym komputerze).
 
-**Modele**
-- **Jedna wyszukiwarka dla dwóch źródeł** — wpisz nazwę modelu, a appka szuka naraz w oficjalnej
-  bibliotece Ollamy (ollama.com) i na Hugging Face (tylko modele GGUF). Każdy wynik ma kolumnę
-  **Źródło**, więc zawsze wiadomo, skąd jest model. Wybierz wynik, żeby zobaczyć wszystkie jego
-  warianty (tagi/kwantyzacje) z **prawdziwym rozmiarem pliku**, wybierz wariant i kliknij
-  Pobierz — z paskiem postępu. Nie trzeba znać dokładnego tagu z góry. Warianty MLX (tylko Apple)
-  i modele „cloud” (niepobieralne) są pomijane
-- Wklejony link do Hugging Face (albo `użytkownik/repo`) od razu pokazuje warianty tego repo;
-  wpisanie dokładnej nazwy (np. `llama3.2:3b` albo `hf.co/...:Q4_K_M`) pozwala pobrać bez szukania
-- **Hugging Face to opcjonalne, społecznościowe źródło** — każdy może tam coś opublikować, a appka
-  nie weryfikuje zawartości repo, więc dopisek w karcie doradza trzymać się znanych autorów
-  kwantyzacji (np. bartowski, mradermacher, unsloth)
-- Orientacyjne wyliczenie zużycia pamięci dla wybranego wariantu (prawdziwy rozmiar pliku + KV
-  cache + bufory, plus zalecany RAM; szczegóły w dymku)
-- Tabela zainstalowanych modeli — nazwa, **źródło** (Ollama / Hugging Face), rozmiar na dysku
-  i kolumna z szacowanym/realnym VRAM — + usuwanie. Najechanie na wiersz pokazuje źródło (dla HF
-  z autorem kwantyzacji), rodzinę modelu, liczbę parametrów, kwantyzację i datę pobrania
-- Podgląd modeli aktualnie załadowanych do pamięci (VRAM)
-- Uwaga: ollama.com nie ma publicznego API wyszukiwania, więc appka czyta jej strony wyszukiwania
-  i tagów — jeśli wygląd strony się zmieni, wyszukiwanie w Ollamie może wymagać poprawki (Hugging
-  Face ma prawdziwe API); appka pokaże wtedy błąd, zamiast po cichu wyświetlać same wyniki z HF.
-  Wyniki z Ollamy są zawsze na górze; modele Ollamy dostępne tylko w chmurze (niepobieralne) są
-  pomijane
-
-**Open WebUI**
-- Instalacja panelu czatu w przeglądarce jednym przyciskiem (bez Dockera)
-- Start / stop, autostart po zalogowaniu
-- Przycisk "Otwórz WebUI" otwiera panel w przeglądarce (bez automatycznego otwierania)
-- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na PyPI, z propozycją
-  aktualizacji przez `uv tool upgrade` (bez uprawnień administratora), gdy masz starszą wersję
-- Po udanej instalacji appka proponuje doinstalowanie opcjonalnych pakietów `ffmpeg`/`pandoc`/`zstd`
-  potrzebnych do transkrypcji głosu i importu dokumentów do RAG (jedyny krok wymagający roota)
+**Panel główny**
+- Jeden przełącznik dla wszystkich usług (Ollama, router LiteLLM, Open WebUI) oraz „Uruchom
+  ponownie” i „Zatrzymaj wszystko”
+- Karta każdej usługi ze stanem i własnym przełącznikiem — albo przyciskiem „Zainstaluj”, gdy jej
+  brakuje (Ollama oficjalnym skryptem, reszta przez `uv`, bez Dockera i bez roota)
+- Karta Ollamy: które hosty są online, które modele są w pamięci, obciążenie GPU na żywo
+- Karta routera: trasy (alias → model @ hosty) w jednym rzucie oka
+- Karta Open WebUI: jeden duży przycisk — zainstaluj / uruchom / otwórz w przeglądarce
+- Zasoby komputera: wskaźniki CPU, VRAM i RAM, wykresy sieci i procesora
 
 **Hosty Ollama**
-- Osobny ekran ze wszystkimi hostami Ollamy (ten komputer i dowolne w LAN, np. BC-250): stan
-  online/offline, wersja Ollamy, czas odpowiedzi, VRAM zajęty przez modele (dla tego komputera
-  także rozmiar karty) i modele na każdym hoście — na dysku albo w pamięci
-- Dodawanie hosta przez sam adres (`http://` i domyślny port 11434 program dopisze sam), usuwanie
-  jednym kliknięciem; lista zapamiętana między uruchomieniami i wspólna z agregatorem LiteLLM
-- Dla tego komputera: ponowne uruchomienie usługi Ollama i podgląd jej dziennika systemd w okienku —
-  bez terminala
+- Wszystkie hosty Ollamy (ten komputer i dowolne w LAN, np. BC-250): online/offline, wersja
+  Ollamy, czas odpowiedzi, VRAM zajęty przez modele (dla tego komputera także rozmiar karty)
+  i modele na każdym hoście — na dysku albo w pamięci
+- Dodawanie hosta przez sam adres (`http://` i port 11434 program dopisze sam), usuwanie jednym
+  kliknięciem; lista jest wspólna dla routera i ekranu Modele
+- Dla tego komputera: ponowne uruchomienie usługi Ollama i przejście do jej dziennika
 - Gdy host nie odpowiada, program podpowiada, co sprawdzić (`OLLAMA_HOST=0.0.0.0`)
 
-**Przełącznik serwera**
-- Wybór hosta Ollama (localhost albo dowolny w LAN, np. BC-250) dla operacji na modelach
+**Router LiteLLM**
+- Jeden adres zgodny z API OpenAI (`http://localhost:4000/v1`) dla wszystkich programów, łączący
+  modele ze wszystkich hostów
+- Schemat tras na żywo: programy → LiteLLM → aliasy → hosty
+- **Aliasy** — stałe nazwy, np. `czat` albo `kod`, dla modelu na wybranych hostach; programy
+  używają aliasu, więc model za nim zmienisz bez przestawiania programów
+- Co robić, gdy model jest na kilku hostach: na zmianę, najmniej zajęty albo najszybszy
+- Wybór, które modele router udostępnia pod własnymi nazwami (pole wyboru przy modelu i hoście)
+- Opcjonalny **klucz API** — domyślnie wyłączony (każdy w Twojej sieci może używać modeli)
+- Gotowe ustawienia dla **Continue.dev** (`config.yaml` do skopiowania) i instrukcja krok po kroku
+  dla **Open WebUI**
+- Zmiany czekają na „Uruchom ponownie router” — bez niespodziewanego przestoju
 
-**Agregator modeli (LiteLLM)**
-- Instalacja, start/stop i autostart LiteLLM jednym przyciskiem (bez Dockera)
-- Wystawia jeden endpoint (zgodny z API OpenAI) łączący modele ze WSZYSTKICH
-  serwerów z listy przełącznika — VS Code/Continue wskazuje tylko na ten adres
-- Podgląd, jakie modele i hosty trafią do configu, z polem wyboru przy każdym modelu — odznacz te,
-  których LiteLLM ma nie serwować (wybór zapamiętany; nowe modele są domyślnie włączone)
-- Opcjonalny **klucz API (hasło)** do agregatora — domyślnie wyłączony, więc każdy w Twojej sieci może
-  korzystać z modeli; po włączeniu appka raz generuje losowy klucz, pokazuje go z przyciskiem
-  kopiowania i sama wpisuje go do configu Continue
-- Generuje gotowy do wklejenia `config.yaml` dla Continue.dev na podstawie wystawionych modeli —
-  appka nigdy sama nie zapisuje tego pliku, tylko podgląd/kopiowanie
-- Instrukcja podłączenia **Open WebUI** do agregatora krok po kroku (adres dla tego komputera i jego
-  IP w sieci, z przyciskami kopiowania) — jedno połączenie i WebUI widzi modele ze wszystkich hostów
-- Sprawdzanie aktualizacji na żądanie względem najnowszego wydania na PyPI, z propozycją
-  aktualizacji przez `uv tool upgrade` (bez uprawnień administratora), gdy masz starszą wersję
+**Modele**
+- **Jedna wyszukiwarka dla dwóch źródeł** — oficjalna biblioteka Ollamy i Hugging Face (tylko
+  GGUF); wyniki rozwijają się pod polem z każdym wariantem i jego **prawdziwym rozmiarem
+  pliku** oraz szacunkiem pamięci. Dokładna nazwa (`llama3.2:3b`, `hf.co/...:Q4_K_M`) + Enter =
+  pobieranie od razu; wybierasz host docelowy
+- Postęp pobierania z rozmiarem i prędkością oraz przycisk „Anuluj” (wznowi się później tam, gdzie
+  przerwało)
+- Kafelki modeli ze **wszystkich hostów** z filtrami (czat, kod, embedding, wizja): rozmiar,
+  kwantyzacja, długość kontekstu i na których hostach jest model (zielony = w pamięci)
+- „Załaduj” / „Zwolnij” model z pamięci, „Kopiuj na host” (pobiera ten sam model na inny host),
+  usuwanie z jednego albo ze wszystkich hostów
+- Hugging Face to źródło społecznościowe — program podpowiada znanych autorów kwantyzacji
 
-**Zaawansowane (zmienne środowiskowe Ollamy)**
-- `OLLAMA_KEEP_ALIVE`, `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 za mało do pracy agentowej),
-  `OLLAMA_MAX_LOADED_MODELS`, `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`,
-  `OLLAMA_VULKAN` (backend Vulkan zamiast ROCm, przydatne na kartach AMD bez pełnego wsparcia ROCm
-  np. BC-250), `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST` (nasłuch w sieci LAN zamiast tylko lokalnie),
-  `IPAddressAllow` (lista dozwolonych adresów systemd, np. `localhost 192.168.8.20` — tylko te hosty z LAN
-  mogą się połączyć; puste = cały LAN, pobieranie modeli z internetu działa dalej),
-  `GGML_VK_VISIBLE_DEVICES` (indeks urządzenia Vulkan — niezbędne na niektórych APU), `OLLAMA_GPU_OVERHEAD`
-  (ile VRAM zarezerwować dla reszty systemu — wybór z gotowych profili pulpit/serwer)
-- Jeden przycisk "Zapisz" stosuje wszystkie pola naraz i restartuje usługę tylko raz, plus
-  przycisk "Zastosuj zalecane wartości", który wypełnia formularz sensownym profilem startowym
-  do przejrzenia przed zapisem
-- Wolne pole na dowolną inną zmienną środowiskową, spoza gotowego formularza
-- Pełne opisy każdej zmiennej są w osobnej zakładce "Pomoc" — ta zakładka zostaje kompaktowa
+**Open WebUI**
+- Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
+- Ustawienia: start razem z systemem, otwieranie przeglądarki po starcie, wymaganie logowania
+  (wyłączyć da się tylko, dopóki nie ma kont — inaczej Open WebUI zablokowałby istniejących
+  użytkowników), port
+- Szczegóły instalacji: wersja, środowisko, gdzie są czaty, czy jest połączony z routerem;
+  sprawdzanie aktualizacji i **kopia zapasowa** wszystkich czatów jednym kliknięciem (plik ZIP)
+- Po świeżej instalacji propozycja opcjonalnych pakietów `ffmpeg`/`pandoc`/`zstd` (głos, dokumenty
+  w RAG — jedyny krok wymagający uprawnień administratora)
 
-**Pasek statystyk**
-- Status Ollamy i Open WebUI
-- Zużycie VRAM na aktualnie wybranym serwerze
-- **RAM zajęty przez Ollamę** i suma **VRAM + RAM** — realne zużycie pamięci. Ollama trzyma część
-  modelu w RAM (mapuje pliki modeli do pamięci, zwłaszcza gdy model nie mieści się w VRAM). Dla
-  lokalnej Ollamy mierzone z jej procesów (pamięć procesów + zmapowane pliki modeli, szczegóły
-  w dymku); dla zdalnego serwera to część załadowanych modeli poza VRAM, z jego API. Załadowane
-  modele pokazują też podział, np. `20.0 GB VRAM + 16.0 GB RAM`
-- Liczba zainstalowanych modeli
+**Dziennik**
+- Komunikaty Ollamy, LiteLLM, Open WebUI i samego programu w jednym miejscu, z filtrem usług
+- Błędy z **prostym wyjaśnieniem**, co znaczą, i — gdy to ma sens — linkiem „Pokaż host”
+- Zapis do pliku, czyszczenie widoku, automatyczne przewijanie
+- Dziennik usługi Ollama wymaga uprawnień: wczytasz go raz (hasło) albo zezwolisz na stałe
 
-**Dziennik zdarzeń** — log wszystkich operacji, zawsze widoczny na dole okna.
-
-**Język interfejsu** — polski, angielski, niemiecki, hiszpański, francuski, portugalski i włoski, przełączany z poziomu okna, zapamiętywany między uruchomieniami.
+**Ustawienia**
+- Język interfejsu — polski, angielski, niemiecki, hiszpański, francuski, portugalski, włoski;
+  zmiana od razu, zapamiętana między uruchomieniami
+- Start Ollamy razem z systemem, start routera po zalogowaniu
+- Wersje i sprawdzanie aktualizacji Ollamy i LiteLLM na żądanie
+- Zmienne środowiskowe Ollamy, każda z krótkim opisem: `OLLAMA_KEEP_ALIVE`,
+  `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 to za mało do pracy agentowej), `OLLAMA_MAX_LOADED_MODELS`,
+  `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,
+  `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST`, `IPAddressAllow` (ograniczenie dostępu z LAN),
+  `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD` i dowolne własne zmienne — jedno „Zapisz”
+  stosuje wszystko jednym restartem usługi
 
 ## Uwagi
 

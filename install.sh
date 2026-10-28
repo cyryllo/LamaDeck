@@ -24,6 +24,7 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 SOURCE_SCRIPT="$SCRIPT_DIR/ollama_manager.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
 SOURCE_THEME="$SCRIPT_DIR/theme.qss"
+SOURCE_FONTS_DIR="$SCRIPT_DIR/fonts"
 TARGET_SCRIPT="$TARGET_DIR/ollama_manager.py"
 
 _version_from_file() {
@@ -201,6 +202,12 @@ fi
 #      next to the script - without it the app falls back to the system theme.
 if [ -f "$SOURCE_THEME" ]; then
     cp "$SOURCE_THEME" "$TARGET_DIR/"
+fi
+
+# WHY: bundled fonts (Inter + JetBrains Mono, SIL OFL) are loaded from next to the
+#      script too - JetBrains Mono is rarely installed system-wide.
+if [ -d "$SOURCE_FONTS_DIR" ]; then
+    cp -r "$SOURCE_FONTS_DIR" "$TARGET_DIR/"
 fi
 
 # 3) Application menu entry - Categories=Utility is the "Utilities" section in KDE.

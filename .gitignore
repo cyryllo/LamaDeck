@@ -21,3 +21,6 @@ CLAUDE.md
 
 # Wynik build-deb.sh - build artefakt, nie kod źródłowy
 *.deb
+
+# Makiety interfejsu (Claude Design) - tylko lokalnie, nie trafiają do repozytorium
+Wyglad/
