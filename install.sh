@@ -21,13 +21,16 @@ set -euo pipefail
 TARGET_DIR="$HOME/.local/share/ollama-manager"
 DESKTOP_FILE="$HOME/.local/share/applications/ollama-manager.desktop"
 # WHY: standard place for a user's own app icons - KDE finds it by name (Icon=ollama-manager)
-ICON_FILE="$HOME/.local/share/icons/hicolor/scalable/apps/ollama-manager.svg"
+ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/ollama-manager.png"
+# WHY: 0.6.6 installed a vector icon here - KDE prefers scalable icons, so a leftover
+#      one would keep showing the old icon. Removed on every install/uninstall.
+OLD_ICON_FILE="$HOME/.local/share/icons/hicolor/scalable/apps/ollama-manager.svg"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 SOURCE_SCRIPT="$SCRIPT_DIR/ollama_manager.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
 SOURCE_THEME="$SCRIPT_DIR/theme.qss"
 SOURCE_FONTS_DIR="$SCRIPT_DIR/fonts"
-SOURCE_ICON="$SCRIPT_DIR/ollama-manager.svg"
+SOURCE_ICON="$SCRIPT_DIR/logo.png"
 TARGET_SCRIPT="$TARGET_DIR/ollama_manager.py"
 
 _version_from_file() {
@@ -71,7 +74,7 @@ remove_app() {
     fi
     echo "Removing Ollama Manager..."
     rm -rf "$TARGET_DIR"
-    rm -f "$DESKTOP_FILE" "$ICON_FILE"
+    rm -f "$DESKTOP_FILE" "$ICON_FILE" "$OLD_ICON_FILE"
     command -v update-desktop-database >/dev/null 2>&1 \
         && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     echo "Done. Ollama Manager has been removed (pip dependencies are kept - other tools may share them)."
@@ -215,6 +218,7 @@ fi
 
 # WHY: the app icon goes twice - next to the script (window icon, loaded by the
 #      app itself) and into the icon theme folder (application menu / taskbar).
+rm -f "$OLD_ICON_FILE" "$TARGET_DIR/ollama-manager.svg"
 if [ -f "$SOURCE_ICON" ]; then
     cp "$SOURCE_ICON" "$TARGET_DIR/"
     mkdir -p "$(dirname "$ICON_FILE")"

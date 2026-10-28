@@ -6432,7 +6432,7 @@ class MainWindow(QMainWindow):
 
 PALETA = None  # WHY: tworzona w main() po wczytaniu theme.qss (patrz Paleta)
 _PLIK_MOTYWU = Path(__file__).resolve().parent / "theme.qss"
-_PLIK_IKONY = Path(__file__).resolve().parent / "ollama-manager.svg"
+_PLIK_IKONY = Path(__file__).resolve().parent / "logo.png"
 
 
 def _ikona_programu():
