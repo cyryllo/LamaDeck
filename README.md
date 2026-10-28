@@ -76,7 +76,7 @@ fonts are bundled, so it looks the same everywhere).
 
 **Ollama hosts**
 - All Ollama hosts (this computer and any on the LAN, e.g. BC-250): online/offline, Ollama
-  version, response time, VRAM used by models (with the card's total for this computer) and the
+  version, response time, VRAM and RAM used by models (with the totals for this computer) and the
   models on each host — on disk or loaded into memory
 - Add a host by just typing its address (`http://` and port 11434 are added for you), remove it
   with one click; the list is shared by the router and the Models screen
@@ -101,6 +101,9 @@ fonts are bundled, so it looks the same everywhere).
   results unfold under the field with every variant and its **real file size**, plus a memory
   estimate. Type an exact name (`llama3.2:3b`, `hf.co/...:Q4_K_M`) and press Enter to download
   right away; pick the target host
+- **"Only MoE models"** checkbox — shows only mixture-of-experts models (and only their MoE
+  variants), which run much faster on APUs and computers without a strong graphics card.
+  Detected by description, name, Hugging Face tags and Ollama variant tags (e.g. `30b-a3b`)
 - Download progress with size and speed, and a "Cancel" button (resumes later where it stopped)
 - Tiles for the models on **all hosts**, filterable by kind (chat, code, embedding, vision): size,
   quantization, context length and on which hosts the model is (green = loaded in memory)

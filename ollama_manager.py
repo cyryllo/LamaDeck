@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -38,7 +39,7 @@ import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, pyqtProperty, QTimer, QUrl, QSettings, QSize, QByteArray, QRectF, QPointF, QPoint,
-    QRect,
+    QRect, QObject, QEvent,
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
@@ -502,15 +503,15 @@ def _vram_lokalnie_calkowita():
 def sprawdz_host(serwer):
     # WHAT: stan jednego hosta z listy serwerów do ekranu "Hosty Ollama":
     #       czy odpowiada, wersja Ollamy, czas odpowiedzi, modele (na dysku /
-    #       w pamięci), zajęty VRAM, a dla tego komputera także stan usługi systemd.
+    #       w pamięci), zajęty VRAM i RAM, a dla tego komputera także stan usługi systemd.
     # WHY:  czas odpowiedzi mierzymy na /api/version - najlżejsze zapytanie API,
     #       więc liczba to głównie sieć, a nie praca serwera.
     adres = serwer["adres"].rstrip("/")
     wynik = {
         "nazwa": serwer["nazwa"], "adres": adres, "lokalny": _adres_lokalny(adres),
         "online": False, "wersja": None, "ping_ms": None, "modele": [],
-        "vram_uzyte": 0, "vram_calkowite": None, "usluga_aktywna": None,
-        "usluga_autostart": None, "sprawdzono": time.time(),
+        "vram_uzyte": 0, "vram_calkowite": None, "ram_uzyte": 0, "ram_calkowite": None,
+        "ram_procesy": None, "usluga_aktywna": None, "usluga_autostart": None, "sprawdzono": time.time(),
     }
     if wynik["lokalny"]:
         wynik["vram_calkowite"] = _vram_lokalnie_calkowita()
@@ -524,13 +525,27 @@ def sprawdz_host(serwer):
         wynik["wersja"] = r.json().get("version")
         wynik["online"] = True
         klient = OllamaClient(base_url=adres)
-        zaladowane = klient.list_loaded()
-        w_pamieci = {m.get("name") for m in zaladowane}
-        wynik["vram_uzyte"] = sum(m.get("size_vram", 0) for m in zaladowane)
+        zaladowane = {m.get("name"): m for m in klient.list_loaded()}
+        wynik["vram_uzyte"] = sum(m.get("size_vram", 0) for m in zaladowane.values())
+        # WHAT: RAM - dla tego komputera zmierzony z procesów Ollamy (pamięć procesów
+        #       + zmapowane pliki modeli, _ollama_pamiec_procesow), dla zdalnego hosta
+        #       to, co podaje jego API: część modeli, której nie zmieścił w VRAM.
+        # WHY:  prośba użytkownika ("żeby było widać też normalny RAM") - sam VRAM
+        #       zaniżał zużycie, gdy model nie mieści się na karcie.
+        wynik["ram_uzyte"] = sum(max(0, m.get("size", 0) - m.get("size_vram", 0)) for m in zaladowane.values())
+        if wynik["lokalny"]:
+            wynik["ram_calkowite"] = ProbnikZasobow._ram()[1]
+            procesy = _ollama_pamiec_procesow()
+            if procesy:
+                wynik["ram_procesy"] = procesy
+                wynik["ram_uzyte"] = procesy["anon"] + procesy["pliki"]
         for m in klient.list_models():
+            zal = zaladowane.get(m["name"])
             wynik["modele"].append({
                 "nazwa": m["name"], "rozmiar": m["size"],
-                "kwantyzacja": m["quantization_level"], "w_pamieci": m["name"] in w_pamieci,
+                "kwantyzacja": m["quantization_level"], "w_pamieci": zal is not None,
+                "vram": zal.get("size_vram", 0) if zal else 0,
+                "ram": max(0, zal.get("size", 0) - zal.get("size_vram", 0)) if zal else 0,
             })
     except (requests.RequestException, ValueError):
         pass  # WHY: host nie odpowiada - zostaje "offline", ekran pokaże podpowiedź
@@ -1526,9 +1541,59 @@ def hf_wyszukaj_repozytoria(zapytanie):
     )
     r.raise_for_status()
     return [
-        {"id": wpis.get("id", ""), "pobrania": wpis.get("downloads", 0)}
+        {"id": wpis.get("id", ""), "pobrania": wpis.get("downloads", 0), "tagi": wpis.get("tags") or []}
         for wpis in r.json() if wpis.get("id")
     ]
+
+
+# WHAT: rozpoznawanie modeli MoE (mixture of experts) dla pola "Tylko modele MoE".
+# WHY:  ani ollama.com, ani Hugging Face nie mają takiego filtra - sprawdzone na
+#       żywych wynikach (2026-10-28): MoE widać w opisie ("Mixture of Experts",
+#       "MoE"), w tagach HF ("moe", "mixture-of-experts"), w nazwie rozmiaru
+#       ("8x7b") albo aktywnych parametrów ("30b-a3b", "30B-A3B"). Część rodzin
+#       nie mówi tego nigdzie (np. gpt-oss, qwen3-coder) - stąd krótka lista
+#       znanych rodzin MoE. Rozpoznawanie nie jest pełne i okno mówi to uczciwie.
+_WZORZEC_MOE = re.compile(
+    r"\bmoe\b|mixture[- ]of[- ]experts|mixtral|\d+x\d+(\.\d+)?b\b|[-_]a\d+(\.\d+)?b\b", re.IGNORECASE)
+_RODZINY_MOE = re.compile(
+    r"gpt-oss|qwen3-coder|qwen3-next|deepseek-v[23]|llama4|glm-4\.[5-9]|olmoe|dbrx|jamba|kimi-k2|phi-3\.5-moe",
+    re.IGNORECASE)
+
+
+def jest_moe(wynik):
+    # WHAT: czy wynik wyszukiwania (Ollama albo HF) wygląda na model MoE.
+    if wynik.get("moe_z_tagow"):
+        return True
+    tekst = " ".join([wynik.get("id", ""), wynik.get("opis", "")]
+                     + list(wynik.get("tagi", [])) + list(wynik.get("rozmiary", [])))
+    return bool(_WZORZEC_MOE.search(tekst) or _RODZINY_MOE.search(wynik.get("id", "")))
+
+
+def uzupelnij_moe_z_tagow(wyniki):
+    # WHAT: dla modeli z Ollamy, których opis/nazwa nie zdradza MoE, sprawdza tagi
+    #       wariantów (np. qwen3.6: "35b-a3b-...") i zapisuje wynik w "moe_z_tagow".
+    # WHY:  tagi na ollama.com mówią o MoE dużo pewniej niż opisy (sprawdzone:
+    #       qwen3.5/3.6, nemotron, qwen3.8-flash-next nie mówią tego w opisie).
+    #       Osobne zapytanie na model, więc tylko przy włączonym filtrze MoE i
+    #       równolegle - zwykle ok. sekundy zamiast kilkunastu.
+    do_sprawdzenia = [w for w in wyniki if w.get("zrodlo") == "ollama"
+                      and "moe_z_tagow" not in w and not jest_moe(w)]
+
+    def _sprawdz(wynik):
+        try:
+            wynik["moe_z_tagow"] = any(wariant_moe(w[0]) for w in ollama_warianty_modelu(wynik["id"]))
+        except (requests.RequestException, ValueError):
+            pass  # WHY: błąd jednego modelu nie psuje reszty - zostaje "nie-MoE"
+
+    with ThreadPoolExecutor(max_workers=8) as pula:
+        list(pula.map(_sprawdz, do_sprawdzenia))
+    return wyniki
+
+
+def wariant_moe(tag):
+    # WHAT: czy konkretny wariant (tag Ollamy / kwantyzacja HF) to wersja MoE,
+    #       np. "30b-a3b-q4_K_M" albo "8x7b" - dla rodzin z wariantami zwykłymi i MoE.
+    return bool(re.search(r"(^|[-_])a\d+(\.\d+)?b\b|\d+x\d+(\.\d+)?b\b|\bmoe\b", tag or "", re.IGNORECASE))
 
 
 def _rozmiar_na_bajty(tekst):
@@ -2382,9 +2447,10 @@ class SzukajModeliWorker(QThread):
     """
     wynik = pyqtSignal(list, list)  # (wyniki z obu źródeł, komunikaty błędów)
 
-    def __init__(self, zapytanie):
+    def __init__(self, zapytanie, sprawdz_moe=False):
         super().__init__()
         self.zapytanie = zapytanie
+        self.sprawdz_moe = sprawdz_moe
 
     def run(self):
         wyniki, bledy = [], []
@@ -2392,13 +2458,15 @@ class SzukajModeliWorker(QThread):
             # WHY: wyniki z Ollamy ZAWSZE na górze listy (oficjalna biblioteka),
             #      wyniki z HF dopisywane dopiero pod nimi.
             wyniki += ollama_wyszukaj_modele(self.zapytanie)
+            if self.sprawdz_moe:
+                uzupelnij_moe_z_tagow(wyniki)
         except (requests.RequestException, ValueError) as e:
             bledy.append(_("Ollama: {blad}").format(blad=e))
         try:
             for wpis in hf_wyszukaj_repozytoria(self.zapytanie):
                 wyniki.append({
                     "zrodlo": "hf", "id": wpis["id"], "opis": "", "mozliwosci": [],
-                    "rozmiary": [], "pobrania": _formatuj_liczbe(wpis["pobrania"]),
+                    "rozmiary": [], "pobrania": _formatuj_liczbe(wpis["pobrania"]), "tagi": wpis["tagi"],
                 })
         except requests.RequestException as e:
             bledy.append(_("Hugging Face: {blad}").format(blad=e))
@@ -2664,8 +2732,9 @@ class KartaHosta(QFrame):
             self.lbl_stan.setText("online")
             self.lbl_stan.setProperty("state", "ok")
             self.kropka.setProperty("state", "ok")
-            vram = stan["vram_uzyte"] / 1024 ** 3
-            self.lbl_info.setText(_("VRAM {vram:.1f} GB · modele: {n}").format(vram=vram, n=len(stan["modele"])))
+            gib = 1024 ** 3
+            self.lbl_info.setText(_("VRAM {vram:.1f} GB · RAM {ram:.1f} GB · modele: {n}").format(
+                vram=stan["vram_uzyte"] / gib, ram=stan["ram_uzyte"] / gib, n=len(stan["modele"])))
         else:
             self.lbl_stan.setText("offline")
             self.lbl_stan.setProperty("state", "warn")
@@ -3247,6 +3316,23 @@ def _miniatura_czatu(szer, wys, duza=False):
     return ramka
 
 
+class PilnujWysokosci(QObject):
+    """Filtr zdarzeń: minimalna wysokość widżetu = wysokość jego zawiniętych tekstów.
+
+    WHY: Qt nie wlicza zawijanego tekstu (QLabel z setWordWrap) do minimalnej
+         wysokości - przy niskim oknie albo dłuższym tłumaczeniu (np. niemieckim)
+         ściskał kartę i elementy nachodziły na siebie. Tylko dla widżetów o stałej
+         szerokości (np. karta strategii routera), więc przeliczanie się nie zapętla.
+    """
+
+    def eventFilter(self, obiekt, zdarzenie):
+        if zdarzenie.type() == QEvent.Type.Resize and obiekt.layout():
+            potrzebna = obiekt.layout().totalHeightForWidth(obiekt.width())
+            if potrzebna > 0 and potrzebna != obiekt.minimumHeight():
+                obiekt.setMinimumHeight(potrzebna)
+        return False
+
+
 class KartaWyboru(QFrame):
     """Pozycja "radio" z makiety Router (strategia wyboru hosta)."""
     kliknieto = pyqtSignal(str)
@@ -3273,6 +3359,16 @@ class KartaWyboru(QFrame):
         o.setWordWrap(True)
         v.addWidget(o)
         h.addLayout(v, 1)
+
+    def resizeEvent(self, zdarzenie):
+        # WHAT: minimalna wysokość = tyle, ile potrzebuje zawinięty opis przy obecnej szerokości.
+        # WHY:  Qt nie liczy wysokości zawijanego tekstu do minimum - przy niskim
+        #       oknie ściskał ramki i ucinał drugą linię opisu (np. w dłuższych
+        #       tłumaczeniach). Szerokość karty jest stała, więc to się nie zapętla.
+        super().resizeEvent(zdarzenie)
+        potrzebna = self.layout().totalHeightForWidth(self.width())
+        if potrzebna > 0 and potrzebna != self.minimumHeight():
+            self.setMinimumHeight(potrzebna)
 
     def ustaw_wybrana(self, wybrana):
         for widget in (self, self.kropka):
@@ -3520,6 +3616,8 @@ class MainWindow(QMainWindow):
         self._modele = []               # WHY: modele ze wszystkich hostów (ModeleWorker)
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
+        self._tylko_moe = False         # WHY: pole "Tylko modele MoE" w wyszukiwarce; przeżywa przebudowę UI
+        self._wyniki_szukania = []      # WHY: pełne wyniki - pole MoE filtruje je bez ponownego szukania
         self._pobieranie = None         # WHY: jedno pobieranie naraz - {"worker", "model", "host", ...}
         self._warianty_dla = None       # WHY: (źródło, id) modelu, którego warianty CHCEMY pokazać
         self._wpisy = []                # WHY: wszystkie wpisy dziennika (program + systemd)
@@ -3542,7 +3640,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(_("Ollama Manager - lokalny stos AI"))
         # WHY: makiety mają 1280x840 razem z paskiem tytułu - tyle potrzeba,
         #      żeby każdy ekran mieścił się bez ściskania kart.
-        self.setMinimumSize(1280, 800)
+        # WHY: 1600x900 zamiast 1280x800 z makiet - prośba użytkownika ("program za
+        #      mały"; ekran 3440x1440). Na mniejszym ekranie (laptop ze skalowaniem)
+        #      minimum nie może przekroczyć dostępnej przestrzeni, bo okno nie
+        #      zmieściłoby się w całości - stąd przycięcie do rozmiaru ekranu.
+        ekran = QApplication.primaryScreen().availableGeometry() if QApplication.primaryScreen() else None
+        self.setMinimumSize(min(1600, ekran.width()) if ekran else 1600,
+                            min(900, ekran.height()) if ekran else 900)
         self._buduj_ui()
 
         # WHAT: odświeżanie co 10 s (stan usług + dane widocznego ekranu) i co 2 s
@@ -4402,12 +4506,22 @@ class MainWindow(QMainWindow):
         self.pasek_host_vram.setFixedHeight(6)
         kafelek.layout().addWidget(self.pasek_host_vram)
         kafelki.addWidget(kafelek, 0, 0)
-        kafelek, self.lbl_host_ping, self.lbl_host_ping_opis = self._kafelek_hosta(_("Czas odpowiedzi"))
+        kafelek, self.lbl_host_ram, self.lbl_host_ram_opis = self._kafelek_hosta(_("Pamięć RAM"))
+        self.pasek_host_ram = QProgressBar()
+        self.pasek_host_ram.setObjectName("meter")
+        self.pasek_host_ram.setTextVisible(False)
+        self.pasek_host_ram.setFixedHeight(6)
+        kafelek.layout().addWidget(self.pasek_host_ram)
         kafelki.addWidget(kafelek, 0, 1)
+        # WHY: siatka 2x2 zamiast czterech w rzędzie - przy czterech kafelkach w
+        #      jednym rzędzie podpisy i "ollama.service" się ucinały. Pamięć (VRAM
+        #      i RAM) u góry, obok siebie - łatwo porównać.
+        kafelek, self.lbl_host_ping, self.lbl_host_ping_opis = self._kafelek_hosta(_("Czas odpowiedzi"))
+        kafelki.addWidget(kafelek, 1, 0)
         kafelek, self.lbl_host_usluga, self.lbl_host_usluga_opis = self._kafelek_hosta(_("Usługa"))
         self.lbl_host_usluga.setProperty("role", "monoValue")
-        kafelki.addWidget(kafelek, 0, 2)
-        for kolumna in range(3):
+        kafelki.addWidget(kafelek, 1, 1)
+        for kolumna in range(2):
             kafelki.setColumnStretch(kolumna, 1)
         uk.addLayout(kafelki)
 
@@ -4544,6 +4658,34 @@ class MainWindow(QMainWindow):
             self.lbl_host_vram_opis.setText(_("zajęte przez modele (rozmiaru karty zdalnego hosta API nie podaje)"))
             self.pasek_host_vram.hide()
 
+        if not stan:
+            self.lbl_host_ram.setText("—")
+            self.lbl_host_ram_opis.setText(_("sprawdzam..."))
+            self.pasek_host_ram.hide()
+        elif not online:
+            self.lbl_host_ram.setText(_("brak danych"))
+            self.lbl_host_ram_opis.setText("")
+            self.pasek_host_ram.hide()
+        else:
+            uzyte = stan["ram_uzyte"] / gib
+            procesy = stan["ram_procesy"]
+            if stan["ram_calkowite"]:
+                procent = round(100 * stan["ram_uzyte"] / stan["ram_calkowite"])
+                self.lbl_host_ram.setText(f"{uzyte:.1f} / {stan['ram_calkowite'] / gib:.0f} GB")
+                self.pasek_host_ram.setValue(min(100, procent))
+                self.pasek_host_ram.setProperty("state", "error" if procent > 80 else "")
+                _odswiez_styl(self.pasek_host_ram)
+                self.pasek_host_ram.show()
+            else:
+                self.lbl_host_ram.setText(f"{uzyte:.1f} GB")
+                self.pasek_host_ram.hide()
+            if procesy:
+                self.lbl_host_ram_opis.setText(_("procesy {a:.1f} GB + pliki modeli {p:.1f} GB").format(
+                    a=procesy["anon"] / gib, p=procesy["pliki"] / gib))
+            else:
+                # WHY: zdalnego hosta nie zmierzymy z tego komputera - tylko API
+                self.lbl_host_ram_opis.setText(_("część modeli poza VRAM (wg API)"))
+
         if stan and stan["ping_ms"] is not None:
             self.lbl_host_ping.setText(f"{stan['ping_ms']:.0f} ms")
         else:
@@ -4583,7 +4725,8 @@ class MainWindow(QMainWindow):
             # WHAT: ikona zamiast napisu - zielona kość RAM = wczytany do pamięci,
             #       szary dysk = tylko na dysku (prośba użytkownika: "żeby było
             #       widać, że wczytane"). Słowny opis w dymku i dla czytnika ekranu.
-            opis = _("w pamięci") if m["w_pamieci"] else _("na dysku")
+            opis = (_("w pamięci: {vram:.1f} GB VRAM + {ram:.1f} GB RAM").format(
+                vram=m["vram"] / gib, ram=m["ram"] / gib) if m["w_pamieci"] else _("na dysku"))
             lbl = QLabel()
             lbl.setPixmap(_pixmapa_svg("pamiec" if m["w_pamieci"] else "dysk",
                                        PALETA.ok if m["w_pamieci"] else PALETA.wyciszony, 18))
@@ -4686,6 +4829,15 @@ class MainWindow(QMainWindow):
         naglowek.addWidget(self.pill_router, alignment=Qt.AlignmentFlag.AlignVCenter)
         self.btn_router_start = self._przycisk(_("Uruchom"), "odswiez", slot=self.uruchom_litellm)
         naglowek.addWidget(self.btn_router_start, alignment=Qt.AlignmentFlag.AlignVCenter)
+        # WHAT: gotowe ustawienia dla programów łączących się z routerem - w menu.
+        # WHY:  w nagłówku, nie w karcie strategii: tam brakowało wysokości i w
+        #       dłuższych tłumaczeniach ramki strategii nachodziły na siebie.
+        btn_programy = self._przycisk(_("Połącz program"), "kopiuj")
+        menu_programow = QMenu(btn_programy)
+        menu_programow.addAction(_("Config dla Continue..."), self.generuj_config_continue)
+        menu_programow.addAction(_("Połączenie z Open WebUI..."), lambda: DialogPolaczenieWebUI(self).exec())
+        btn_programy.setMenu(menu_programow)
+        naglowek.addWidget(btn_programy, alignment=Qt.AlignmentFlag.AlignVCenter)
         naglowek.addWidget(self._przycisk(_("Dodaj alias"), "plus", "primary", self.dodaj_alias),
                            alignment=Qt.AlignmentFlag.AlignVCenter)
         v.addLayout(naglowek)
@@ -4785,6 +4937,10 @@ class MainWindow(QMainWindow):
         # --- Strategia + adres ---
         karta, uk = self._karta()
         karta.setFixedWidth(330)
+        # WHY: tytuł i opisy strategii zawijają się (zwłaszcza w tłumaczeniach) -
+        #      karta musi dostać ich pełną wysokość, inaczej ramki nachodziły na siebie.
+        self._pilnuj_wysokosci_strategii = PilnujWysokosci(karta)
+        karta.installEventFilter(self._pilnuj_wysokosci_strategii)
         uk.setSpacing(14)
         tytul = _etykieta(_("Gdy model jest na kilku hostach"), "h2")
         tytul.setWordWrap(True)
@@ -4793,9 +4949,9 @@ class MainWindow(QMainWindow):
         wybory = QVBoxLayout()
         wybory.setSpacing(6)
         for klucz, nazwa, opis in (
-            ("simple-shuffle", _("Na zmianę"), _("zapytania rozkładane równo między hosty")),
+            ("simple-shuffle", _("Na zmianę"), _("rozkłada zapytania między hosty")),
             ("least-busy", _("Najmniej zajęty"), _("wybiera host z najmniejszą kolejką")),
-            ("latency-based-routing", _("Najszybszy"), _("wybiera host o najkrótszym czasie odpowiedzi")),
+            ("latency-based-routing", _("Najszybszy"), _("host, który odpowiada najszybciej")),
         ):
             wybor = KartaWyboru(klucz, nazwa, opis)
             wybor.kliknieto.connect(self.wybierz_strategie)
@@ -4803,17 +4959,6 @@ class MainWindow(QMainWindow):
             self._karty_strategii.append(wybor)
         uk.addLayout(wybory)
         uk.addStretch(1)
-        # WHY: gotowe ustawienia dla dwóch programów, które najczęściej łączą się z routerem
-        uk.addWidget(_etykieta(_("Gotowe ustawienia dla programów"), "muted"))
-        programy = QHBoxLayout()
-        programy.setSpacing(6)
-        self.btn_config_continue = self._przycisk("Continue.dev", slot=self.generuj_config_continue)
-        self.btn_config_continue.setToolTip(_("Config dla Continue..."))
-        programy.addWidget(self.btn_config_continue)
-        btn_webui = self._przycisk("Open WebUI", slot=lambda: DialogPolaczenieWebUI(self).exec())
-        btn_webui.setToolTip(_("Połączenie z Open WebUI..."))
-        programy.addWidget(btn_webui)
-        uk.addLayout(programy)
         uk.addWidget(_etykieta(_("Adres dla programów"), "muted"))
         adres = QHBoxLayout()
         adres.setSpacing(6)
@@ -5093,6 +5238,14 @@ class MainWindow(QMainWindow):
         self.combo_host_pobierz.setFixedWidth(200)
         kol.addWidget(self.combo_host_pobierz)
         wiersz.addLayout(kol)
+        self.chk_moe = QCheckBox(_("Tylko modele MoE"))
+        self.chk_moe.setChecked(self._tylko_moe)
+        self.chk_moe.setToolTip(_(
+            "MoE (mixture of experts) to modele, które przy każdym zapytaniu liczą tylko część "
+            "parametrów - działają szybciej na APU i komputerach bez mocnej karty graficznej.\n"
+            "Rozpoznawane po opisie, nazwie i tagach - część modeli MoE może zostać pominięta."))
+        self.chk_moe.toggled.connect(self._przelacz_moe)
+        wiersz.addWidget(self.chk_moe, alignment=Qt.AlignmentFlag.AlignBottom)
         self.btn_szukaj_model = self._przycisk(_("Szukaj"), "szukaj", slot=self.szukaj_modeli)
         wiersz.addWidget(self.btn_szukaj_model, alignment=Qt.AlignmentFlag.AlignBottom)
         self.btn_pull = self._przycisk(_("Pobierz"), "pobierz", "primary", self.pobierz_model)
@@ -5368,16 +5521,40 @@ class MainWindow(QMainWindow):
         self._wypelnij_wyniki([])
         self.btn_szukaj_model.setEnabled(False)
         self.lbl_status_szukania.setText(_("Szukam w bibliotece Ollamy i na Hugging Face..."))
-        worker = SzukajModeliWorker(zapytanie)
+        worker = SzukajModeliWorker(zapytanie, sprawdz_moe=self._tylko_moe)
 
         def _po_szukaniu(wyniki, bledy):
             self.btn_szukaj_model.setEnabled(True)
-            self._wypelnij_wyniki(wyniki)
-            linie = [_("Znalezione modele: {n}").format(n=len(wyniki))]
-            linie += [_("Błąd wyszukiwania - {blad}").format(blad=b) for b in bledy]
-            self.lbl_status_szukania.setText("\n".join(linie))
+            self._wyniki_szukania = wyniki
+            self._bledy_szukania = bledy
+            self._pokaz_wyniki_szukania()
 
         self._uruchom_watek("szukaj", worker, worker.wynik, _po_szukaniu)
+
+    def _pokaz_wyniki_szukania(self):
+        # WHAT: wyniki ostatniego szukania - wszystkie albo tylko MoE (pole wyboru).
+        widoczne = [w for w in self._wyniki_szukania if not self._tylko_moe or jest_moe(w)]
+        self._wypelnij_wyniki(widoczne)
+        if self._tylko_moe:
+            linie = [_("Znalezione modele: {n} (MoE: {m})").format(n=len(self._wyniki_szukania), m=len(widoczne))]
+        else:
+            linie = [_("Znalezione modele: {n}").format(n=len(widoczne))]
+        linie += [_("Błąd wyszukiwania - {blad}").format(blad=b) for b in getattr(self, "_bledy_szukania", [])]
+        self.lbl_status_szukania.setText("\n".join(linie))
+
+    def _przelacz_moe(self, wlacz):
+        self._tylko_moe = wlacz
+        if not self._wyniki_szukania:
+            return
+        if wlacz and any(w.get("zrodlo") == "ollama" and "moe_z_tagow" not in w and not jest_moe(w)
+                         for w in self._wyniki_szukania):
+            # WHY: wyniki szukane bez filtra - tagi modeli z Ollamy sprawdzamy dopiero teraz
+            self.lbl_status_szukania.setText(_("Sprawdzam warianty modeli..."))
+            wyniki = self._wyniki_szukania
+            worker = FunkcjaWorker(lambda: uzupelnij_moe_z_tagow(wyniki))
+            self._uruchom_watek("moe", worker, worker.zakonczono, lambda _ok, _w: self._pokaz_wyniki_szukania())
+        else:
+            self._pokaz_wyniki_szukania()
 
     def _wypelnij_wyniki(self, wyniki):
         # WHAT: tabela wyników - nazwa, źródło, pobrania; cały wynik jako dane wiersza.
@@ -5435,6 +5612,11 @@ class MainWindow(QMainWindow):
             _sprzatnij()
             if self._warianty_dla != (zrodlo, model_id):
                 return
+            # WHY: rodzina z wariantami zwykłymi i MoE (np. qwen3: 8b obok 30b-a3b) -
+            #      przy włączonym filtrze pokazujemy tylko MoE. Gdy żaden tag nie
+            #      zdradza MoE (np. gpt-oss), cały model jest MoE - zostają wszystkie.
+            if self._tylko_moe and any(wariant_moe(w[0]) for w in warianty):
+                warianty = [w for w in warianty if wariant_moe(w[0])]
             self.lbl_status_szukania.setText(_("Znalezione warianty: {n}").format(n=len(warianty)))
             for kwant, rozmiar_bajty, kontekst in warianty:
                 wiersz_w = self.tabela_wariantow.rowCount()

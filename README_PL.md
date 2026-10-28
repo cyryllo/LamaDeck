@@ -76,8 +76,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 **Hosty Ollama**
 - Wszystkie hosty Ollamy (ten komputer i dowolne w LAN, np. BC-250): online/offline, wersja
-  Ollamy, czas odpowiedzi, VRAM zajęty przez modele (dla tego komputera także rozmiar karty)
-  i modele na każdym hoście — na dysku albo w pamięci
+  Ollamy, czas odpowiedzi, VRAM i RAM zajęte przez modele (dla tego komputera także całkowita
+  pamięć) i modele na każdym hoście — na dysku albo w pamięci
 - Dodawanie hosta przez sam adres (`http://` i port 11434 program dopisze sam), usuwanie jednym
   kliknięciem; lista jest wspólna dla routera i ekranu Modele
 - Dla tego komputera: ponowne uruchomienie usługi Ollama i przejście do jej dziennika
@@ -101,6 +101,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   GGUF); wyniki rozwijają się pod polem z każdym wariantem i jego **prawdziwym rozmiarem
   pliku** oraz szacunkiem pamięci. Dokładna nazwa (`llama3.2:3b`, `hf.co/...:Q4_K_M`) + Enter =
   pobieranie od razu; wybierasz host docelowy
+- Pole **„Tylko modele MoE”** — pokazuje tylko modele typu mixture of experts (i tylko ich warianty
+  MoE), które działają dużo szybciej na APU i komputerach bez mocnej karty graficznej. Rozpoznawane
+  po opisie, nazwie, tagach Hugging Face i tagach wariantów Ollamy (np. `30b-a3b`)
 - Postęp pobierania z rozmiarem i prędkością oraz przycisk „Anuluj” (wznowi się później tam, gdzie
   przerwało)
 - Kafelki modeli ze **wszystkich hostów** z filtrami (czat, kod, embedding, wizja): rozmiar,
