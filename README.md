@@ -110,10 +110,10 @@ fonts are bundled, so it looks the same everywhere).
 
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
-- Settings: start with the system, open the browser after start, require login (only switchable
-  off while there are no accounts — otherwise Open WebUI would lock existing users out), port
-- Installation details: version, environment, where chats are stored, whether it's connected to
-  the router; update check and **one-click backup** of all chat data (a ZIP file)
+- Settings: open the browser after start, require login (only switchable off while there are no
+  accounts — otherwise Open WebUI would lock existing users out), port
+- Installation details: environment, where chats are stored, whether it's connected to the router;
+  **one-click backup** of all chat data (a ZIP file)
 - After a fresh install, offers the optional `ffmpeg`/`pandoc`/`zstd` packages (voice, document
   RAG — the only step that needs admin rights)
 
@@ -127,8 +127,9 @@ fonts are bundled, so it looks the same everywhere).
 **Settings**
 - Interface language — Polish, English, German, Spanish, French, Portuguese, Italian; switches
   instantly, remembered between runs
-- Start Ollama with the system, start the router after login
-- Versions and on-demand update checks for Ollama and LiteLLM
+- Autostart of all three services in one place: Ollama with the system, the router and Open WebUI
+  after login
+- Versions and on-demand update checks for Ollama, LiteLLM and Open WebUI
 - Ollama environment variables, each with a short description: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work), `OLLAMA_MAX_LOADED_MODELS`,
   `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,

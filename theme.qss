@@ -68,7 +68,7 @@ QFrame#sidebarPanel {
     border-right: 1px solid #30363d;
 }
 QFrame#sidebarPanel QLabel { background: transparent; }
-QLabel#brandIcon { background: #1d3a4f; border-radius: 9px; }
+QLabel#brandIcon { background: transparent; }
 QLabel#brandName { font-size: 11pt; font-weight: 700; }
 QLabel#brandVersion { font-size: 8pt; color: #a3abb5; }
 /* Link do repozytorium na dole paska - przycisk, bo koloru linku w QLabel
@@ -341,6 +341,7 @@ Paleta {
     qproperty-blad: #f47c84;
     qproperty-boczny: #c9cfd6;
     qproperty-bocznyWybrany: #7cc8f0;
+    qproperty-ok: #5fd38d;
 }
 Przelacznik {
     qproperty-kolorWlaczony: #3daee9;

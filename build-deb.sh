@@ -50,6 +50,7 @@ mkdir -p "$BUILD_DIR/DEBIAN"
 mkdir -p "$BUILD_DIR/usr/bin"
 mkdir -p "$BUILD_DIR/usr/share/$PACKAGE_NAME"
 mkdir -p "$BUILD_DIR/usr/share/applications"
+mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/scalable/apps"
 
 # App + translations + stylesheet (see CLAUDE.md - lang/ and theme.qss MUST
 # travel with the script, both are resolved relative to ollama_manager.py's location)
@@ -59,6 +60,9 @@ cp theme.qss "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 # WHY: bundled Inter + JetBrains Mono (SIL OFL, licenses in fonts/) - loaded by the app
 #      from next to the script, so the UI looks the same on every machine
 cp -r fonts "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+# WHY: app icon next to the script (window icon) and in the system icon theme (menu)
+cp ollama-manager.svg "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+cp ollama-manager.svg "$BUILD_DIR/usr/share/icons/hicolor/scalable/apps/$PACKAGE_NAME.svg"
 
 # WHY: a small wrapper instead of calling the full path straight from
 #      .desktop - this also lets `ollama-manager` be run from a terminal.
@@ -68,7 +72,7 @@ exec python3 /usr/share/$PACKAGE_NAME/ollama_manager.py "\$@"
 EOF
 chmod 755 "$BUILD_DIR/usr/bin/$PACKAGE_NAME"
 
-# Menu entry - same category/icon as install.sh. Comment[pl]: the .desktop
+# Menu entry - same category/icon as install.sh (own icon: ollama-manager.svg). Comment[pl]: the .desktop
 # format supports per-language variants directly (see install.sh).
 cat > "$BUILD_DIR/usr/share/applications/$PACKAGE_NAME.desktop" <<EOF
 [Desktop Entry]
@@ -77,7 +81,7 @@ Name=Ollama Manager
 Comment=Manage the Ollama service and models
 Comment[pl]=Zarządzanie usługą i modelami Ollama
 Exec=$PACKAGE_NAME
-Icon=applications-system
+Icon=$PACKAGE_NAME
 Categories=Utility;
 Terminal=false
 StartupNotify=true
@@ -117,6 +121,7 @@ cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications 2>/dev/null || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
 EOF
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 
@@ -124,6 +129,7 @@ cat > "$BUILD_DIR/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications 2>/dev/null || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
 EOF
 chmod 755 "$BUILD_DIR/DEBIAN/postrm"
 

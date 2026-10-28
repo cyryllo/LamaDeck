@@ -20,11 +20,14 @@ set -euo pipefail
 
 TARGET_DIR="$HOME/.local/share/ollama-manager"
 DESKTOP_FILE="$HOME/.local/share/applications/ollama-manager.desktop"
+# WHY: standard place for a user's own app icons - KDE finds it by name (Icon=ollama-manager)
+ICON_FILE="$HOME/.local/share/icons/hicolor/scalable/apps/ollama-manager.svg"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 SOURCE_SCRIPT="$SCRIPT_DIR/ollama_manager.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
 SOURCE_THEME="$SCRIPT_DIR/theme.qss"
 SOURCE_FONTS_DIR="$SCRIPT_DIR/fonts"
+SOURCE_ICON="$SCRIPT_DIR/ollama-manager.svg"
 TARGET_SCRIPT="$TARGET_DIR/ollama_manager.py"
 
 _version_from_file() {
@@ -68,7 +71,7 @@ remove_app() {
     fi
     echo "Removing Ollama Manager..."
     rm -rf "$TARGET_DIR"
-    rm -f "$DESKTOP_FILE"
+    rm -f "$DESKTOP_FILE" "$ICON_FILE"
     command -v update-desktop-database >/dev/null 2>&1 \
         && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     echo "Done. Ollama Manager has been removed (pip dependencies are kept - other tools may share them)."
@@ -210,6 +213,14 @@ if [ -d "$SOURCE_FONTS_DIR" ]; then
     cp -r "$SOURCE_FONTS_DIR" "$TARGET_DIR/"
 fi
 
+# WHY: the app icon goes twice - next to the script (window icon, loaded by the
+#      app itself) and into the icon theme folder (application menu / taskbar).
+if [ -f "$SOURCE_ICON" ]; then
+    cp "$SOURCE_ICON" "$TARGET_DIR/"
+    mkdir -p "$(dirname "$ICON_FILE")"
+    cp "$SOURCE_ICON" "$ICON_FILE"
+fi
+
 # 3) Application menu entry - Categories=Utility is the "Utilities" section in KDE.
 #    WHY Comment[pl]: the .desktop format supports per-language variants
 #    directly - default (no suffix) in English, Polish as an explicit [pl] variant.
@@ -221,7 +232,7 @@ Name=Ollama Manager
 Comment=Manage the Ollama service and models
 Comment[pl]=Zarządzanie usługą i modelami Ollama
 Exec=python3 "$TARGET_DIR/ollama_manager.py"
-Icon=applications-system
+Icon=ollama-manager
 Categories=Utility;
 Terminal=false
 StartupNotify=true

@@ -111,11 +111,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
-- Ustawienia: start razem z systemem, otwieranie przeglądarki po starcie, wymaganie logowania
-  (wyłączyć da się tylko, dopóki nie ma kont — inaczej Open WebUI zablokowałby istniejących
-  użytkowników), port
-- Szczegóły instalacji: wersja, środowisko, gdzie są czaty, czy jest połączony z routerem;
-  sprawdzanie aktualizacji i **kopia zapasowa** wszystkich czatów jednym kliknięciem (plik ZIP)
+- Ustawienia: otwieranie przeglądarki po starcie, wymaganie logowania (wyłączyć da się tylko,
+  dopóki nie ma kont — inaczej Open WebUI zablokowałby istniejących użytkowników), port
+- Szczegóły instalacji: środowisko, gdzie są czaty, czy jest połączony z routerem;
+  **kopia zapasowa** wszystkich czatów jednym kliknięciem (plik ZIP)
 - Po świeżej instalacji propozycja opcjonalnych pakietów `ffmpeg`/`pandoc`/`zstd` (głos, dokumenty
   w RAG — jedyny krok wymagający uprawnień administratora)
 
@@ -128,8 +127,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 **Ustawienia**
 - Język interfejsu — polski, angielski, niemiecki, hiszpański, francuski, portugalski, włoski;
   zmiana od razu, zapamiętana między uruchomieniami
-- Start Ollamy razem z systemem, start routera po zalogowaniu
-- Wersje i sprawdzanie aktualizacji Ollamy i LiteLLM na żądanie
+- Autostart wszystkich trzech usług w jednym miejscu: Ollama razem z systemem, router i Open WebUI
+  po zalogowaniu
+- Wersje i sprawdzanie aktualizacji Ollamy, LiteLLM i Open WebUI na żądanie
 - Zmienne środowiskowe Ollamy, każda z krótkim opisem: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 to za mało do pracy agentowej), `OLLAMA_MAX_LOADED_MODELS`,
   `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,

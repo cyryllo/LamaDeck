@@ -2839,6 +2839,7 @@ class Paleta(QWidget):
     blad = _wlasciwosc_koloru("blad", "#808080")
     boczny = _wlasciwosc_koloru("boczny", "#808080")
     bocznyWybrany = _wlasciwosc_koloru("bocznyWybrany", "#808080")
+    ok = _wlasciwosc_koloru("ok", "#808080")
 
     def __init__(self):
         super().__init__()
@@ -2868,6 +2869,11 @@ _IKONY_SVG = {
     "otworz": '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
+    # WHAT: stan modelu w tabeli hosta - kość RAM (wczytany do pamięci) i dysk (tylko na dysku)
+    "pamiec": '<rect x="2" y="7" width="20" height="10" rx="1.5"/>'
+              '<path d="M6 10v4M10 10v4M14 10v4M18 10v4M5 17v3M9 17v3M15 17v3M19 17v3"/>',
+    "dysk": '<path d="M22 12H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6'
+            'l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/>',
 }
 
 
@@ -3596,7 +3602,7 @@ class MainWindow(QMainWindow):
         logo.setObjectName("brandIcon")
         logo.setFixedSize(36, 36)
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setPixmap(_pixmapa_svg("logo", PALETA.bocznyWybrany, 22, 1.8))
+        logo.setPixmap(_ikona_programu().pixmap(36, 36))
         marka.addWidget(logo)
         napisy = QVBoxLayout()
         napisy.setSpacing(0)
@@ -4395,13 +4401,11 @@ class MainWindow(QMainWindow):
         naglowki.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for kolumna in (1, 2):
             naglowki.setSectionResizeMode(kolumna, QHeaderView.ResizeMode.ResizeToContents)
-        # WHY: w kolumnie "Stan" są etykiety (setCellWidget), których szerokości
-        #      ResizeToContents nie widzi - stała szerokość na dłuższy z napisów.
+        # WHY: w kolumnie "Stan" jest sama ikona (setCellWidget) - stała, wąska
+        #      szerokość wystarczy na nagłówek i ikonę.
         naglowki.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        # WHY: szerokość liczona z etykiety po nałożeniu stylu (czcionka + odstępy z theme.qss)
-        wzor = _etykieta(_("w pamięci"))
-        wzor.ensurePolished()
-        self.tabela_host_modele.setColumnWidth(3, wzor.sizeHint().width() + 40)
+        self.tabela_host_modele.setColumnWidth(
+            3, self.tabela_host_modele.fontMetrics().horizontalAdvance(_("Stan")) + 48)
         self.tabela_host_modele.verticalHeader().setVisible(False)
         self.tabela_host_modele.verticalHeader().setDefaultSectionSize(40)
         self.tabela_host_modele.setShowGrid(False)
@@ -4558,10 +4562,15 @@ class MainWindow(QMainWindow):
             kwant = QTableWidgetItem(m["kwantyzacja"] if m["kwantyzacja"] not in ("", "unknown") else "—")
             kwant.setFont(mono)
             self.tabela_host_modele.setItem(wiersz, 2, kwant)
-            # WHY: QLabel zamiast zwykłej komórki - kolor stanu bierze z theme.qss
-            #      (QLabel[state=...]), więc w kodzie nie ma żadnego koloru.
-            lbl = _etykieta(_("w pamięci") if m["w_pamieci"] else _("na dysku"),
-                            state="ok" if m["w_pamieci"] else "off")
+            # WHAT: ikona zamiast napisu - zielona kość RAM = wczytany do pamięci,
+            #       szary dysk = tylko na dysku (prośba użytkownika: "żeby było
+            #       widać, że wczytane"). Słowny opis w dymku i dla czytnika ekranu.
+            opis = _("w pamięci") if m["w_pamieci"] else _("na dysku")
+            lbl = QLabel()
+            lbl.setPixmap(_pixmapa_svg("pamiec" if m["w_pamieci"] else "dysk",
+                                       PALETA.ok if m["w_pamieci"] else PALETA.wyciszony, 18))
+            lbl.setToolTip(opis)
+            lbl.setAccessibleName(opis)
             self.tabela_host_modele.setCellWidget(wiersz, 3, lbl)
         self.lbl_host_ostrzezenie.setVisible(bool(stan) and not online)
 
@@ -5645,9 +5654,6 @@ class MainWindow(QMainWindow):
         tytul = _etykieta(_("Ustawienia"), "h2")
         tytul.setContentsMargins(0, 0, 0, 8)
         uk.addWidget(tytul)
-        self.sw_webui_autostart = self._wiersz_przelacznika(
-            uk, _("Uruchamiaj razem z systemem"), _("usługa startuje po zalogowaniu do KDE"),
-            self.przelacz_webui_autostart)
         self.sw_webui_przegladarka = self._wiersz_przelacznika(
             uk, _("Otwieraj przeglądarkę po starcie"), _("przydatne, gdy komputer służy tylko do czatu"),
             lambda w: (webui_zapisz_ustawienie("otworz_po_starcie", w),
@@ -5679,7 +5685,7 @@ class MainWindow(QMainWindow):
         siatka.setVerticalSpacing(10)
         siatka.setColumnMinimumWidth(0, 130)
         self._pola_instalacji_webui = {}
-        for i, (klucz, podpis) in enumerate((("wersja", _("Wersja")), ("srodowisko", _("Środowisko")),
+        for i, (klucz, podpis) in enumerate((("srodowisko", _("Środowisko")),
                                              ("dane", _("Dane czatów")), ("usluga", _("Usługa")),
                                              ("polaczenie", _("Połączenie")))):
             siatka.addWidget(_etykieta(podpis, "muted"), i, 0)
@@ -5693,9 +5699,6 @@ class MainWindow(QMainWindow):
         uk.addStretch(1)
         przyciski = QHBoxLayout()
         przyciski.setSpacing(8)
-        self.btn_sprawdz_aktualizacje_webui = self._przycisk(_("Sprawdź aktualizacje"),
-                                                             slot=self.sprawdz_aktualizacje_webui)
-        przyciski.addWidget(self.btn_sprawdz_aktualizacje_webui)
         self.btn_kopia_webui = self._przycisk(_("Kopia zapasowa danych"), slot=self.kopia_zapasowa_webui)
         przyciski.addWidget(self.btn_kopia_webui)
         self.btn_webui_router = self._przycisk(_("Połącz z routerem..."), slot=lambda: DialogPolaczenieWebUI(self).exec())
@@ -5745,17 +5748,14 @@ class MainWindow(QMainWindow):
         self.btn_webui_duzy.setEnabled(not w_toku)
         self.btn_webui_restart.setEnabled(zainstalowane and not w_toku)
         self.btn_webui_stop.setEnabled(dziala and not w_toku)
-        self.sw_webui_autostart.setEnabled(zainstalowane)
-        self.sw_webui_autostart.ustaw_cicho(stan["webui_autostart"])
-        self.btn_sprawdz_aktualizacje_webui.setEnabled(zainstalowane and not self._w_toku("aktualizacja_webui"))
         self.btn_kopia_webui.setEnabled(zainstalowane)
 
     def odswiez_info_webui(self):
-        # WHAT: wersja, katalog danych, konta i połączenie z routerem - raz przy wejściu na ekran.
+        # WHAT: katalog danych, konta i połączenie z routerem - raz przy wejściu na ekran.
         # WHY:  'uv tool list' i odczyt bazy to wolniejsze operacje - nie co 10 s.
         def _zbierz():
             katalog = webui_katalog_danych()
-            return {"wersja": webui_wersja_lokalna(), "dane": str(katalog) if katalog else None,
+            return {"dane": str(katalog) if katalog else None,
                     "konta": webui_liczba_kont(), "router": webui_podlaczone_do_routera()}
 
         worker = FunkcjaWorker(_zbierz)
@@ -5773,7 +5773,6 @@ class MainWindow(QMainWindow):
         info = self._webui_info
         dom = str(Path.home())
         krotko = lambda sciezka: sciezka.replace(dom, "~", 1) if sciezka else "—"
-        self._pola_instalacji_webui["wersja"].setText(info.get("wersja") or "—")
         self._pola_instalacji_webui["srodowisko"].setText("~/.local/share/uv/tools/open-webui")
         self._pola_instalacji_webui["dane"].setText(krotko(info.get("dane")))
         self._pola_instalacji_webui["usluga"].setText(_("open-webui.service (użytkownik)"))
@@ -6089,6 +6088,11 @@ class MainWindow(QMainWindow):
         self.sw_litellm_autostart = self._wiersz_przelacznika(
             uk, _("Router LiteLLM startuje po zalogowaniu"), _("usługa użytkownika, bez hasła"),
             self.przelacz_litellm_autostart)
+        # WHY: autostart i aktualizacje wszystkich trzech usług w jednym miejscu
+        #      (prośba użytkownika) - ekran Open WebUI zostaje od codziennego użycia.
+        self.sw_webui_autostart = self._wiersz_przelacznika(
+            uk, _("Open WebUI startuje po zalogowaniu"), _("usługa użytkownika, bez hasła"),
+            self.przelacz_webui_autostart)
         uk.addStretch(1)
         rzad.addWidget(karta, 1)
 
@@ -6097,7 +6101,8 @@ class MainWindow(QMainWindow):
         uk.addWidget(_etykieta(_("Wersje i aktualizacje"), "h2"))
         self._lbl_wersji = {}
         for rodzaj, nazwa, slot in (("aktualizacja_ollamy", "Ollama", self.sprawdz_aktualizacje_ollamy),
-                                    ("aktualizacja_litellm", "LiteLLM", self.sprawdz_aktualizacje_litellm)):
+                                    ("aktualizacja_litellm", "LiteLLM", self.sprawdz_aktualizacje_litellm),
+                                    ("aktualizacja_webui", "Open WebUI", self.sprawdz_aktualizacje_webui)):
             wiersz = QFrame()
             wiersz.setObjectName("settingRow")
             h = QHBoxLayout(wiersz)
@@ -6110,11 +6115,13 @@ class MainWindow(QMainWindow):
             h.addWidget(btn)
             if rodzaj == "aktualizacja_ollamy":
                 self.btn_aktualizacje_ollamy = btn
-            else:
+            elif rodzaj == "aktualizacja_litellm":
                 self.btn_aktualizacje_litellm = btn
+            else:
+                self.btn_sprawdz_aktualizacje_webui = btn
             uk.addWidget(wiersz)
-        uwaga = _etykieta(_("Open WebUI aktualizujesz na jego ekranie. Niektóre nowe modele wymagają "
-                            "nowszej Ollamy - warto sprawdzać co jakiś czas."), "muted")
+        uwaga = _etykieta(_("Niektóre nowe modele wymagają nowszej Ollamy - warto sprawdzać co jakiś czas."),
+                          "muted")
         uwaga.setWordWrap(True)
         uwaga.setContentsMargins(0, 10, 0, 0)
         uk.addWidget(uwaga)
@@ -6246,9 +6253,10 @@ class MainWindow(QMainWindow):
         return przewijanie
 
     def odswiez_wersje(self):
-        # WHAT: zainstalowane wersje Ollamy i LiteLLM - bez sprawdzania internetu.
+        # WHAT: zainstalowane wersje Ollamy, LiteLLM i Open WebUI - bez sprawdzania internetu.
         worker = FunkcjaWorker(lambda: {"aktualizacja_ollamy": ollama_wersja_lokalna(),
-                                        "aktualizacja_litellm": litellm_wersja_lokalna()})
+                                        "aktualizacja_litellm": litellm_wersja_lokalna(),
+                                        "aktualizacja_webui": webui_wersja_lokalna()})
 
         def _po(sukces, wynik):
             if sukces:
@@ -6260,8 +6268,6 @@ class MainWindow(QMainWindow):
     def _pokaz_wersje(self):
         for rodzaj, lbl in getattr(self, "_lbl_wersji", {}).items():
             lbl.setText(self._wersje.get(rodzaj, ""))
-        if "aktualizacja_webui" in self._wersje and not self._webui_info.get("wersja"):
-            self._pola_instalacji_webui["wersja"].setText(self._wersje["aktualizacja_webui"])
 
     def _odswiez_ustawienia(self, stan):
         # WHAT: przełączniki autostartu przy każdym odświeżeniu; pola zmiennych
@@ -6273,6 +6279,9 @@ class MainWindow(QMainWindow):
         self.sw_litellm_autostart.ustaw_cicho(stan["litellm_autostart"])
         self.btn_aktualizacje_ollamy.setEnabled(stan["zainstalowana"] and not self._w_toku("aktualizacja_ollamy"))
         self.btn_aktualizacje_litellm.setEnabled(stan["litellm"] and not self._w_toku("aktualizacja_litellm"))
+        self.sw_webui_autostart.setEnabled(stan["webui"])
+        self.sw_webui_autostart.ustaw_cicho(stan["webui_autostart"])
+        self.btn_sprawdz_aktualizacje_webui.setEnabled(stan["webui"] and not self._w_toku("aktualizacja_webui"))
         for widget in self._pola_zmiennych + [self.pole_wlasne_zmienne, self.btn_zalecane_zaawansowane,
                                               self.btn_zapisz_zaawansowane]:
             widget.setEnabled(stan["zainstalowana"])
@@ -6423,6 +6432,15 @@ class MainWindow(QMainWindow):
 
 PALETA = None  # WHY: tworzona w main() po wczytaniu theme.qss (patrz Paleta)
 _PLIK_MOTYWU = Path(__file__).resolve().parent / "theme.qss"
+_PLIK_IKONY = Path(__file__).resolve().parent / "ollama-manager.svg"
+
+
+def _ikona_programu():
+    # WHAT: własna ikona programu (lama w goglach na stosie serwerów) - okno i pasek boczny.
+    # WHY:  leży obok skryptu jak theme.qss; bez pliku - ikona z motywu systemu.
+    if _PLIK_IKONY.exists():
+        return QIcon(str(_PLIK_IKONY))
+    return QIcon.fromTheme("applications-system")
 _KATALOG_CZCIONEK = Path(__file__).resolve().parent / "fonts"
 
 
@@ -6444,8 +6462,10 @@ def _wczytaj_motyw(app):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Ollama Manager")
-    # WHY: ikona z motywu systemowego - spójny wygląd w Breeze, bez własnych zasobów.
-    app.setWindowIcon(QIcon.fromTheme("applications-system"))
+    app.setWindowIcon(_ikona_programu())
+    # WHY: KDE (Wayland) łączy okno z wpisem .desktop po tej nazwie - pasek zadań
+    #      pokaże wtedy ikonę z menu, a nie ogólną ikonę Pythona.
+    app.setDesktopFileName("ollama-manager")
     _wczytaj_motyw(app)
     okno = MainWindow()
     okno.show()
