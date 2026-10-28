@@ -301,7 +301,6 @@
   "Ollama na tym komputerze - zmienne środowiskowe": "Ollama on this computer - environment variables",
   "Ollama startuje razem z systemem": "Ollama starts with the system",
   "Open WebUI": "Open WebUI",
-  "Open WebUI aktualizujesz na jego ekranie. Niektóre nowe modele wymagają nowszej Ollamy - warto sprawdzać co jakiś czas.": "You update Open WebUI on its own screen. Some new models need a newer Ollama - worth checking now and then.",
   "Otwieraj przeglądarkę po starcie": "Open the browser after start",
   "Otwórz Open WebUI": "Open Open WebUI",
   "Otwórz w przeglądarce": "Open in browser",
@@ -336,7 +335,6 @@
   "Ten model nie jest teraz widoczny na żadnym hoście.": "This model is not visible on any host right now.",
   "Tworzę kopię zapasową danych Open WebUI...": "Creating an Open WebUI data backup...",
   "UWAGA": "WARNING",
-  "Uruchamiaj razem z systemem": "Start with the system",
   "Uruchamianie wszystkich usług": "Starting all services",
   "Uruchom Open WebUI": "Start Open WebUI",
   "Uruchom ponownie router": "Restart the router",
@@ -350,7 +348,6 @@
   "W Open WebUI są już konta ({n}). Logowania nie da się wyłączyć, bo Open WebUI przestałby wpuszczać do istniejących kont.": "Open WebUI already has accounts ({n}). Login cannot be turned off, because Open WebUI would stop letting existing accounts in.",
   "WSZYSTKIE USŁUGI": "ALL SERVICES",
   "Wczytaj teraz": "Load now",
-  "Wersja": "Version",
   "Wersje i aktualizacje": "Versions and updates",
   "Wizja": "Vision",
   "Wpisy Ollamy (usługa systemowa) wymagają uprawnień. Możesz wczytać je raz albo zezwolić na stałe (po ponownym zalogowaniu).": "Ollama log entries (a system service) need permission. You can load them once or allow it permanently (after logging in again).",
@@ -408,7 +405,6 @@
   "połączony z routerem": "connected to the router",
   "przydatne, gdy komputer służy tylko do czatu": "useful when the computer is used only for chat",
   "ten komputer": "this computer",
-  "usługa startuje po zalogowaniu do KDE": "the service starts after logging in to KDE",
   "usługa systemowa - zmiana wymaga hasła administratora": "system service - changing it needs the administrator password",
   "usługa użytkownika, bez hasła": "user service, no password",
   "w pamięci: {vram:.1f} GB VRAM + {ram:.1f} GB RAM": "in memory: {vram:.1f} GB VRAM + {ram:.1f} GB RAM",
@@ -428,5 +424,7 @@
   "łączę...": "connecting...",
   "Środowisko": "Environment",
   "Źródła: oficjalna biblioteka Ollamy (ollama.com) i Hugging Face (tylko modele GGUF). Hugging Face to repozytoria społecznościowe - pobieraj od znanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth).": "Sources: the official Ollama library (ollama.com) and Hugging Face (GGUF models only). Hugging Face repositories are community-run - download from well-known quantization authors (e.g. bartowski, mradermacher, unsloth).",
-  "żaden model nie jest w pamięci": "no model is in memory"
+  "żaden model nie jest w pamięci": "no model is in memory",
+  "Niektóre nowe modele wymagają nowszej Ollamy - warto sprawdzać co jakiś czas.": "Some new models need a newer Ollama - worth checking now and then.",
+  "Open WebUI startuje po zalogowaniu": "Open WebUI starts after login"
 }

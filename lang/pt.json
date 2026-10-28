@@ -301,7 +301,6 @@
   "Ollama na tym komputerze - zmienne środowiskowe": "Ollama neste computador - variáveis de ambiente",
   "Ollama startuje razem z systemem": "O Ollama arranca com o sistema",
   "Open WebUI": "Open WebUI",
-  "Open WebUI aktualizujesz na jego ekranie. Niektóre nowe modele wymagają nowszej Ollamy - warto sprawdzać co jakiś czas.": "O Open WebUI atualiza-se no seu próprio ecrã. Alguns modelos novos precisam de um Ollama mais recente - vale a pena verificar de vez em quando.",
   "Otwieraj przeglądarkę po starcie": "Abrir o navegador após arrancar",
   "Otwórz Open WebUI": "Abrir o Open WebUI",
   "Otwórz w przeglądarce": "Abrir no navegador",
@@ -336,7 +335,6 @@
   "Ten model nie jest teraz widoczny na żadnym hoście.": "Este modelo não está visível em nenhum host neste momento.",
   "Tworzę kopię zapasową danych Open WebUI...": "A criar uma cópia de segurança dos dados do Open WebUI...",
   "UWAGA": "AVISO",
-  "Uruchamiaj razem z systemem": "Arrancar com o sistema",
   "Uruchamianie wszystkich usług": "A arrancar todos os serviços",
   "Uruchom Open WebUI": "Iniciar o Open WebUI",
   "Uruchom ponownie router": "Reiniciar o router",
@@ -350,7 +348,6 @@
   "W Open WebUI są już konta ({n}). Logowania nie da się wyłączyć, bo Open WebUI przestałby wpuszczać do istniejących kont.": "O Open WebUI já tem contas ({n}). Não é possível desativar o início de sessão, porque o Open WebUI deixaria de aceitar as contas existentes.",
   "WSZYSTKIE USŁUGI": "TODOS OS SERVIÇOS",
   "Wczytaj teraz": "Carregar agora",
-  "Wersja": "Versão",
   "Wersje i aktualizacje": "Versões e atualizações",
   "Wizja": "Visão",
   "Wpisy Ollamy (usługa systemowa) wymagają uprawnień. Możesz wczytać je raz albo zezwolić na stałe (po ponownym zalogowaniu).": "As entradas do Ollama (um serviço do sistema) requerem permissões. Pode carregá-las uma vez ou permitir de forma permanente (após voltar a iniciar sessão).",
@@ -408,7 +405,6 @@
   "połączony z routerem": "ligado ao router",
   "przydatne, gdy komputer służy tylko do czatu": "útil quando o computador serve só para conversar",
   "ten komputer": "este computador",
-  "usługa startuje po zalogowaniu do KDE": "o serviço arranca ao iniciar sessão no KDE",
   "usługa systemowa - zmiana wymaga hasła administratora": "serviço do sistema - alterá-lo requer a palavra-passe de administrador",
   "usługa użytkownika, bez hasła": "serviço do utilizador, sem palavra-passe",
   "w pamięci: {vram:.1f} GB VRAM + {ram:.1f} GB RAM": "na memória: {vram:.1f} GB VRAM + {ram:.1f} GB RAM",
@@ -428,5 +424,7 @@
   "łączę...": "a ligar...",
   "Środowisko": "Ambiente",
   "Źródła: oficjalna biblioteka Ollamy (ollama.com) i Hugging Face (tylko modele GGUF). Hugging Face to repozytoria społecznościowe - pobieraj od znanych autorów kwantyzacji (np. bartowski, mradermacher, unsloth).": "Fontes: a biblioteca oficial do Ollama (ollama.com) e o Hugging Face (só modelos GGUF). O Hugging Face aloja repositórios da comunidade - transfira de autores de quantizações conhecidos (ex. bartowski, mradermacher, unsloth).",
-  "żaden model nie jest w pamięci": "nenhum modelo está na memória"
+  "żaden model nie jest w pamięci": "nenhum modelo está na memória",
+  "Niektóre nowe modele wymagają nowszej Ollamy - warto sprawdzać co jakiś czas.": "Alguns modelos novos precisam de um Ollama mais recente - vale a pena verificar de vez em quando.",
+  "Open WebUI startuje po zalogowaniu": "O Open WebUI arranca ao iniciar sessão"
 }
