@@ -247,6 +247,35 @@ EOF
 command -v update-desktop-database >/dev/null 2>&1 \
     && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
+# 4) Read access to the Ollama service log for the current user.
+#    WHY: the app's Log screen reads 'journalctl -u ollama' (a system service).
+#    Without the 'systemd-journal' (or 'adm') group journalctl silently returns
+#    nothing, so the app had to ask for a password every time. Asked once here,
+#    default Yes, via sudo in this terminal - same pattern as the apt prompts.
+#    'id -nG "$USER"' reads the group database, not the current session, so a
+#    user who was already added (but hasn't logged in again) isn't asked twice.
+allow_service_log() {
+    if id -nG "$USER" | tr ' ' '\n' | grep -qxE 'adm|systemd-journal|wheel'; then
+        return
+    fi
+    if ! getent group systemd-journal >/dev/null 2>&1; then
+        return
+    fi
+    read -r -p "Let $USER read the Ollama service log in the app (adds you to the 'systemd-journal' group via sudo)? [Y/n] " ANSWER || true
+    case "$ANSWER" in
+        [nN]*)
+            echo "Skipped - you can still allow it later from the app's Log screen."
+            return
+            ;;
+    esac
+    if sudo usermod -a -G systemd-journal "$USER"; then
+        echo "Done - the Ollama log will be visible in the app after you log out and log back in."
+    else
+        echo "Could not change your groups - you can allow it later from the app's Log screen." >&2
+    fi
+}
+allow_service_log
+
 echo "Done. Ollama Manager $NEW_VERSION should now be in the application menu (Utilities)."
 echo "If it doesn't show up right away, log out and log back in."
 echo "To uninstall: ./install.sh --uninstall"

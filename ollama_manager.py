@@ -38,9 +38,11 @@ import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, pyqtProperty, QTimer, QUrl, QSettings, QSize, QByteArray, QRectF, QPointF, QPoint,
+    QRect,
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
+    QImage, QBitmap, QRegion,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -234,6 +236,19 @@ def _systemctl_query(arg):
         return "unknown"
 
 
+def _sciezka_programu(nazwa):
+    # WHAT: pełna ścieżka do programu uruchamianego przez pkexec.
+    # WHY:  pkexec szuka programu w PATH zwykłego użytkownika, a w Debianie nie ma
+    #       w nim /usr/sbin i /sbin - "usermod" kończył się błędem "Cannot run
+    #       program usermod: No such file or directory", zanim w ogóle pojawiło
+    #       się pytanie o hasło. Szukamy więc też w katalogach programów
+    #       administracyjnych i podajemy pkexec gotową ścieżkę.
+    if os.path.isabs(nazwa):
+        return nazwa
+    sciezki = os.environ.get("PATH", "") + ":/usr/local/sbin:/usr/sbin:/sbin"
+    return shutil.which(nazwa, path=sciezki) or nazwa
+
+
 def _pkexec(args, wejscie=None):
     # WHAT: uruchamia polecenie jako root przez polkit.
     # WHY:  pkexec pokazuje graficzny dialog KDE z prośbą o hasło - nie potrzeba
@@ -241,7 +256,8 @@ def _pkexec(args, wejscie=None):
     #       Opcjonalne 'wejscie' idzie na STDIN procesu (np. treść pliku do
     #       zapisania) - bezpieczniejsze niż wstrzykiwanie tekstu do argumentów
     #       powłoki, bo w ogóle nie dotyka parsera 'sh'.
-    r = subprocess.run(["pkexec"] + args, input=wejscie, capture_output=True, text=True)
+    r = subprocess.run(["pkexec", _sciezka_programu(args[0])] + args[1:],
+                       input=wejscie, capture_output=True, text=True)
     if r.returncode != 0:
         # WHY: kod 126 = użytkownik anulował/brak uprawnień, 127 = błąd autoryzacji.
         raise RuntimeError(r.stderr.strip() or _("pkexec: kod wyjścia {kod}").format(kod=r.returncode))
@@ -277,7 +293,7 @@ def usluga_dziennik(linie=200):
     wpisy = [l for l in r.stdout.splitlines() if l.strip() and not l.startswith("-- No entries --")]
     if wpisy:
         return "\n".join(wpisy)
-    r = subprocess.run(["pkexec"] + polecenie, capture_output=True, text=True)
+    r = subprocess.run(["pkexec", _sciezka_programu(polecenie[0])] + polecenie[1:], capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or _("pkexec: kod wyjścia {kod}").format(kod=r.returncode))
     return r.stdout.strip() or _("Dziennik usługi jest pusty.")
@@ -2139,7 +2155,7 @@ def dziennik_usluga(usluga, kursor=None, linie=300, przez_pkexec=False):
         polecenie.insert(1, "--user")
     polecenie += ["--after-cursor", kursor] if kursor else ["-n", str(linie)]
     if przez_pkexec:
-        polecenie = ["pkexec"] + polecenie
+        polecenie = ["pkexec", _sciezka_programu(polecenie[0])] + polecenie[1:]
     try:
         r = subprocess.run(polecenie, capture_output=True, text=True, timeout=None if przez_pkexec else 15)
     except (OSError, subprocess.SubprocessError):
@@ -3600,16 +3616,18 @@ class MainWindow(QMainWindow):
         marka.setSpacing(10)
         logo = QLabel()
         logo.setObjectName("brandIcon")
-        logo.setFixedSize(36, 36)
+        # WHY: 52 px zamiast 36 z makiety - prośba użytkownika ("ikona za mała"),
+        #      logo ma dużo detali, które w 36 px się zlewały.
+        logo.setFixedSize(52, 52)
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setPixmap(_ikona_programu().pixmap(36, 36))
+        logo.setPixmap(_ikona_programu().pixmap(52, 52))
         marka.addWidget(logo)
         napisy = QVBoxLayout()
         napisy.setSpacing(0)
         nazwa = QLabel("Ollama Manager")
         nazwa.setObjectName("brandName")
         napisy.addWidget(nazwa)
-        wersja = QLabel(f"v{WERSJA} · KDE / Qt6")
+        wersja = QLabel(f"v{WERSJA}")
         wersja.setObjectName("brandVersion")
         napisy.addWidget(wersja)
         marka.addLayout(napisy, 1)
@@ -6438,9 +6456,18 @@ _PLIK_IKONY = Path(__file__).resolve().parent / "logo.png"
 def _ikona_programu():
     # WHAT: własna ikona programu (lama w goglach na stosie serwerów) - okno i pasek boczny.
     # WHY:  leży obok skryptu jak theme.qss; bez pliku - ikona z motywu systemu.
-    if _PLIK_IKONY.exists():
+    #       logo.png ma ok. 11% przezroczystego marginesu z każdej strony - przycinamy
+    #       go przy wczytaniu (do kwadratu wokół treści), żeby lama wypełniała ikonę
+    #       także w małych rozmiarach (pasek zadań). Sam plik zostaje nietknięty.
+    if not _PLIK_IKONY.exists():
+        return QIcon.fromTheme("applications-system")
+    obraz = QImage(str(_PLIK_IKONY))
+    tresc = QRegion(QBitmap.fromImage(obraz.createAlphaMask())).boundingRect()
+    if tresc.isEmpty():
         return QIcon(str(_PLIK_IKONY))
-    return QIcon.fromTheme("applications-system")
+    bok = max(tresc.width(), tresc.height())
+    kwadrat = QRect(tresc.center().x() - bok // 2, tresc.center().y() - bok // 2, bok, bok)
+    return QIcon(QPixmap.fromImage(obraz.copy(kwadrat)))
 _KATALOG_CZCIONEK = Path(__file__).resolve().parent / "fonts"
 
 
