@@ -8,9 +8,10 @@ everything runs on your LAN.
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
-> **Status: stable (v0.8.6).** Daily driver on my own setup, working as expected. Still
-> actively developed — new options and features keep coming; [bug reports and
-> feedback](../../issues) are welcome.
+> **Status: stable (v0.9.0) — almost 1.0.** Daily driver on my own setup, working as expected.
+> The feature set is nearly complete: a few chat additions are left before 1.0 (see the
+> [roadmap](#roadmap-to-10)), after which the project switches to bug fixes only.
+> [Bug reports and feedback](../../issues) are welcome.
 
 ![Ollama Manager — Dashboard](om.png)
 
@@ -186,6 +187,22 @@ fonts are bundled, so it looks the same everywhere).
   `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST`, `IPAddressAllow` (limit LAN access),
   `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD`, plus free-form extra variables — one "Save"
   applies everything with a single service restart
+
+## Roadmap to 1.0
+
+**0.9.0** (current) is the near-final release. What's left before **1.0**:
+
+- [ ] Chat: **automatic saving of conversations** to local files, with a list of saved
+  conversations (open, delete, search)
+- [ ] Chat: **context window per conversation** and a usage indicator (e.g. "4,051 / 65,536
+  tokens") that warns before the model starts forgetting the beginning
+- [ ] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
+- [ ] Chat: **regenerate** the last answer and **edit** the last question
+- [ ] Chat: **copy the whole answer** and **export** a conversation to Markdown
+- [ ] `install.sh`: warn when the app is already installed from the `.deb` package
+
+**After 1.0: bug fixes only.** The app covers what it set out to do; anything bigger
+(user accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.
 
 ## Notes
 

@@ -7,9 +7,10 @@ jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, oraz pan
 w przeglądarce (Open WebUI). Bez terminala, bez Dockera, bez chmury — wszystko działa
 lokalnie, w Twoim LAN.
 
-> **Status: stabilna (v0.8.6).** Używam jej na co dzień na własnym sprzęcie i działa
-> zgodnie z oczekiwaniami. Nadal aktywnie rozwijana — regularnie dochodzą nowe opcje
-> i funkcjonalności; [zgłoszenia błędów i uwagi](../../issues) są mile widziane.
+> **Status: stabilna (v0.9.0) — prawie 1.0.** Używam jej na co dzień na własnym sprzęcie
+> i działa zgodnie z oczekiwaniami. Funkcje są prawie kompletne: przed 1.0 zostało kilka
+> dodatków do czatu (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same
+> poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
 ![Ollama Manager — panel główny](om_pl.png)
 
@@ -186,6 +187,22 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   `OLLAMA_IGPU_ENABLE`, `OLLAMA_HOST`, `IPAddressAllow` (ograniczenie dostępu z LAN),
   `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD` i dowolne własne zmienne — jedno „Zapisz”
   stosuje wszystko jednym restartem usługi
+
+## Plan do wersji 1.0
+
+**0.9.0** (obecna) to wersja prawie końcowa. Przed **1.0** zostało:
+
+- [ ] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
+  rozmów (otwieranie, usuwanie, wyszukiwanie)
+- [ ] Czat: **okno kontekstu dla rozmowy** i wskaźnik zajętości (np. „4 051 / 65 536 tokenów”),
+  który ostrzeże, zanim model zacznie zapominać początek rozmowy
+- [ ] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
+- [ ] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
+- [ ] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown
+- [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
+
+**Po 1.0: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe
+(konta użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.
 
 ## Uwagi
 
