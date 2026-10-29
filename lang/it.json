@@ -456,5 +456,9 @@
   "włączony": "attivato",
   "{n} z {m} usług działa": "{n} servizi su {m} in esecuzione",
   "Adres": "Indirizzo",
-  "Host": "Host"
+  "Host": "Host",
+  "Gotowe": "Fatto",
+  "Błąd": "Errore",
+  "Pobieranie zakończone": "Download completato",
+  "Pobieranie nie powiodło się": "Download non riuscito"
 }

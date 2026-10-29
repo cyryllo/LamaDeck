@@ -456,5 +456,9 @@
   "włączony": "activé",
   "{n} z {m} usług działa": "{n} services sur {m} en marche",
   "Adres": "Adresse",
-  "Host": "Hôte"
+  "Host": "Hôte",
+  "Gotowe": "Terminé",
+  "Błąd": "Erreur",
+  "Pobieranie zakończone": "Téléchargement terminé",
+  "Pobieranie nie powiodło się": "Échec du téléchargement"
 }

@@ -39,7 +39,7 @@ import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, pyqtProperty, QTimer, QUrl, QSettings, QSize, QByteArray, QRectF, QPointF, QPoint,
-    QRect, QObject, QEvent,
+    QRect, QObject, QEvent, QVariant, QMetaType,
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
@@ -56,7 +56,7 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtDBus import QDBusInterface
+from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 
 # --- Konfiguracja ---------------------------------------------------------
 # WHAT: wersja aplikacji - widoczna w tytule okna.
@@ -3642,6 +3642,33 @@ def _kwin_przesun_okienko_zasobnika():
     kwin.call("start")
 
 
+def powiadomienie_systemowe(tytul, tekst, zasobnik=None):
+    # WHAT: dymek powiadomienia KDE (org.freedesktop.Notifications przez DBus).
+    # WHY:  DBus, a nie QSystemTrayIcon.showMessage - zasobnik jest domyślnie
+    #       wyłączony, a bez ikony w zasobniku Qt nie pokaże żadnego dymka.
+    #       DBus działa zawsze, bez dodatkowych programów (notify-send).
+    #       "desktop-entry" łączy powiadomienie z wpisem programu w menu, więc KDE
+    #       pokazuje je pod nazwą i ikoną Ollama Managera (i pozwala je wyciszyć
+    #       w Ustawieniach systemu → Powiadomienia).
+    dbus = QDBusInterface("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                          "org.freedesktop.Notifications")
+    if dbus.isValid():
+        # WHY: sygnatura Notify to (susssasa{sv}i) - id i lista akcji muszą mieć
+        #      dokładny typ DBus, inaczej odpowiedź "No such method 'Notify'".
+        bez_id = QVariant(0)
+        bez_id.convert(QMetaType(QMetaType.Type.UInt.value))
+        bez_akcji = QDBusArgument()
+        bez_akcji.add([], QMetaType.Type.QStringList.value)
+        ikona_pliku = str(_PLIK_IKONY) if _PLIK_IKONY.exists() else "ollama-manager"
+        odp = dbus.call("Notify", "Ollama Manager", bez_id, ikona_pliku, tytul, tekst, bez_akcji,
+                        {"desktop-entry": QVariant("ollama-manager")}, 10000)
+        if odp.type() != QDBusMessage.MessageType.ErrorMessage:
+            return
+    # WHY: awaryjnie (pulpit bez usługi powiadomień) - dymek ikony, jeśli jest w zasobniku
+    if zasobnik is not None and zasobnik.isVisible():
+        zasobnik.showMessage(tytul, tekst, _ikona_programu(), 10000)
+
+
 class OknoZasobnika(QWidget):
     """Okienko po kliknięciu ikony w zasobniku: usługi, zasoby, modele w pamięci.
 
@@ -4227,13 +4254,17 @@ class MainWindow(QMainWindow):
         self._dodaj_wpisy([{"czas": time.time(), "usluga": usluga, "poziom": poziom, "tekst": tekst}])
         self.statusBar().showMessage(tekst, 10000)
 
-    def _uruchom_akcje(self, funkcja, opis, po=None):
+    def _uruchom_akcje(self, funkcja, opis, po=None, powiadom=False):
         # WHAT: akcja w tle, wynik do dziennika, potem odświeżenie stanu.
+        #       powiadom=True - długie operacje (instalacje, aktualizacje): po końcu
+        #       dymek KDE, gdy okno nie jest na wierzchu (_powiadom_w_tle).
         worker = ActionWorker(funkcja, opis)
         self._workers.append(worker)
 
         def _sprzatnij(sukces, komunikat, w=worker):
             self.wpis_log(komunikat, None if sukces else "BŁĄD")
+            if powiadom:
+                self._powiadom_w_tle(_("Gotowe") if sukces else _("Błąd"), komunikat)
             if w in self._workers:
                 self._workers.remove(w)
             if po:
@@ -4245,6 +4276,12 @@ class MainWindow(QMainWindow):
         worker.zakonczono.connect(_sprzatnij)
         worker.start()
         return worker
+
+    def _powiadom_w_tle(self, tytul, tekst):
+        # WHY: tylko gdy okno NIE jest aktywne (schowane, zminimalizowane, inne okno
+        #      na wierzchu) - gdy patrzysz na program, wynik i tak widać w oknie.
+        if not self.isActiveWindow():
+            powiadomienie_systemowe(tytul, tekst, self.zasobnik)
 
     def _zasobnik_otwarty(self):
         return bool(self.okno_zasobnika and self.okno_zasobnika.isVisible())
@@ -4746,7 +4783,7 @@ class MainWindow(QMainWindow):
         if odp != QMessageBox.StandardButton.Yes:
             return
         self.wpis_log(_("Instaluję Ollamę - to może potrwać kilka minut..."))
-        self._watki["ollama"] = self._uruchom_akcje(ollama_zainstaluj, _("Instalacja Ollamy"))
+        self._watki["ollama"] = self._uruchom_akcje(ollama_zainstaluj, _("Instalacja Ollamy"), powiadom=True)
 
     def zainstaluj_litellm(self):
         if self._w_toku("litellm"):
@@ -4760,7 +4797,7 @@ class MainWindow(QMainWindow):
         if odp != QMessageBox.StandardButton.Yes:
             return
         self.wpis_log(_("Instaluję LiteLLM - to może potrwać kilka minut..."))
-        self._watki["litellm"] = self._uruchom_akcje(litellm_zainstaluj, _("Instalacja LiteLLM"))
+        self._watki["litellm"] = self._uruchom_akcje(litellm_zainstaluj, _("Instalacja LiteLLM"), powiadom=True)
 
     def zainstaluj_webui(self):
         if self._w_toku("webui"):
@@ -4779,7 +4816,7 @@ class MainWindow(QMainWindow):
             if sukces:
                 self._zapytaj_o_opcjonalne_pakiety_webui()
 
-        self._watki["webui"] = self._uruchom_akcje(webui_zainstaluj, _("Instalacja Open WebUI"), _po)
+        self._watki["webui"] = self._uruchom_akcje(webui_zainstaluj, _("Instalacja Open WebUI"), _po, powiadom=True)
 
     def _zapytaj_o_opcjonalne_pakiety_webui(self):
         # WHY: Docker image WebUI ma ffmpeg/pandoc/zstd w środku, goły 'uv tool
@@ -4795,7 +4832,7 @@ class MainWindow(QMainWindow):
         if odp != QMessageBox.StandardButton.Yes:
             return
         self.wpis_log(_("Instaluję opcjonalne pakiety WebUI (ffmpeg, pandoc, zstd)..."))
-        self._uruchom_akcje(webui_zainstaluj_opcjonalne, _("Instalacja opcjonalnych pakietów WebUI"))
+        self._uruchom_akcje(webui_zainstaluj_opcjonalne, _("Instalacja opcjonalnych pakietów WebUI"), powiadom=True)
 
     # =========================================================================
     #  Ekran "Hosty Ollama" (makieta Hosts.dc.html)
@@ -6190,6 +6227,10 @@ class MainWindow(QMainWindow):
         self.ramka_pobierania.hide()
         self._aktualizuj_przycisk_pobierz()
         self.wpis_log(komunikat, "INFO" if sukces or anulowane else "BŁĄD", "Ollama")
+        if not anulowane:
+            # WHY: pobranie dużego modelu trwa długo - pewnie patrzysz wtedy na coś innego
+            self._powiadom_w_tle(_("Pobieranie zakończone") if sukces else _("Pobieranie nie powiodło się"),
+                                 komunikat)
         self.odswiez_modele()  # WHY: świeżo pobrany model powinien od razu pojawić się w siatce
         self.odswiez_hosty()
 
@@ -6444,7 +6485,7 @@ class MainWindow(QMainWindow):
             plik += ".zip"
         self.wpis_log(_("Tworzę kopię zapasową danych Open WebUI..."))
         self._uruchom_akcje(lambda: webui_kopia_zapasowa(plik),
-                            _("Kopia zapasowa Open WebUI: {plik}").format(plik=plik))
+                            _("Kopia zapasowa Open WebUI: {plik}").format(plik=plik), powiadom=True)
 
     # --- Aktualizacje (Ollama / WebUI / LiteLLM) -----------------------------
     def _sprawdz_aktualizacje(self, rodzaj, nazwa, lokalna, najnowsza, przycisk, aktualizuj, opis_aktualizacji):
@@ -6476,7 +6517,7 @@ class MainWindow(QMainWindow):
                     nazwa=nazwa, najnowsza=wynik["najnowsza"], lokalna=wynik["lokalna"], opis=opis_aktualizacji))
             if odp == QMessageBox.StandardButton.Yes:
                 self.wpis_log(_("Aktualizuję: {nazwa} - to może potrwać kilka minut...").format(nazwa=nazwa))
-                self._watki[rodzaj] = self._uruchom_akcje(aktualizuj, _("Aktualizacja: {nazwa}").format(nazwa=nazwa))
+                self._watki[rodzaj] = self._uruchom_akcje(aktualizuj, _("Aktualizacja: {nazwa}").format(nazwa=nazwa), powiadom=True)
 
         self._uruchom_watek(rodzaj, worker, worker.wynik, _po)
 

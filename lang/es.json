@@ -456,5 +456,9 @@
   "włączony": "activado",
   "{n} z {m} usług działa": "{n} de {m} servicios en marcha",
   "Adres": "Dirección",
-  "Host": "Host"
+  "Host": "Host",
+  "Gotowe": "Listo",
+  "Błąd": "Error",
+  "Pobieranie zakończone": "Descarga completada",
+  "Pobieranie nie powiodło się": "La descarga ha fallado"
 }

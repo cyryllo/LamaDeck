@@ -456,5 +456,9 @@
   "włączony": "ativado",
   "{n} z {m} usług działa": "{n} de {m} serviços em execução",
   "Adres": "Endereço",
-  "Host": "Host"
+  "Host": "Host",
+  "Gotowe": "Concluído",
+  "Błąd": "Erro",
+  "Pobieranie zakończone": "Transferência concluída",
+  "Pobieranie nie powiodło się": "A transferência falhou"
 }

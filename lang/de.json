@@ -456,5 +456,9 @@
   "włączony": "an",
   "{n} z {m} usług działa": "{n} von {m} Diensten laufen",
   "Adres": "Adresse",
-  "Host": "Host"
+  "Host": "Host",
+  "Gotowe": "Fertig",
+  "Błąd": "Fehler",
+  "Pobieranie zakończone": "Download abgeschlossen",
+  "Pobieranie nie powiodło się": "Download fehlgeschlagen"
 }

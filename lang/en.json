@@ -456,5 +456,9 @@
   "włączony": "on",
   "{n} z {m} usług działa": "{n} of {m} services running",
   "Adres": "Address",
-  "Host": "Host"
+  "Host": "Host",
+  "Gotowe": "Done",
+  "Błąd": "Error",
+  "Pobieranie zakończone": "Download finished",
+  "Pobieranie nie powiodło się": "Download failed"
 }
