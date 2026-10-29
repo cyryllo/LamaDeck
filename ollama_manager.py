@@ -2266,7 +2266,32 @@ def dziennik_zezwol_na_odczyt():
 # =============================================================================
 #  Wątki robocze - żeby nie blokować GUI
 # =============================================================================
-class RefreshWorker(QThread):
+class WatekTla(QThread):
+    """Wspólna baza wątków roboczych: wątek żyje, dopóki naprawdę się nie skończy.
+
+    WHY: wątek wysyła swój sygnał "gotowe" jeszcze W TRAKCIE run() (potem np.
+         zamyka połączenie). Gdy okno w odpowiedzi wyrzucało ostatnie odwołanie
+         do niego (self._czat_worker = None, self._pobieranie = None), Python
+         niszczył działający wątek, a Qt w takiej sytuacji celowo zabija cały
+         program ("QThread: Destroyed while thread is still running") - program
+         "sam się zamykał" (zgłoszenie użytkownika 2026-10-29, potwierdzone
+         w zrzucie pamięci). Tu wątek trzyma sam siebie w _zywe od start() do
+         sygnału finished, niezależnie od tego, co zrobi okno.
+    """
+    _zywe = set()
+
+    def start(self, *argumenty):
+        WatekTla._zywe.add(self)
+        self.finished.connect(self._zwolnij)
+        super().start(*argumenty)
+
+    def _zwolnij(self):
+        # WHY: finished przychodzi tuż PRZED faktycznym końcem wątku - chwila czekania
+        self.wait()
+        WatekTla._zywe.discard(self)
+
+
+class RefreshWorker(WatekTla):
     """Stan usług tego komputera: Ollama (systemd), Open WebUI, LiteLLM.
 
     WHY: wywołania systemctl i zapytania HTTP nie mogą iść w wątku GUI. Hosty
@@ -2293,7 +2318,7 @@ class RefreshWorker(QThread):
         })
 
 
-class ModeleWorker(QThread):
+class ModeleWorker(WatekTla):
     """Modele ze wszystkich hostów (ekran "Modele"), patrz zbierz_modele()."""
     wynik = pyqtSignal(list, list)  # (modele, hosty online)
 
@@ -2305,7 +2330,7 @@ class ModeleWorker(QThread):
         self.wynik.emit(*zbierz_modele(self.serwery))
 
 
-class ZasobyWorker(QThread):
+class ZasobyWorker(WatekTla):
     """Jedna próbka zasobów komputera (ProbnikZasobow) w tle.
 
     WHY: odczyt /proc i sysfs jest szybki, ale nvidia-smi to osobny proces -
@@ -2321,7 +2346,7 @@ class ZasobyWorker(QThread):
         self.wynik.emit(self.probnik.probka())
 
 
-class DziennikWorker(QThread):
+class DziennikWorker(WatekTla):
     """Nowe wpisy z journald dla Ollamy, LiteLLM i Open WebUI."""
     wynik = pyqtSignal(list, dict, bool)  # (wpisy, kursory, czy dziennik Ollamy jest dostępny)
 
@@ -2344,7 +2369,7 @@ class DziennikWorker(QThread):
         self.wynik.emit(wszystkie, self.kursory, dostep_ollama)
 
 
-class PullWorker(QThread):
+class PullWorker(WatekTla):
     """Pobiera model w tle wraz z postępem (z możliwością anulowania)."""
     postep = pyqtSignal(int, str, object, object)  # (procent lub -1, status, pobrane B, całość B)
     zakonczono = pyqtSignal(bool, str)  # (sukces, komunikat)
@@ -2383,7 +2408,7 @@ class PullWorker(QThread):
             strumien.close()
 
 
-class CzatWorker(QThread):
+class CzatWorker(WatekTla):
     """Jedna odpowiedź modelu na ekranie "Czat" (POST /api/chat, strumień).
 
     WHY: wprost do Ollamy wybranego hosta, nie przez router - czat działa też
@@ -2462,7 +2487,7 @@ class CzatWorker(QThread):
                 self.zakonczono.emit(False, str(e))
 
 
-class ActionWorker(QThread):
+class ActionWorker(WatekTla):
     """Uruchamia dowolną krótką akcję (funkcję) w tle.
 
     WHY: sterowanie usługą (dialog pkexec) i usuwanie modelu (sieć) są krótkie,
@@ -2483,7 +2508,7 @@ class ActionWorker(QThread):
             self.zakonczono.emit(False, _("{opis}: błąd - {blad}").format(opis=self.opis, blad=e))
 
 
-class SprawdzAktualizacjeWorker(QThread):
+class SprawdzAktualizacjeWorker(WatekTla):
     """Sprawdza w tle, czy jest dostępna nowsza wersja programu niż zainstalowana.
 
     WHY: odczyt lokalnej wersji (subprocess) i zapytanie o najnowszą (sieć) są
@@ -2519,7 +2544,7 @@ class SprawdzAktualizacjeWorker(QThread):
         self.wynik.emit({"blad": None, "lokalna": lokalna, "najnowsza": najnowsza, "dostepna": dostepna})
 
 
-class SzukajModeliWorker(QThread):
+class SzukajModeliWorker(WatekTla):
     """Szuka modeli naraz w obu źródłach (biblioteka Ollamy + Hugging Face), w tle.
 
     WHY: jedna wspólna wyszukiwarka w karcie "Pobierz nowy model" - błąd
@@ -2555,7 +2580,7 @@ class SzukajModeliWorker(QThread):
         self.wynik.emit(wyniki, bledy)
 
 
-class WariantyModeluWorker(QThread):
+class WariantyModeluWorker(WatekTla):
     """Pobiera w tle listę wariantów wybranego modelu - z Ollamy albo z HF.
 
     WHY: jeden worker dla obu źródeł - różni się tylko funkcja czytająca
@@ -2582,7 +2607,7 @@ class WariantyModeluWorker(QThread):
         self.wynik.emit(self.zrodlo, self.model_id, warianty)
 
 
-class AgregatorWorker(QThread):
+class AgregatorWorker(WatekTla):
     """Odpytuje na żywo hosty z listy serwerów o zainstalowane modele.
 
     WHY: podgląd "co trafi do configu LiteLLM" wymaga /api/tags na KAŻDYM
@@ -2601,7 +2626,7 @@ class AgregatorWorker(QThread):
 # =============================================================================
 #  Zarządzanie listą serwerów (dialog otwierany z paska w głównym oknie)
 # =============================================================================
-class HostyWorker(QThread):
+class HostyWorker(WatekTla):
     """Sprawdza w tle wszystkie hosty z listy serwerów (ekran "Hosty Ollama").
 
     WHY: kilka zapytań na host, a nieosiągalny host czeka do końca timeoutu -
@@ -2618,7 +2643,7 @@ class HostyWorker(QThread):
         self.wynik.emit([sprawdz_host(s) for s in self.serwery])
 
 
-class FunkcjaWorker(QThread):
+class FunkcjaWorker(WatekTla):
     """Uruchamia w tle funkcję, która ZWRACA wynik (np. tekst dziennika).
 
     WHY: ActionWorker oddaje tylko "OK"/błąd do dziennika aplikacji - tu wynik
@@ -6837,7 +6862,6 @@ class MainWindow(QMainWindow):
             self._czat_zegar.setInterval(1000)
             self._czat_zegar.timeout.connect(self._czat_tyk_czekania)
         self._czat_zegar.start()
-        worker.finished.connect(worker.deleteLater)
         worker.start()
         self._odswiez_przycisk_czatu()
 
