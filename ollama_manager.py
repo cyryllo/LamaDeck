@@ -8720,7 +8720,7 @@ class MainWindow(QMainWindow):
         # WHY: osobna funkcja - po zmianie języka menu trzeba zbudować na nowo
         menu = QMenu(self)
         menu.addAction(_("Otwórz panel zarządzania"), self.pokaz_okno)
-        menu.addAction(_("Otwórz czat"), self.otworz_webui)
+        menu.addAction(_("Otwórz czat"), self.otworz_czat)  # WHY: wbudowany czat, jak przycisk w okienku zasobnika
         menu.addSeparator()
         menu.addAction(_("Zakończ"), self.zakoncz)
         self.zasobnik.setContextMenu(menu)
