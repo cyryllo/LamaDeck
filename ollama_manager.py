@@ -6748,10 +6748,20 @@ class MainWindow(QMainWindow):
             return True
         return super().eventFilter(obiekt, zdarzenie)
 
+    @staticmethod
+    def _umie_rozmawiac(model):
+        # WHAT: czy model obsługuje czat - możliwość "completion" z /api/show.
+        # WHY:  modele bez niej (embeddingi, rerankery, generatory obrazów) i tak
+        #       zwróciłyby błąd. Gdy Ollama nie podała możliwości (starsza wersja),
+        #       odrzucamy tylko embeddingi, jak wcześniej.
+        if model.get("mozliwosci"):
+            return "completion" in model["mozliwosci"]
+        return model["rodzaj"] != "embedding"
+
     def _modele_czatu(self):
-        # WHAT: (model, host) do wyboru - bez embeddingów (nie umieją rozmawiać);
+        # WHAT: (model, host) do wyboru - tylko modele umiejące rozmawiać;
         #       tylko hosty online, bo tylko takie zbiera zbierz_modele.
-        return [(m, h) for m in self._modele if m["rodzaj"] != "embedding" for h in m["hosty"]]
+        return [(m, h) for m in self._modele if self._umie_rozmawiac(m) for h in m["hosty"]]
 
     def _odswiez_modele_czatu(self):
         if not hasattr(self, "combo_czat_model"):
