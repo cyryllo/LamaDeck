@@ -121,6 +121,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   przydatne do porównywania modeli i ustawień Ollamy
 - Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
 - Rozmowy nie są zapisywane — pełny czat z historią daje Open WebUI
+- Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
@@ -139,8 +140,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 **Zasobnik systemowy** (opcjonalny, domyślnie wyłączony — włączasz w Ustawieniach)
 - Ikona przy zegarze z małym panelem: zainstalowane usługi z przełącznikami, CPU / VRAM / RAM,
-  modele w pamięci i przyciski otwierające czat (Open WebUI, a bez niego wbudowany czat) albo
-  panel zarządzania
+  modele w pamięci i przyciski otwierające wbudowany czat albo panel
+  zarządzania
 - Zamknięcie okna chowa je do zasobnika; program kończysz z menu ikony
 - Opcjonalnie start programu po zalogowaniu, od razu schowanego w zasobniku
 - Działa tylko jedna kopia programu — ponowne uruchomienie po prostu pokazuje okno

@@ -53,7 +53,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
-    QSystemTrayIcon, QTextBrowser,
+    QSystemTrayIcon, QTextBrowser, QToolTip,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
@@ -2391,6 +2391,7 @@ class CzatWorker(QThread):
          niesie liczby tokenów i czasy, z których liczymy tokeny/s.
     """
     fragment = pyqtSignal(str, str)        # (kawałek odpowiedzi, kawałek rozumowania)
+    ladowanie = pyqtSignal()               # model nie jest w pamięci - pierwsze słowo chwilę potrwa
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
     def __init__(self, adres, model, wiadomosci):
@@ -2410,8 +2411,22 @@ class CzatWorker(QThread):
             except Exception:
                 pass
 
+    def _model_w_pamieci(self):
+        # WHAT: czy model jest już wczytany na tym hoście (/api/ps); None = nie wiadomo.
+        # WHY:  Ollama nie wysyła żadnego znaku "wczytuję model" ani postępu wczytywania -
+        #       pierwszy kawałek odpowiedzi przychodzi dopiero po wczytaniu. Pytamy więc
+        #       sami, zanim wyślemy pytanie, żeby okno mogło uprzedzić o dłuższym czekaniu.
+        try:
+            odp = requests.get(f"{self.adres}/api/ps", timeout=3)
+            odp.raise_for_status()
+            return any(self.model in (m.get("name"), m.get("model")) for m in odp.json().get("models", []))
+        except (requests.RequestException, ValueError):
+            return None
+
     def run(self):
         statystyki = {}
+        if self._model_w_pamieci() is False:
+            self.ladowanie.emit()
         try:
             # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
             #      pierwszym słowem potrafi trwać ponad minutę.
@@ -3021,20 +3036,38 @@ class WidokCzatu(QTextBrowser):
     tloTy = _wlasciwosc_koloru("tloTy", "#808080")
     tloModelu = _wlasciwosc_koloru("tloModelu", "#808080")
     tloKodu = _wlasciwosc_koloru("tloKodu", "#808080")
+    kolorLinku = _wlasciwosc_koloru("kolorLinku", "#808080")
 
     def __init__(self):
         super().__init__()
         self._kolory = {}
         self.setObjectName("chatView")
-        self.setOpenExternalLinks(True)
+        # WHY: linki obsługujemy sami - "Kopiuj kod" to nie adres, a zwykłe linki
+        #      z odpowiedzi modelu otwieramy w przeglądarce (_klik_linku)
+        self.setOpenLinks(False)
+        self.anchorClicked.connect(self._klik_linku)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.pokaz_myslenie = False
         self._start_ostatniej = 0
+        self._kody = {}  # WHY: treść bloków kodu pod linkami "Kopiuj kod" (kopiuj:<numer>)
         self.ensurePolished()
 
-    def pokaz(self, wiadomosci, pusty_tekst=""):
-        # WHAT: cała rozmowa od nowa (nowa wiadomość, nowa rozmowa, zmiana języka).
+    def _przewin(self, wartosc, na_dole, do_dolu=False):
+        # WHY: w dół tylko, gdy ktoś był na dole (albo właśnie wysłał pytanie) - inaczej
+        #      wraca dokładnie tam, gdzie czytał. Bez tego przy przebudowie tekstu
+        #      dokument na chwilę się skracał i suwak "uciekał" (zgłoszenie użytkownika).
+        pasek = self.verticalScrollBar()
+        pasek.setValue(pasek.maximum() if (na_dole or do_dolu) else min(wartosc, pasek.maximum()))
+
+    def _pozycja(self):
+        pasek = self.verticalScrollBar()
+        return pasek.value(), pasek.value() >= pasek.maximum() - 8
+
+    def pokaz(self, wiadomosci, pusty_tekst="", do_dolu=False):
+        # WHAT: cała rozmowa od nowa (nowa wiadomość, koniec odpowiedzi, zmiana języka).
+        wartosc, na_dole = self._pozycja()
         self.document().clear()
+        self._kody = {}
         if not wiadomosci:
             c = QTextCursor(self.document())
             format_bloku = QTextBlockFormat()
@@ -3047,22 +3080,29 @@ class WidokCzatu(QTextBrowser):
             self._wstaw(wiadomosc)
         self._start_ostatniej = self._koniec()
         self._wstaw(wiadomosci[-1])
-        self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+        self._przewin(wartosc, na_dole, do_dolu)
 
     def odswiez_ostatnia(self, wiadomosc):
         # WHAT: podmienia tylko ostatnią wiadomość - tę, która właśnie się pisze.
         # WHY:  przebudowa całej długiej rozmowy kilka razy na sekundę byłaby
-        #       zbędnym kosztem. Przewijamy w dół tylko, gdy ktoś był na dole -
-        #       inaczej nie da się czytać starszych wiadomości w trakcie pisania.
-        pasek = self.verticalScrollBar()
-        na_dole = pasek.value() >= pasek.maximum() - 8
+        #       zbędnym kosztem. Usunięcie i wstawienie w JEDNYM bloku edycji -
+        #       dokument przelicza układ raz, bez chwilowego skrócenia.
+        wartosc, na_dole = self._pozycja()
         c = QTextCursor(self.document())
+        c.beginEditBlock()
         c.setPosition(self._start_ostatniej)
         c.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
         c.removeSelectedText()
         self._wstaw(wiadomosc)
-        if na_dole:
-            pasek.setValue(pasek.maximum())
+        c.endEditBlock()
+        self._przewin(wartosc, na_dole)
+
+    def _klik_linku(self, url):
+        if url.scheme() == "kopiuj":
+            QApplication.clipboard().setText(self._kody.get(url.path(), ""))
+            QToolTip.showText(QCursor.pos(), _("Skopiowano do schowka"), self)
+        else:
+            QDesktopServices.openUrl(url)
 
     def _koniec(self):
         return self.document().characterCount() - 1
@@ -3109,14 +3149,35 @@ class WidokCzatu(QTextBrowser):
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
         elif w.get("trwa"):
-            c.insertText(_("model myśli...") if myslenie else _("czekam na odpowiedź..."),
-                         self._znaki(self.kolorWyciszony, kursywa=True))
+            if myslenie:
+                tekst = _("model myśli...")
+            elif w.get("laduje"):
+                tekst = _("Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę "
+                          "trwa, potem odpowiedzi idą od razu...").format(gb=w.get("gb", 0))
+            else:
+                tekst = _("czekam na odpowiedź...")
+            # WHY: licznik sekund - widać, że program żyje, a nie zawiesił się
+            sekundy = int(time.monotonic() - w.get("start", time.monotonic()))
+            if sekundy >= 1:
+                tekst += f"  {sekundy} s"
+            c.insertText(tekst, self._znaki(self.kolorWyciszony, kursywa=True))
         self._styl_kodu(ramka)
 
     def _styl_kodu(self, ramka):
-        # WHAT: bloki kodu - tło i JetBrains Mono, zawijane; `kod` w tekście - ta sama czcionka.
+        # WHAT: bloki kodu - tło i JetBrains Mono, zawijane, z linkiem "Kopiuj kod" nad
+        #       każdym; `kod` w tekście - ta sama czcionka.
         # WHY:  Qt rozpoznaje kod z Markdownu (czcionka o stałej szerokości), ale nie
         #       daje mu tła, a długie linie zostawiłby niezawinięte (przewijanie w bok).
+        czcionka = QFont("JetBrains Mono")
+        czcionka.setPointSizeF(max(1.0, self.font().pointSizeF() - 0.5))
+        # WHY: bez ligatur - JetBrains Mono rysowała "<!--" jako strzałki, a "->" / ">="
+        #      jako jeden znak; w kodzie do skopiowania ma być widać dokładnie te znaki
+        czcionka.setFeature(QFont.Tag("liga"), 0)
+        czcionka.setFeature(QFont.Tag("calt"), 0)
+        f_kodu = QTextCharFormat()
+        f_kodu.setFont(czcionka, QTextCharFormat.FontPropertiesInheritanceBehavior.FontPropertiesSpecifiedOnly)
+        grupy = []  # (pozycja pierwszego bloku, linie) - kolejne bloki kodu = jeden fragment kodu
+        poprzedni_kod = False
         blok = ramka.firstCursorPosition().block()
         while blok.isValid() and blok.position() < ramka.lastPosition():
             format_bloku = blok.blockFormat()
@@ -3125,6 +3186,11 @@ class WidokCzatu(QTextBrowser):
                 format_bloku.setNonBreakableLines(False)
                 format_bloku.setBackground(self.tloKodu)
                 QTextCursor(blok).setBlockFormat(format_bloku)
+                if poprzedni_kod:
+                    grupy[-1][1].append(blok.text())
+                else:
+                    grupy.append((blok.position(), [blok.text()]))
+            poprzedni_kod = kod
             it = blok.begin()
             while not it.atEnd():
                 fragment = it.fragment()
@@ -3132,12 +3198,26 @@ class WidokCzatu(QTextBrowser):
                     c = QTextCursor(self.document())
                     c.setPosition(fragment.position())
                     c.setPosition(fragment.position() + fragment.length(), QTextCursor.MoveMode.KeepAnchor)
-                    f = QTextCharFormat()
-                    f.setFontFamilies(["JetBrains Mono"])
-                    f.setFontPointSize(max(1.0, self.font().pointSizeF() - 0.5))
-                    c.mergeCharFormat(f)
+                    c.mergeCharFormat(f_kodu)
                 it += 1
             blok = blok.next()
+        # WHY: od końca - wstawienie linku przesuwa pozycje wszystkiego, co jest dalej
+        for pozycja, linie in reversed(grupy):
+            numer = str(len(self._kody))
+            self._kody[numer] = "\n".join(linie)
+            c = QTextCursor(self.document())
+            c.setPosition(pozycja)
+            c.insertBlock()  # WHY: kod przechodzi do nowego bloku, a ten przed nim dostaje link
+            c.movePosition(QTextCursor.MoveOperation.PreviousBlock)
+            format_linku = QTextBlockFormat()
+            format_linku.setAlignment(Qt.AlignmentFlag.AlignRight)
+            format_linku.setTopMargin(6)
+            c.setBlockFormat(format_linku)
+            link = self._znaki(self.kolorLinku)
+            link.setAnchor(True)
+            link.setAnchorHref(f"kopiuj:{numer}")
+            link.setFontPointSize(max(1.0, self.font().pointSizeF() - 1))
+            c.insertText(_("Kopiuj kod"), link)
 
 
 class Paleta(QWidget):
@@ -3999,9 +4079,21 @@ class OknoZasobnika(QWidget):
 
         self.btn_czat = QPushButton(_("Otwórz czat"))
         self.btn_czat.setObjectName("trayPrimary")
-        self.btn_czat.setIcon(ikona("otworz", PALETA.naAkcencie, rozmiar=16, grubosc=2.2))
+        self.btn_czat.setIcon(ikona("czat", PALETA.naAkcencie, rozmiar=16, grubosc=2.2))
         self.btn_czat.clicked.connect(lambda: self._i_zamknij(okno.otworz_czat))
-        v.addWidget(self.btn_czat)
+        # WHAT: obok czatu mały przycisk do Open WebUI - tylko, gdy WebUI działa
+        #       (układ 70/30, prośba użytkownika); odświeżany w odswiez().
+        self.btn_webui = QPushButton("WebUI")
+        self.btn_webui.setObjectName("trayButton")
+        self.btn_webui.setIcon(ikona("otworz", PALETA.tekst, rozmiar=15, grubosc=2))
+        self.btn_webui.setToolTip(_("Otwórz Open WebUI w przeglądarce"))
+        self.btn_webui.clicked.connect(lambda: self._i_zamknij(okno.otworz_webui))
+        self.btn_webui.hide()
+        rzad_czatu = QHBoxLayout()
+        rzad_czatu.setSpacing(8)
+        rzad_czatu.addWidget(self.btn_czat, 7)
+        rzad_czatu.addWidget(self.btn_webui, 3)
+        v.addLayout(rzad_czatu)
         btn_panel = QPushButton(_("Otwórz panel zarządzania"))
         btn_panel.setObjectName("trayButton")
         btn_panel.clicked.connect(lambda: self._i_zamknij(okno.pokaz_okno))
@@ -4057,6 +4149,7 @@ class OknoZasobnika(QWidget):
                     _odswiez_styl(wiersz)
                 self._ramka_uslug.setVisible(bool(widoczne))
                 self._dopasuj_wysokosc()
+            self.btn_webui.setVisible(stan["webui_dziala"])
             for klucz, (zainstalowana, dziala) in uslugi.items():
                 kropka, opis, przelacznik = self._wiersze[klucz]
                 kropka.setProperty("state", "ok" if dziala else "off")
@@ -5000,11 +5093,10 @@ class MainWindow(QMainWindow):
         self._watki["webui"] = self._uruchom_akcje(_start, _("Uruchomienie Open WebUI"), _po)
 
     def otworz_czat(self):
-        # WHAT: "Otwórz czat" w zasobniku - Open WebUI, a bez niego wbudowany czat.
-        if self._stan and self._stan["webui"]:
-            self.otworz_webui()
-        else:
-            self.pokaz_okno("czat")
+        # WHAT: "Otwórz czat" w zasobniku - ekran "Czat" w programie.
+        # WHY:  decyzja użytkownika (2026-10-29): wbudowany czat, nie Open WebUI -
+        #       otwiera się od razu, bez startu WebUI i bez przeglądarki.
+        self.pokaz_okno("czat")
 
     def otworz_webui(self):
         # WHAT: jeden przycisk, trzy znaczenia - instaluj / uruchom / otwórz.
@@ -6688,14 +6780,14 @@ class MainWindow(QMainWindow):
         self.widok_czatu.pokaz_myslenie = wlacz
         self._pokaz_czat()
 
-    def _pokaz_czat(self):
+    def _pokaz_czat(self, do_dolu=False):
         if not hasattr(self, "widok_czatu"):
             return
         if self._modele_czatu():
             pusty = _("Wybierz model po prawej i zadaj pytanie.")
         else:
             pusty = _("Brak modeli do rozmowy na hostach online. Pobierz model na ekranie \"Modele\".")
-        self.widok_czatu.pokaz(self._czat, pusty)
+        self.widok_czatu.pokaz(self._czat, pusty, do_dolu)
 
     def _odswiez_przycisk_czatu(self):
         if not hasattr(self, "btn_czat_wyslij"):
@@ -6729,17 +6821,37 @@ class MainWindow(QMainWindow):
         historia.append({"role": "user", "content": tekst})
         self._czat.append({"rola": "user", "tresc": tekst})
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
-                           "tresc": "", "myslenie": "", "trwa": True})
+                           "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
+                           "gb": model["rozmiar"] / 1024 ** 3})
         self.pole_czat.clear()
-        self._pokaz_czat()
+        self._pokaz_czat(do_dolu=True)
         worker = CzatWorker(host["adres"], model["nazwa"], historia)
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
+        worker.ladowanie.connect(self._czat_ladowanie)
         worker.zakonczono.connect(self._czat_koniec)
+        # WHY: co sekundę odświeżamy licznik czekania, dopóki nie przyjdzie pierwsze słowo
+        if not hasattr(self, "_czat_zegar"):
+            self._czat_zegar = QTimer(self)
+            self._czat_zegar.setInterval(1000)
+            self._czat_zegar.timeout.connect(self._czat_tyk_czekania)
+        self._czat_zegar.start()
         worker.finished.connect(worker.deleteLater)
         worker.start()
         self._odswiez_przycisk_czatu()
+
+    def _czat_ladowanie(self):
+        if self.sender() is self._czat_worker and self._czat:
+            self._czat[-1]["laduje"] = True
+            self._czat_odswiez_ostatnia()
+
+    def _czat_tyk_czekania(self):
+        ostatnia = self._czat[-1] if self._czat else None
+        if self._czat_worker is None or not ostatnia or not ostatnia.get("trwa"):
+            self._czat_zegar.stop()
+        elif not _rozdziel_myslenie(ostatnia["tresc"])[1].strip():
+            self._czat_odswiez_ostatnia()
 
     def _czat_fragment(self, tresc, myslenie):
         if self.sender() is not self._czat_worker or not self._czat:

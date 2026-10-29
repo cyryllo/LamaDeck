@@ -493,5 +493,9 @@
   "w pamięci": "in memoria",
   "wczyta się przy pierwszym pytaniu": "si caricherà alla prima domanda",
   "{n:.1f} tok/s": "{n:.1f} tok/s",
-  "{n} tokenów": "{n} token"
+  "{n} tokenów": "{n} token",
+  "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Caricamento del modello in memoria ({gb:.1f} GB) - la prima domanda richiede un po' di tempo, poi le risposte arrivano subito...",
+  "Kopiuj kod": "Copia codice",
+  "Skopiowano do schowka": "Copiato negli appunti",
+  "Otwórz Open WebUI w przeglądarce": "Apri Open WebUI nel browser"
 }

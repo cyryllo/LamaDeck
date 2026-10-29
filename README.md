@@ -121,6 +121,7 @@ fonts are bundled, so it looks the same everywhere).
   Ollama settings
 - Optional view of the model's reasoning (models that "think", e.g. qwen3)
 - Conversations are not saved — for a full chat with history, use Open WebUI
+- Also opens straight from the tray panel ("Open chat")
 
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
@@ -140,8 +141,7 @@ fonts are bundled, so it looks the same everywhere).
 
 **System tray** (optional, off by default — turn it on in Settings)
 - A tray icon with a small panel: the installed services with on/off switches, CPU / VRAM / RAM,
-  models in memory, and buttons to open the chat (Open WebUI, or the built-in chat without it)
-  or the control panel
+  models in memory, and buttons to open the built-in chat or the control panel
 - Closing the window hides it in the tray; quit from the icon's menu
 - Optionally start the program after login, already hidden in the tray
 - Only one copy runs at a time — starting it again just brings the window back

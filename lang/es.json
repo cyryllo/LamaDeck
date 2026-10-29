@@ -493,5 +493,9 @@
   "w pamięci": "en memoria",
   "wczyta się przy pierwszym pytaniu": "se cargará con la primera pregunta",
   "{n:.1f} tok/s": "{n:.1f} tok/s",
-  "{n} tokenów": "{n} tokens"
+  "{n} tokenów": "{n} tokens",
+  "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Cargando el modelo en memoria ({gb:.1f} GB): la primera pregunta tarda un poco, después las respuestas llegan enseguida...",
+  "Kopiuj kod": "Copiar código",
+  "Skopiowano do schowka": "Copiado al portapapeles",
+  "Otwórz Open WebUI w przeglądarce": "Abrir Open WebUI en el navegador"
 }
