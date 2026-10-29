@@ -6989,7 +6989,10 @@ class MainWindow(QMainWindow):
             teksty.setSpacing(1)
             teksty.addWidget(QLabel(nazwa))
             if opis:
-                teksty.addWidget(_etykieta(opis, "muted"))
+                # WHY: zawijany - przy dłuższym tłumaczeniu wartość po prawej ucinała opis
+                lbl_opis = _etykieta(opis, "muted")
+                lbl_opis.setWordWrap(True)
+                teksty.addWidget(lbl_opis)
             h.addLayout(teksty, 1)
             wartosc = _etykieta("—", "mono")
             h.addWidget(wartosc)

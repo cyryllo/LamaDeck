@@ -7,7 +7,7 @@ jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, oraz pan
 w przeglądarce (Open WebUI). Bez terminala, bez Dockera, bez chmury — wszystko działa
 lokalnie, w Twoim LAN.
 
-> **Status: stabilna (v0.6.0).** Używam jej na co dzień na własnym sprzęcie i działa
+> **Status: stabilna (v0.8.6).** Używam jej na co dzień na własnym sprzęcie i działa
 > zgodnie z oczekiwaniami. Nadal aktywnie rozwijana — regularnie dochodzą nowe opcje
 > i funkcjonalności; [zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
@@ -61,7 +61,7 @@ python3 ollama_manager.py
 
 ## Funkcje
 
-Okno ma pasek boczny z siedmioma ekranami, w ciemnym wyglądzie Breeze (czcionki Inter
+Okno ma pasek boczny z ośmioma ekranami, w ciemnym wyglądzie Breeze (czcionki Inter
 i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym komputerze).
 
 **Panel główny**
@@ -105,7 +105,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   MoE), które działają dużo szybciej na APU i komputerach bez mocnej karty graficznej. Rozpoznawane
   po opisie, nazwie, tagach Hugging Face i tagach wariantów Ollamy (np. `30b-a3b`)
 - Postęp pobierania z rozmiarem i prędkością oraz przycisk „Anuluj” (wznowi się później tam, gdzie
-  przerwało)
+  przerwało); powiadomienie na pulpicie, gdy długie pobieranie (albo instalacja/aktualizacja)
+  skończy się w tle
 - Kafelki modeli ze **wszystkich hostów** z filtrami (czat, kod, embedding, wizja): rozmiar,
   kwantyzacja, długość kontekstu i na których hostach jest model (zielony = w pamięci)
 - „Załaduj” / „Zwolnij” model z pamięci, „Kopiuj na host” (pobiera ten sam model na inny host),
@@ -113,9 +114,15 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Hugging Face to źródło społecznościowe — program podpowiada znanych autorów kwantyzacji
 
 **Czat**
+
+![Czat ze statystykami szybkości](screenshots/chat_pl.png)
+
 - Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
   WebUI i bez routera
-- Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele); można ją przerwać
+- Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele) i linkiem
+  **„Kopiuj kod”** nad każdym blokiem kodu; można ją przerwać
+- Gdy model wczytuje się do pamięci (pierwsze pytanie potrafi chwilę potrwać), dymek odpowiedzi
+  mówi o tym i odlicza sekundy
 - **Statystyki szybkości** każdej odpowiedzi, mierzone przez samą Ollamę: generowanie
   i przetwarzanie pytania w tokenach/s, liczba tokenów, czas wczytania modelu, czas całkowity —
   przydatne do porównywania modeli i ustawień Ollamy
@@ -149,9 +156,12 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Dziennik usługi Ollama wymaga uprawnień: wczytasz go raz (hasło) albo zezwolisz na stałe
 
 **Zasobnik systemowy** (opcjonalny, domyślnie wyłączony — włączasz w Ustawieniach)
+
+<img src="screenshots/tray_pl.png" alt="Okienko zasobnika" width="300">
+
 - Ikona przy zegarze z małym panelem: zainstalowane usługi z przełącznikami, CPU / VRAM / RAM,
-  modele w pamięci i przyciski otwierające wbudowany czat albo panel
-  zarządzania
+  modele w pamięci i przyciski otwierające wbudowany czat albo panel zarządzania (a obok mały
+  przycisk „WebUI”, gdy Open WebUI działa)
 - Zamknięcie okna chowa je do zasobnika; program kończysz z menu ikony
 - Opcjonalnie start programu po zalogowaniu, od razu schowanego w zasobniku
 - Działa tylko jedna kopia programu — ponowne uruchomienie po prostu pokazuje okno
@@ -162,6 +172,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Autostart wszystkich trzech usług w jednym miejscu: Ollama razem z systemem, router i Open WebUI
   po zalogowaniu
 - Wersje i sprawdzanie aktualizacji Ollamy, LiteLLM i Open WebUI na żądanie
+- Czat: model embeddingów do wyszukiwania w dużych plikach (albo pobranie zalecanego jednym
+  przyciskiem)
+- Usługi, których nie ma na komputerze, są tu ukryte — tak samo w pasku bocznym i w zasobniku
 - Zmienne środowiskowe Ollamy, każda z krótkim opisem: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 to za mało do pracy agentowej), `OLLAMA_MAX_LOADED_MODELS`,
   `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,

@@ -8,7 +8,7 @@ everything runs on your LAN.
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
-> **Status: stable (v0.6.0).** Daily driver on my own setup, working as expected. Still
+> **Status: stable (v0.8.6).** Daily driver on my own setup, working as expected. Still
 > actively developed — new options and features keep coming; [bug reports and
 > feedback](../../issues) are welcome.
 
@@ -62,7 +62,7 @@ python3 ollama_manager.py
 
 ## Features
 
-The window has a sidebar with seven screens, in a dark Breeze look (Inter + JetBrains Mono
+The window has a sidebar with eight screens, in a dark Breeze look (Inter + JetBrains Mono
 fonts are bundled, so it looks the same everywhere).
 
 **Dashboard**
@@ -104,7 +104,8 @@ fonts are bundled, so it looks the same everywhere).
 - **"Only MoE models"** checkbox — shows only mixture-of-experts models (and only their MoE
   variants), which run much faster on APUs and computers without a strong graphics card.
   Detected by description, name, Hugging Face tags and Ollama variant tags (e.g. `30b-a3b`)
-- Download progress with size and speed, and a "Cancel" button (resumes later where it stopped)
+- Download progress with size and speed, and a "Cancel" button (resumes later where it stopped);
+  a desktop notification when a long download (or an install/update) finishes in the background
 - Tiles for the models on **all hosts**, filterable by kind (chat, code, embedding, vision): size,
   quantization, context length and on which hosts the model is (green = loaded in memory)
 - "Load" / "Unload" a model to/from memory, "Copy to host" (downloads the same model on another
@@ -112,10 +113,15 @@ fonts are bundled, so it looks the same everywhere).
 - Hugging Face is a community source — the app suggests well-known quantization authors
 
 **Chat**
+
+![Chat with speed statistics](screenshots/chat.png)
+
 - A simple built-in chat with any model on any host, straight from Ollama — works without Open
   WebUI and without the router
-- Answers stream in as they're written, with formatting (code blocks, lists, tables); stop at any
-  time
+- Answers stream in as they're written, with formatting (code blocks, lists, tables) and a
+  **Copy code** link above every code block; stop at any time
+- While a model is being loaded into memory (the first question can take a while), the answer
+  bubble says so and counts the seconds
 - **Speed stats** for every answer, measured by Ollama itself: generation and prompt processing in
   tokens/s, token counts, model loading time, total time — handy for comparing models and
   Ollama settings
@@ -149,8 +155,12 @@ fonts are bundled, so it looks the same everywhere).
 - The Ollama service log needs permission: load it once (password) or allow it permanently
 
 **System tray** (optional, off by default — turn it on in Settings)
+
+<img src="screenshots/tray.png" alt="Tray panel" width="300">
+
 - A tray icon with a small panel: the installed services with on/off switches, CPU / VRAM / RAM,
-  models in memory, and buttons to open the built-in chat or the control panel
+  models in memory, and buttons to open the built-in chat or the control panel (plus a small
+  "WebUI" button while Open WebUI is running)
 - Closing the window hides it in the tray; quit from the icon's menu
 - Optionally start the program after login, already hidden in the tray
 - Only one copy runs at a time — starting it again just brings the window back
@@ -161,6 +171,9 @@ fonts are bundled, so it looks the same everywhere).
 - Autostart of all three services in one place: Ollama with the system, the router and Open WebUI
   after login
 - Versions and on-demand update checks for Ollama, LiteLLM and Open WebUI
+- Chat: the embedding model used to search large files (or a one-click download of the
+  recommended one)
+- Services that aren't installed are hidden here, in the sidebar and in the tray panel
 - Ollama environment variables, each with a short description: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work), `OLLAMA_MAX_LOADED_MODELS`,
   `OLLAMA_NUM_PARALLEL`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_VULKAN`,
