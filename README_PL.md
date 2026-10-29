@@ -22,6 +22,8 @@ lokalnie, w Twoim LAN.
   `install.sh` proponuje jego instalację przez `apt`, jeśli go brakuje
 - Ollama (jeśli jej nie masz, aplikacja sama ją zainstaluje jednym przyciskiem)
 - Opcjonalnie: **uv** (do instalacji Open WebUI i LiteLLM — aplikacja doinstaluje je sama w razie potrzeby)
+- Opcjonalnie: moduł **QtPdf** do załączników PDF w czacie — jest w PyQt6 z pip; w Debianie to
+  `python3-pyqt6.qtpdf` (`install.sh` zaproponuje instalację, pakiet `.deb` dociąga go sam)
 - Opcjonalnie: `ffmpeg`, `pandoc`, `zstd` (pełna funkcjonalność Open WebUI — głos, dokumenty w RAG;
   aplikacja proponuje ich instalację przez `apt` zaraz po udanej instalacji Open WebUI)
 
@@ -127,10 +129,13 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   i przetwarzanie pytania w tokenach/s, liczba tokenów, czas wczytania modelu, czas całkowity —
   przydatne do porównywania modeli i ustawień Ollamy
 - Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
-- **Załączniki: zdjęcia i pliki tekstowe** — przycisk 📎, przeciągnięcie pliku albo wklejenie
-  zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision), pliki
-  tekstowe (kod, .txt, .md, .csv…) są dołączane do wiadomości. PDF, Word i arkusze zostają
-  dla Open WebUI
+- **Załączniki: zdjęcia, dokumenty i pliki tekstowe** — przycisk 📎, przeciągnięcie pliku albo
+  wklejenie zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision),
+  pliki tekstowe (kod, .txt, .md, .csv…) są dołączane do wiadomości
+- **Dokumenty**: PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), LibreOffice (.odt, .ods,
+  .odp) i EPUB — tekst jest z nich wyciągany samym Pythonem i Qt (tabele i arkusze jako wiersze
+  `a; b; c`, slajdy i strony PDF z numerami). Zeskanowane PDF-y bez warstwy tekstu i stare
+  pliki `.doc`/`.xls`/`.ppt` nie są obsługiwane (czat podpowie, co zrobić)
 - **Duże pliki tekstowe (100 KB – 20 MB) są przeszukiwane, a nie wklejane** — plik jest cięty
   na fragmenty i indeksowany modelem embeddingów w Ollamie (np. `nomic-embed-text`); do każdego
   pytania trafiają najlepiej pasujące fragmenty, a pod odpowiedzią widać, z których linii. Nic

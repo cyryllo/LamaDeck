@@ -196,6 +196,16 @@ command -v pkexec >/dev/null 2>&1 || {
 
 install_python_deps
 
+# WHAT: PDF attachments in the chat need the QtPdf module.
+# WHY:  the pip PyQt6 wheel already contains it, but Debian/Ubuntu ship it as a separate
+#       package - so when PyQt6 came from apt, offer it here. Optional: without it
+#       everything works except reading PDFs.
+python3 -c "import PyQt6.QtPdf" >/dev/null 2>&1 || {
+    _confirm_apt_install python3-pyqt6.qtpdf \
+        "The QtPdf module is missing - the chat needs it to read PDF attachments (optional)." \
+        || echo "Skipping QtPdf - PDF files can't be attached in the chat until it's installed."
+}
+
 # 2) Copy the script to a stable location (survives removing/moving the cloned repo)
 mkdir -p "$TARGET_DIR"
 cp "$SOURCE_SCRIPT" "$TARGET_SCRIPT"

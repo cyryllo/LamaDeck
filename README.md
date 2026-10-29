@@ -23,6 +23,8 @@ everything runs on your LAN.
   `install.sh` offers to install it via `apt` if it's missing
 - Ollama (if you don't have it, the app installs it with one click)
 - Optional: **uv** (for installing Open WebUI and LiteLLM — the app installs it itself if needed)
+- Optional: the **QtPdf** module for PDF attachments in the chat — included in the pip PyQt6;
+  on Debian it's `python3-pyqt6.qtpdf` (`install.sh` offers it, the `.deb` pulls it in)
 - Optional: `ffmpeg`, `pandoc`, `zstd` (full Open WebUI functionality — voice, document RAG;
   the app offers to install these via `apt` right after a successful Open WebUI install)
 
@@ -126,9 +128,13 @@ fonts are bundled, so it looks the same everywhere).
   tokens/s, token counts, model loading time, total time — handy for comparing models and
   Ollama settings
 - Optional view of the model's reasoning (models that "think", e.g. qwen3)
-- **Attach pictures and text files**: 📎 button, drag & drop or paste a screenshot (Ctrl+V).
-  Pictures go to models that can see them (vision), text files (code, .txt, .md, .csv…) are
-  added to the message. PDFs, Word documents and spreadsheets are left to Open WebUI
+- **Attach pictures, documents and text files**: 📎 button, drag & drop or paste a screenshot
+  (Ctrl+V). Pictures go to models that can see them (vision); text files (code, .txt, .md,
+  .csv…) are added to the message
+- **Documents**: PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), LibreOffice (.odt, .ods,
+  .odp) and EPUB — their text is extracted with nothing beyond Python and Qt (tables and sheets
+  as `a; b; c` rows, slides and PDF pages numbered). Scanned PDFs without a text layer and old
+  `.doc`/`.xls`/`.ppt` files are not supported (the chat says what to do)
 - **Large text files (100 KB – 20 MB) are searched, not pasted**: the file is split into excerpts
   and indexed with an embedding model in Ollama (e.g. `nomic-embed-text`); each question gets the
   best-matching excerpts, and the answer shows which lines they came from. Nothing beyond Ollama

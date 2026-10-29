@@ -97,13 +97,15 @@ EOF
 #      the uv bootstrap used for Open WebUI/LiteLLM).
 #      'python3-pyqt6.qtsvg' - on Debian QtSvg is a separate package, and the
 #      app draws its sidebar/button icons from SVG shapes (QSvgRenderer).
+#      'python3-pyqt6.qtpdf' - also separate on Debian; the chat reads the text
+#      of attached PDF files with QtPdf.
 cat > "$BUILD_DIR/DEBIAN/control" <<EOF
 Package: $PACKAGE_NAME
 Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-requests, pkexec, systemd, curl
+Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-requests, pkexec, systemd, curl
 Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
 Homepage: https://github.com/cyryllo/Ollama-manager
 Description: Ollama service and model manager for KDE (PyQt6)

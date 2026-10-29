@@ -27,6 +27,9 @@ import heapq
 import math
 import operator
 from array import array
+import zipfile
+import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 import shlex
 import socket
 import sqlite3
@@ -3103,8 +3106,13 @@ def _wlasciwosc_koloru(nazwa, domyslny):
 # WHY:  PDF/Word/arkusze świadomie NIE - trzeba je rozbierać na tekst (nowe zależności),
 #       a duże dokumenty i tak nie mieszczą się w kontekście; to robi Open WebUI (RAG).
 _ROZSZERZENIA_OBRAZOW = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-_ROZSZERZENIA_DOKUMENTOW = {".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx", ".ods", ".ppt", ".pptx",
-                            ".odp", ".epub"}
+# WHY: dokumenty, z których tekst wyciągamy sami - formaty Office/LibreOffice/EPUB to ZIP
+#      z plikami XML (wystarczy biblioteka standardowa), PDF czyta QtPdf z rodziny Qt
+_ROZSZERZENIA_DOKUMENTOW = {".pdf", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub"}
+# WHY: stare formaty binarne (sprzed 2007) i RTF - świadomie bez obsługi (decyzja użytkownika)
+_ROZSZERZENIA_STARE = {".doc", ".xls", ".ppt", ".rtf"}
+_MAKS_PLIK_DOKUMENTU = 100 * 1024 * 1024    # WHY: rozmiar samego pliku (np. PDF ze zdjęciami)
+_MAKS_ROZPAKOWANY = 300 * 1024 * 1024       # WHY: ochrona przed "bombą ZIP" - XML po rozpakowaniu
 _MAKS_PLIK_TEKSTOWY = 20 * 1024 * 1024  # WHY: 20 MB = ok. 23 tys. fragmentów: 75 MB wektorów i ok. 2,6 s
                                         #      wyszukiwania na pytanie (zmierzone); więcej = minuty czekania
 _DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: powyżej - tryb wyszukiwania (RAG), bo całość nie zmieści się
@@ -3138,9 +3146,16 @@ def wczytaj_zalacznik(sciezka):
     rozszerzenie = sciezka.suffix.lower()
     if rozszerzenie in _ROZSZERZENIA_OBRAZOW:
         return _obraz_do_wyslania(QImage(str(sciezka)), sciezka.name)
+    if rozszerzenie in _ROZSZERZENIA_STARE:
+        raise ValueError(f"{sciezka.name}: " + _("stary format - zapisz plik jako .docx, .xlsx, .pptx albo .odt "
+                                                 "i dołącz ponownie"))
     if rozszerzenie in _ROZSZERZENIA_DOKUMENTOW:
-        raise ValueError(f"{sciezka.name}: " + _("PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je "
-                           "czytać i przeszukiwać."))
+        # WHY: tekst wyciąga dopiero wątek w tle (odczytaj_dokument) - duży PDF czy
+        #      arkusz potrafi zająć kilka sekund, a okno nie może wtedy stać
+        if sciezka.stat().st_size > _MAKS_PLIK_DOKUMENTU:
+            raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 100 MB)"))
+        return {"typ": "do_odczytu", "nazwa": sciezka.name, "rozmiar": sciezka.stat().st_size,
+                "sciezka": str(sciezka)}
     if sciezka.stat().st_size > _MAKS_PLIK_TEKSTOWY:
         raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 20 MB) - większe dokumenty "
                                                  "obsłuży Open WebUI"))
@@ -3153,9 +3168,278 @@ def wczytaj_zalacznik(sciezka):
         tekst = dane.decode("utf-8")
     except UnicodeDecodeError:
         raise ValueError(f"{sciezka.name}: " + _("to nie jest zdjęcie ani plik tekstowy")) from None
-    # WHY: duży plik nie idzie w całości - "dokument" przechodzi w tryb wyszukiwania
-    typ = "dokument" if len(dane) > _DUZY_PLIK_TEKSTOWY else "tekst"
-    return {"typ": typ, "nazwa": sciezka.name, "rozmiar": len(dane), "tekst": tekst}
+    return zalacznik_z_tekstu(sciezka.name, tekst)
+
+
+def zalacznik_z_tekstu(nazwa, tekst):
+    # WHAT: tekst (z pliku tekstowego albo wyciągnięty z dokumentu) -> załącznik.
+    # WHY:  duży tekst nie idzie w całości - "dokument" przechodzi w tryb wyszukiwania;
+    #       limity liczone od TEKSTU, nie od pliku (2 MB .xlsx potrafi dać 10 MB tekstu).
+    rozmiar = len(tekst.encode("utf-8"))
+    if rozmiar > _MAKS_PLIK_TEKSTOWY:
+        raise ValueError(f"{nazwa}: " + _("plik jest za duży na czat (ponad 20 MB) - większe dokumenty "
+                                          "obsłuży Open WebUI"))
+    if not tekst.strip():
+        raise ValueError(f"{nazwa}: " + _("w pliku nie ma żadnego tekstu"))
+    typ = "dokument" if rozmiar > _DUZY_PLIK_TEKSTOWY else "tekst"
+    return {"typ": typ, "nazwa": nazwa, "rozmiar": rozmiar, "tekst": tekst}
+
+
+# --- Tekst z dokumentów (PDF, Office, LibreOffice, EPUB) ---
+# WHY: bez nowych bibliotek - Office/ODF/EPUB to archiwa ZIP z XML (zipfile + ElementTree),
+#      PDF czyta QtPdf. Wynik to zwykły tekst; układ strony, obrazy i formatowanie giną.
+def _lokalna(el):
+    return el.tag.rsplit("}", 1)[-1]
+
+
+def _xml_z_zip(archiwum, nazwa):
+    info = archiwum.getinfo(nazwa)
+    if info.file_size > _MAKS_ROZPAKOWANY:
+        raise ValueError(_("dokument po rozpakowaniu jest za duży"))
+    return ET.fromstring(archiwum.read(info))
+
+
+def _tekst_docx(archiwum):
+    # WHAT: akapity i tabele (komórki rozdzielone średnikami) z word/document.xml.
+    def akapit(p):
+        czesci = []
+        for el in p.iter():
+            nazwa = _lokalna(el)
+            if nazwa == "t" and el.text:
+                czesci.append(el.text)
+            elif nazwa == "tab":
+                czesci.append("\t")
+            elif nazwa in ("br", "cr"):
+                czesci.append("\n")
+        return "".join(czesci)
+
+    linie = []
+
+    def blok(el):
+        for dziecko in el:
+            nazwa = _lokalna(dziecko)
+            if nazwa == "p":
+                linie.append(akapit(dziecko))
+            elif nazwa == "tbl":
+                for wiersz in (w for w in dziecko if _lokalna(w) == "tr"):
+                    komorki = [" ".join(akapit(p) for p in k.iter() if _lokalna(p) == "p").strip()
+                               for k in wiersz if _lokalna(k) == "tc"]
+                    linie.append("; ".join(komorki))
+            else:
+                blok(dziecko)  # WHY: treść w kontrolkach (sdt) i podobnych opakowaniach
+
+    blok(_xml_z_zip(archiwum, "word/document.xml"))
+    return "\n".join(linie)
+
+
+def _kolumna_xlsx(adres):
+    # WHAT: "C12" -> 2 (numer kolumny od zera)
+    numer = 0
+    for znak in adres:
+        if not znak.isalpha():
+            break
+        numer = numer * 26 + ord(znak.upper()) - 64
+    return numer - 1
+
+
+def _tekst_xlsx(archiwum):
+    # WHAT: każdy arkusz osobno, wiersze jako "a; b; c" - wartości wyliczone przez formuły.
+    # WHY:  daty Excel zapisuje jako liczby dni (np. 45962) - zostają liczbami; rozpoznanie
+    #       wymagałoby czytania stylów komórek.
+    wspolne = []
+    if "xl/sharedStrings.xml" in archiwum.namelist():
+        for si in _xml_z_zip(archiwum, "xl/sharedStrings.xml"):
+            wspolne.append("".join(t.text or "" for t in si.iter() if _lokalna(t) == "t"))
+    skoroszyt = _xml_z_zip(archiwum, "xl/workbook.xml")
+    relacje = {r.get("Id"): r.get("Target") for r in _xml_z_zip(archiwum, "xl/_rels/workbook.xml.rels")}
+    wynik = []
+    for arkusz in (a for a in skoroszyt.iter() if _lokalna(a) == "sheet"):
+        rid = next((v for k, v in arkusz.attrib.items() if k.endswith("}id")), None)
+        cel = relacje.get(rid, "")
+        sciezka = cel.lstrip("/") if cel.startswith("/") else "xl/" + cel
+        if sciezka not in archiwum.namelist():
+            continue
+        wynik.append(_("Arkusz: {nazwa}").format(nazwa=arkusz.get("name", "")))
+        for wiersz in (w for w in _xml_z_zip(archiwum, sciezka).iter() if _lokalna(w) == "row"):
+            komorki = {}
+            for c in (c for c in wiersz if _lokalna(c) == "c"):
+                typ = c.get("t")
+                if typ == "inlineStr":
+                    wartosc = "".join(t.text or "" for t in c.iter() if _lokalna(t) == "t")
+                else:
+                    v = next((x.text for x in c if _lokalna(x) == "v"), None)
+                    if v is None:
+                        continue
+                    if typ == "s":
+                        wartosc = wspolne[int(v)] if int(v) < len(wspolne) else ""
+                    elif typ == "b":
+                        wartosc = "TRUE" if v == "1" else "FALSE"
+                    else:
+                        wartosc = v
+                if wartosc != "":
+                    komorki[_kolumna_xlsx(c.get("r", "A"))] = wartosc
+            if komorki:
+                wynik.append("; ".join(komorki.get(i, "") for i in range(max(komorki) + 1)))
+        wynik.append("")
+    return "\n".join(wynik)
+
+
+def _tekst_pptx(archiwum):
+    # WHAT: tekst każdego slajdu po kolei, z numerem slajdu.
+    slajdy = sorted((n for n in archiwum.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+                    key=lambda n: int(re.search(r"(\d+)", n.rsplit("/", 1)[-1]).group(1)))
+    wynik = []
+    for nr, nazwa in enumerate(slajdy, 1):
+        wynik.append(_("Slajd {n}").format(n=nr))
+        for p in (p for p in _xml_z_zip(archiwum, nazwa).iter() if _lokalna(p) == "p"):
+            linia = "".join(t.text or "" for t in p.iter() if _lokalna(t) == "t")
+            if linia.strip():
+                wynik.append(linia)
+        wynik.append("")
+    return "\n".join(wynik)
+
+
+def _tekst_odf(archiwum):
+    # WHAT: content.xml z .odt/.ods/.odp: akapity, nagłówki, tabele ("a; b; c"),
+    #       arkusze i slajdy z nazwą.
+    # WHY:  ODF powtarza puste komórki/wiersze atrybutem "number-*-repeated" (nawet tysiące) -
+    #       powtarzamy tylko niepuste i ucinamy puste końcówki.
+    def tekst(el):
+        czesci = [el.text or ""]
+        for d in el:
+            nazwa = _lokalna(d)
+            if nazwa == "s":
+                czesci.append(" " * int(next((v for k, v in d.attrib.items() if k.endswith("}c")), "1")))
+            elif nazwa == "tab":
+                czesci.append("\t")
+            elif nazwa == "line-break":
+                czesci.append("\n")
+            elif nazwa not in ("annotation", "note"):
+                czesci.append(tekst(d))
+            czesci.append(d.tail or "")
+        return "".join(czesci)
+
+    def atrybut(el, koncowka, domyslnie=None):
+        return next((v for k, v in el.attrib.items() if k.endswith("}" + koncowka)), domyslnie)
+
+    linie = []
+    slajdy = [0]  # WHY: numer slajdu - nazwa strony ODP bywa tytułem, a nie numerem
+
+    def blok(el):
+        for d in el:
+            nazwa = _lokalna(d)
+            if nazwa in ("p", "h"):
+                linie.append(tekst(d))
+            elif nazwa == "table":
+                if atrybut(d, "name") and _lokalna(el) == "spreadsheet":
+                    linie.append(_("Arkusz: {nazwa}").format(nazwa=atrybut(d, "name")))
+                blok(d)
+                linie.append("")
+            elif nazwa == "table-row":
+                komorki = []
+                for k in (k for k in d if _lokalna(k) in ("table-cell", "covered-table-cell")):
+                    wartosc = " ".join(tekst(p) for p in k if _lokalna(p) in ("p", "h")).strip()
+                    ile = int(atrybut(k, "number-columns-repeated", "1")) if wartosc else 1
+                    komorki += [wartosc] * min(ile, 1000)
+                while komorki and not komorki[-1]:
+                    komorki.pop()
+                if komorki:
+                    linie.append("; ".join(komorki))
+            elif nazwa == "page":
+                slajdy[0] += 1
+                linie.append(_("Slajd {n}").format(n=slajdy[0]))
+                blok(d)
+                linie.append("")
+            else:
+                blok(d)
+
+    blok(_xml_z_zip(archiwum, "content.xml"))
+    return "\n".join(linie)
+
+
+class _TekstHtml(HTMLParser):
+    """Tekst z XHTML rozdziału EPUB - nowa linia przy blokach, bez skryptów i stylów."""
+    _BLOKI = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "blockquote"}
+
+    def __init__(self):
+        super().__init__()
+        self.czesci, self._pomin = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "title"):  # WHY: <title> to często nazwa pliku ("ch001.xhtml")
+            self._pomin += 1
+        elif tag in self._BLOKI:
+            self.czesci.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "title") and self._pomin:
+            self._pomin -= 1
+
+    def handle_data(self, data):
+        if not self._pomin:
+            self.czesci.append(data)
+
+
+def _tekst_epub(archiwum):
+    # WHAT: rozdziały w kolejności czytania (spine z pliku OPF).
+    kontener = _xml_z_zip(archiwum, "META-INF/container.xml")
+    opf = next(e.get("full-path") for e in kontener.iter() if _lokalna(e) == "rootfile")
+    katalog = opf.rsplit("/", 1)[0] + "/" if "/" in opf else ""
+    pakiet = _xml_z_zip(archiwum, opf)
+    pozycje = {e.get("id"): e.get("href") for e in pakiet.iter() if _lokalna(e) == "item"}
+    wynik = []
+    for ref in (e.get("idref") for e in pakiet.iter() if _lokalna(e) == "itemref"):
+        sciezka = katalog + (pozycje.get(ref) or "")
+        if sciezka in archiwum.namelist():
+            parser = _TekstHtml()
+            parser.feed(archiwum.read(sciezka).decode("utf-8", errors="replace"))
+            wynik.append(re.sub(r"\n\s*\n+", "\n\n", "".join(parser.czesci)).strip())
+    return "\n\n".join(w for w in wynik if w)
+
+
+def _tekst_pdf(sciezka):
+    # WHAT: tekst stron PDF przez QtPdf, z oznaczeniem strony (pomaga w źródłach RAG).
+    # WHY:  skan (strony to same obrazy) nie ma warstwy tekstu - wtedy mówimy o tym
+    #       wprost, zamiast wysyłać modelowi pusty plik.
+    try:
+        from PyQt6.QtPdf import QPdfDocument
+    except ImportError:
+        raise ValueError(_("brak modułu QtPdf - doinstaluj pakiet python3-pyqt6.qtpdf")) from None
+    dokument = QPdfDocument(None)
+    dokument.load(str(sciezka))
+    if dokument.status() != QPdfDocument.Status.Ready:
+        raise ValueError(_("nie udało się otworzyć PDF (uszkodzony albo chroniony hasłem)"))
+    teksty = [dokument.getAllText(i).text() for i in range(dokument.pageCount())]
+    dokument.close()
+    if teksty and sum(len(t.strip()) for t in teksty) < 20 * len(teksty):
+        raise ValueError(_("to skan bez warstwy tekstu - zrób zrzut strony i wklej go (Ctrl+V) do modelu, "
+                           "który widzi zdjęcia (np. glm-ocr)"))
+    return "\n\n".join(_("Strona {n}").format(n=i) + "\n" + t for i, t in enumerate(teksty, 1))
+
+
+def odczytaj_dokument(sciezka):
+    # WHAT: tekst z PDF / .docx / .xlsx / .pptx / .odt / .ods / .odp / .epub -> załącznik.
+    # WHY:  wołane w wątku w tle (FunkcjaWorker) - ValueError niesie czytelny powód.
+    sciezka = Path(sciezka)
+    rozszerzenie = sciezka.suffix.lower()
+    try:
+        if rozszerzenie == ".pdf":
+            tekst = _tekst_pdf(sciezka)
+        else:
+            with zipfile.ZipFile(sciezka) as archiwum:
+                if sum(i.file_size for i in archiwum.infolist()) > _MAKS_ROZPAKOWANY * 3:
+                    raise ValueError(_("dokument po rozpakowaniu jest za duży"))
+                czytnik = {".docx": _tekst_docx, ".xlsx": _tekst_xlsx, ".pptx": _tekst_pptx,
+                           ".epub": _tekst_epub}.get(rozszerzenie, _tekst_odf)
+                tekst = czytnik(archiwum)
+    except ValueError as e:
+        raise ValueError(f"{sciezka.name}: {e}") from None
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, StopIteration) as e:
+        raise ValueError(f"{sciezka.name}: " + _("nie udało się odczytać dokumentu ({blad})").format(
+            blad=type(e).__name__)) from None
+    # WHY: puste linie seriami (puste akapity, odstępy w arkuszach) tylko zjadają kontekst
+    tekst = re.sub(r"\n{3,}", "\n\n", tekst)
+    return zalacznik_z_tekstu(sciezka.name, tekst)
 
 
 # WHAT: model embeddingów proponowany, gdy na hostach nie ma żadnego (Ustawienia → Czat).
@@ -6936,8 +7220,9 @@ class MainWindow(QMainWindow):
         self.btn_czat_zalacz.setIcon(ikona("spinacz", PALETA.tekst, rozmiar=20, grubosc=1.8))
         self.btn_czat_zalacz.setIconSize(QSize(20, 20))
         self.btn_czat_zalacz.setFixedSize(48, 76)
-        self.btn_czat_zalacz.setToolTip(_("Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). "
-                                          "Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V)."))
+        self.btn_czat_zalacz.setToolTip(_("Dołącz zdjęcie, dokument (PDF, Word, Excel, PowerPoint, LibreOffice, EPUB) "
+                                          "albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik "
+                                          "do okna albo wkleić zrzut ekranu (Ctrl+V)."))
         self.btn_czat_zalacz.clicked.connect(self._wybierz_zalaczniki)
         wpis.addWidget(self.btn_czat_zalacz)
         self.pole_czat = QPlainTextEdit()
@@ -7045,7 +7330,8 @@ class MainWindow(QMainWindow):
     def _wybierz_zalaczniki(self):
         pliki, _f = QFileDialog.getOpenFileNames(
             self, _("Dołącz do wiadomości"), str(Path.home()),
-            _("Zdjęcia i pliki tekstowe (*)") + ";;" + _("Zdjęcia") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)")
+            _("Zdjęcia, dokumenty i pliki tekstowe (*)") + ";;" + _("Zdjęcia") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)"
+            + ";;" + _("Dokumenty") + " (*.pdf *.docx *.xlsx *.pptx *.odt *.ods *.odp *.epub)")
         for sciezka in pliki:
             self._dodaj_zalacznik(lambda p=sciezka: wczytaj_zalacznik(p))
 
@@ -7057,11 +7343,33 @@ class MainWindow(QMainWindow):
             self._uwaga_czatu(str(e), "warn")
             return
         self._uwaga_czatu("")
-        if z["typ"] == "dokument" and not self._przygotuj_dokument(z):
+        if z["typ"] == "do_odczytu":
+            # WHY: PDF/Office/EPUB - tekst wyciąga wątek w tle, chip pokazuje "odczytuję..."
+            worker = FunkcjaWorker(lambda sciezka=z["sciezka"]: odczytaj_dokument(sciezka))
+            z["_watek"] = worker
+            worker.zakonczono.connect(lambda ok, wynik, zz=z: self._dokument_odczytany(zz, ok, wynik))
+            worker.start()
+        elif z["typ"] == "dokument" and not self._przygotuj_dokument(z):
             return
         self._zalaczniki.append(z)
         self._pokaz_zalaczniki()
         self._odswiez_modele_czatu()  # WHY: ze zdjęciem lista pokazuje też modele OCR
+
+    def _dokument_odczytany(self, z, ok, wynik):
+        z.pop("_watek", None)
+        if z not in self._zalaczniki:
+            return  # WHY: usunięty w trakcie odczytu
+        if not ok:
+            self._zalaczniki.remove(z)
+            self._uwaga_czatu(wynik, "warn")
+        else:
+            z.pop("sciezka", None)
+            z.update(wynik)
+            # WHY: wyciągnięty tekst idzie tą samą drogą co plik tekstowy - w całości
+            #      albo (powyżej 100 KB) przez wyszukiwanie fragmentów
+            if z["typ"] == "dokument" and not self._przygotuj_dokument(z):
+                self._zalaczniki.remove(z)
+        self._pokaz_zalaczniki()
 
     def _modele_embeddingow(self):
         # WHAT: [(nazwa, adres, nazwa hosta)] - modele embeddingów na hostach online.
@@ -7094,6 +7402,7 @@ class MainWindow(QMainWindow):
             return False
         z["model_emb"], z["adres_emb"] = wybor
         z["gotowy"], z["procent"] = False, 0
+        z["_start"] = time.monotonic()
         worker = RagWorker(z["adres_emb"], z["model_emb"], z.pop("tekst"))
         z["_watek"] = worker
         worker.postep.connect(lambda gotowe, wszystkie, zz=z: self._postep_dokumentu(zz, gotowe, wszystkie))
@@ -7103,13 +7412,20 @@ class MainWindow(QMainWindow):
 
     def _postep_dokumentu(self, z, gotowe, wszystkie):
         z["procent"] = int(100 * gotowe / max(1, wszystkie))
+        # WHAT: szacowany pozostały czas z FAKTYCZNEJ prędkości tego komputera.
+        # WHY:  prędkość embeddingów to od kilkunastu (zmierzone u użytkownika: ok. 20
+        #       fragmentów/s) do setek fragmentów na sekundę - przy 20 MB to minuty albo
+        #       kwadrans, więc trzeba widzieć, ile jeszcze. Pierwsze 3 s pomijamy - wtedy
+        #       Ollama dopiero wczytuje model i prędkość byłaby zaniżona.
+        uplynelo = time.monotonic() - z.get("_start", time.monotonic())
+        z["eta"] = uplynelo / gotowe * (wszystkie - gotowe) if gotowe and uplynelo > 3 else None
         etykieta = self._etykiety_zalacznikow.get(id(z))
         if etykieta is not None:
-            # WHY: miejsce na najdłuższy wariant ("100%"), mierzone czcionką już ze stylu -
-            #      inaczej rosnący procent był ucinany
-            etykieta.setMinimumWidth(etykieta.fontMetrics().horizontalAdvance(
-                self._opis_zalacznika(dict(z, procent=100))) + 6)
+            # WHY: szerokość tylko rośnie, mierzona czcionką już ze stylu - inaczej
+            #      rosnący procent i zmieniający się czas były ucinane albo "skakały"
             etykieta.setText(self._opis_zalacznika(z))
+            etykieta.setMinimumWidth(max(etykieta.minimumWidth(), etykieta.fontMetrics().horizontalAdvance(
+                self._opis_zalacznika(dict(z, procent=100))) + 6, etykieta.sizeHint().width()))
 
     def _dokument_gotowy(self, z, ok, wynik):
         z.pop("_watek", None)
@@ -7135,16 +7451,22 @@ class MainWindow(QMainWindow):
     def _opis_zalacznika(self, z):
         if z["typ"] == "obraz":
             opis = _("zdjęcie")
+        elif z["typ"] == "do_odczytu":
+            opis = _("odczytuję tekst...")
         else:
             opis = f"{max(1, z['rozmiar'] // 1024)} KB"
         if z["typ"] == "dokument":
             opis += "  ·  " + (_("wyszukiwanie fragmentów") if z.get("gotowy")
                                else _("przygotowuję {n}%").format(n=z.get("procent", 0)))
+            eta = z.get("eta")
+            if not z.get("gotowy") and eta is not None:
+                opis += "  ·  " + (_("ok. {n} min").format(n=round(eta / 60)) if eta >= 90
+                                   else _("ok. {n} s").format(n=max(1, round(eta))))
         return f"{z['nazwa']}  ·  {opis}"
 
     def _usun_zalacznik(self, z):
-        if z.get("_watek") is not None:
-            z["_watek"].anuluj()
+        if hasattr(z.get("_watek"), "anuluj"):
+            z["_watek"].anuluj()  # WHY: przygotowanie do wyszukiwania; odczytu tekstu się nie przerywa
         if z in self._zalaczniki:
             self._zalaczniki.remove(z)
         self._uwaga_czatu("")
@@ -7335,6 +7657,9 @@ class MainWindow(QMainWindow):
         tekst = self.pole_czat.toPlainText().strip()
         model, host = self._wybrany_model_czatu()
         if not (tekst or self._zalaczniki) or not model:
+            return
+        if any(z["typ"] == "do_odczytu" for z in self._zalaczniki):
+            self._uwaga_czatu(_("Poczekaj chwilę - odczytuję tekst z dołączonego dokumentu."), "warn")
             return
         if any(z["typ"] == "dokument" and not z.get("gotowy") for z in self._zalaczniki):
             self._uwaga_czatu(_("Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania."), "warn")
