@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Caricamento del modello in memoria ({gb:.1f} GB) - la prima domanda richiede un po' di tempo, poi le risposte arrivano subito...",
   "Kopiuj kod": "Copia codice",
   "Skopiowano do schowka": "Copiato negli appunti",
-  "Otwórz Open WebUI w przeglądarce": "Apri Open WebUI nel browser"
+  "Otwórz Open WebUI w przeglądarce": "Apri Open WebUI nel browser",
+  "Dołącz do wiadomości": "Allega al messaggio",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Allega un'immagine o un file di testo (codice, .txt, .md, .csv...). Puoi anche trascinare un file nella finestra o incollare uno screenshot (Ctrl+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "PDF, documenti Word e fogli di calcolo è meglio aprirli in Open WebUI: sa leggerli e cercarvi dentro.",
+  "Plik: {nazwa} ({kb} KB)": "File: {nazwa} ({kb} KB)",
+  "Usuń załącznik": "Rimuovi allegato",
+  "Zdjęcia": "Immagini",
+  "Zdjęcia i pliki tekstowe (*)": "Immagini e file di testo (*)",
+  "nie udało się odczytać obrazu": "impossibile leggere l'immagine",
+  "nie widzi zdjęć": "non vede le immagini",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "il file è troppo grande per la chat (oltre 1 MB): il modello non riuscirebbe a tenerlo nella memoria della conversazione",
+  "to nie jest zdjęcie ani plik tekstowy": "non è né un'immagine né un file di testo",
+  "widzi zdjęcia": "vede le immagini",
+  "zdjęcie": "immagine",
+  "zrzut ekranu.jpg": "screenshot.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} non vede le immagini. Scegli un modello la cui descrizione dice \"vede le immagini\" (es. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} è grande: il modello potrebbe non riuscire a tenerlo tutto nella memoria della conversazione (finestra di contesto, si imposta in Impostazioni)."
 }

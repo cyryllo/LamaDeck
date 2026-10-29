@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "A carregar o modelo na memória ({gb:.1f} GB) - a primeira pergunta demora um pouco, depois as respostas chegam logo...",
   "Kopiuj kod": "Copiar código",
   "Skopiowano do schowka": "Copiado para a área de transferência",
-  "Otwórz Open WebUI w przeglądarce": "Abrir o Open WebUI no navegador"
+  "Otwórz Open WebUI w przeglądarce": "Abrir o Open WebUI no navegador",
+  "Dołącz do wiadomości": "Anexar à mensagem",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Anexe uma imagem ou um ficheiro de texto (código, .txt, .md, .csv...). Também pode arrastar um ficheiro para a janela ou colar uma captura de ecrã (Ctrl+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "PDF, documentos Word e folhas de cálculo abrem-se melhor no Open WebUI - sabe lê-los e pesquisá-los.",
+  "Plik: {nazwa} ({kb} KB)": "Ficheiro: {nazwa} ({kb} KB)",
+  "Usuń załącznik": "Remover anexo",
+  "Zdjęcia": "Imagens",
+  "Zdjęcia i pliki tekstowe (*)": "Imagens e ficheiros de texto (*)",
+  "nie udało się odczytać obrazu": "não foi possível ler a imagem",
+  "nie widzi zdjęć": "não vê imagens",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "o ficheiro é demasiado grande para o chat (mais de 1 MB) - o modelo não o conseguiria guardar na memória da conversa",
+  "to nie jest zdjęcie ani plik tekstowy": "não é uma imagem nem um ficheiro de texto",
+  "widzi zdjęcia": "vê imagens",
+  "zdjęcie": "imagem",
+  "zrzut ekranu.jpg": "captura.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} não vê imagens. Escolha um modelo cuja descrição diga \"vê imagens\" (ex. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} é grande - o modelo pode não conseguir guardá-lo todo na memória da conversa (janela de contexto, define-se nas Definições)."
 }

@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Lade das Modell in den Speicher ({gb:.1f} GB) - die erste Frage dauert etwas, danach kommen die Antworten sofort...",
   "Kopiuj kod": "Code kopieren",
   "Skopiowano do schowka": "In die Zwischenablage kopiert",
-  "Otwórz Open WebUI w przeglądarce": "Open WebUI im Browser öffnen"
+  "Otwórz Open WebUI w przeglądarce": "Open WebUI im Browser öffnen",
+  "Dołącz do wiadomości": "An die Nachricht anhängen",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Bild oder Textdatei anhängen (Code, .txt, .md, .csv...). Du kannst eine Datei auch ins Fenster ziehen oder einen Screenshot einfügen (Strg+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "PDFs, Word-Dokumente und Tabellen öffnest du am besten in Open WebUI - es kann sie lesen und durchsuchen.",
+  "Plik: {nazwa} ({kb} KB)": "Datei: {nazwa} ({kb} KB)",
+  "Usuń załącznik": "Anhang entfernen",
+  "Zdjęcia": "Bilder",
+  "Zdjęcia i pliki tekstowe (*)": "Bilder und Textdateien (*)",
+  "nie udało się odczytać obrazu": "Bild konnte nicht gelesen werden",
+  "nie widzi zdjęć": "sieht keine Bilder",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "die Datei ist zu groß für den Chat (über 1 MB) - das Modell bekäme sie nicht in den Gesprächsspeicher",
+  "to nie jest zdjęcie ani plik tekstowy": "das ist weder ein Bild noch eine Textdatei",
+  "widzi zdjęcia": "sieht Bilder",
+  "zdjęcie": "Bild",
+  "zrzut ekranu.jpg": "Bildschirmfoto.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} sieht keine Bilder. Wähle ein Modell, bei dem \"sieht Bilder\" steht (z. B. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} ist groß - das Modell bekommt eventuell nicht alles in den Gesprächsspeicher (Kontextfenster, einstellbar in den Einstellungen)."
 }

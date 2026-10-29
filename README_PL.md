@@ -120,6 +120,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   i przetwarzanie pytania w tokenach/s, liczba tokenów, czas wczytania modelu, czas całkowity —
   przydatne do porównywania modeli i ustawień Ollamy
 - Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
+- **Załączniki: zdjęcia i pliki tekstowe** — przycisk 📎, przeciągnięcie pliku albo wklejenie
+  zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision), pliki
+  tekstowe (kod, .txt, .md, .csv…) są dołączane do wiadomości. PDF, Word i arkusze zostają
+  dla Open WebUI
 - Rozmowy nie są zapisywane — pełny czat z historią daje Open WebUI
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 

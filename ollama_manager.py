@@ -22,6 +22,7 @@ import html
 import os
 import re
 import secrets
+import base64
 import shlex
 import socket
 import sqlite3
@@ -39,11 +40,12 @@ import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, pyqtProperty, QTimer, QUrl, QSettings, QSize, QByteArray, QRectF, QPointF, QPoint,
-    QRect, QObject, QEvent, QVariant, QMetaType,
+    QRect, QObject, QEvent, QVariant, QMetaType, QBuffer, QIODevice,
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
     QImage, QBitmap, QRegion, QCursor, QTextCursor, QTextFrameFormat, QTextBlockFormat, QTextCharFormat,
+    QTextDocument, QTextImageFormat, QKeySequence,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -3033,6 +3035,70 @@ def _wlasciwosc_koloru(nazwa, domyslny):
     return pyqtProperty(QColor, pobierz, ustaw)
 
 
+# WHAT: załączniki czatu - zdjęcia idą do modelu jako obraz (pole "images" w /api/chat),
+#       pliki tekstowe jako tekst w wiadomości.
+# WHY:  PDF/Word/arkusze świadomie NIE - trzeba je rozbierać na tekst (nowe zależności),
+#       a duże dokumenty i tak nie mieszczą się w kontekście; to robi Open WebUI (RAG).
+_ROZSZERZENIA_OBRAZOW = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+_ROZSZERZENIA_DOKUMENTOW = {".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx", ".ods", ".ppt", ".pptx",
+                            ".odp", ".epub"}
+_MAKS_PLIK_TEKSTOWY = 1024 * 1024       # WHY: większy plik i tak nie zmieści się w kontekście modelu
+_DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: od tej wielkości ostrzegamy o oknie kontekstu
+_MAKS_BOK_OBRAZU = 2048                 # WHY: modele i tak zmniejszają obraz - nie wysyłamy zbędnych MB
+
+
+def _obraz_do_wyslania(obraz, nazwa):
+    # WHAT: QImage -> załącznik (JPEG w base64, najwyżej 2048 px na dłuższym boku).
+    # WHY:  jeden format dla wszystkiego (zrzut ze schowka, webp, gif) - Ollama
+    #       na pewno zna JPEG/PNG, a pomniejszenie oszczędza czas wysyłania.
+    if obraz.isNull():
+        raise ValueError(f"{nazwa}: " + _("nie udało się odczytać obrazu"))
+    if max(obraz.width(), obraz.height()) > _MAKS_BOK_OBRAZU:
+        obraz = obraz.scaled(_MAKS_BOK_OBRAZU, _MAKS_BOK_OBRAZU, Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+    bufor = QBuffer()
+    bufor.open(QIODevice.OpenModeFlag.WriteOnly)
+    obraz.convertToFormat(QImage.Format.Format_RGB888).save(bufor, "JPEG", 90)
+    dane = bytes(bufor.data())
+    return {"typ": "obraz", "nazwa": nazwa, "rozmiar": len(dane),
+            "b64": base64.b64encode(dane).decode("ascii")}
+
+
+def wczytaj_zalacznik(sciezka):
+    # WHAT: plik z dysku -> załącznik czatu (obraz albo tekst); ValueError z czytelnym powodem.
+    sciezka = Path(sciezka)
+    rozszerzenie = sciezka.suffix.lower()
+    if rozszerzenie in _ROZSZERZENIA_OBRAZOW:
+        return _obraz_do_wyslania(QImage(str(sciezka)), sciezka.name)
+    if rozszerzenie in _ROZSZERZENIA_DOKUMENTOW:
+        raise ValueError(f"{sciezka.name}: " + _("PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je "
+                           "czytać i przeszukiwać."))
+    if sciezka.stat().st_size > _MAKS_PLIK_TEKSTOWY:
+        raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci "
+                           "rozmowy"))
+    dane = sciezka.read_bytes()
+    # WHY: plik tekstowy = UTF-8 bez bajtów zerowych; wszystko inne to plik binarny
+    #      (program, archiwum...), którego model i tak by nie zrozumiał
+    try:
+        if b"\0" in dane:
+            raise UnicodeDecodeError("utf-8", dane, 0, 1, "NUL")
+        tekst = dane.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError(f"{sciezka.name}: " + _("to nie jest zdjęcie ani plik tekstowy")) from None
+    return {"typ": "tekst", "nazwa": sciezka.name, "rozmiar": len(dane), "tekst": tekst}
+
+
+def _tresc_dla_modelu(wiadomosc):
+    # WHAT: treść wiadomości użytkownika razem z dołączonymi plikami tekstowymi.
+    # WHY:  model nie "otwiera" plików - dostaje ich treść w wiadomości, z nazwą,
+    #       żeby wiedział, o czym mowa ("popraw ten plik").
+    czesci = [wiadomosc["tresc"]] if wiadomosc["tresc"] else []
+    for plik in wiadomosc.get("zalaczniki", []):
+        if plik["typ"] == "tekst":
+            czesci.append(f"Plik: {plik['nazwa']}\n```\n{plik['tekst']}\n```")
+    return "\n\n".join(czesci)
+
+
 def _rozdziel_myslenie(tresc):
     # WHAT: (rozumowanie, odpowiedź) z treści, w której model sam wstawił <think>...</think>.
     # WHY:  nowsza Ollama oddaje rozumowanie w osobnym polu "thinking", ale część
@@ -3091,7 +3157,7 @@ class WidokCzatu(QTextBrowser):
     def pokaz(self, wiadomosci, pusty_tekst="", do_dolu=False):
         # WHAT: cała rozmowa od nowa (nowa wiadomość, koniec odpowiedzi, zmiana języka).
         wartosc, na_dole = self._pozycja()
-        self.document().clear()
+        self.document().clear()  # WHY: czyści też miniatury zdjęć - wstawiane są od nowa
         self._kody = {}
         if not wiadomosci:
             c = QTextCursor(self.document())
@@ -3165,6 +3231,7 @@ class WidokCzatu(QTextBrowser):
             # WHY: tekst użytkownika i błędy wprost, bez Markdownu - wklejony kod
             #      czy gwiazdki mają zostać dokładnie takie, jak je wpisano.
             c.insertText(w["tresc"], self._znaki(self.kolorBledu if w["rola"] == "blad" else self.kolorModelu))
+            self._wstaw_zalaczniki(c, w.get("zalaczniki", []), bool(w["tresc"]))
             return
         myslenie_z_tresci, odpowiedz = _rozdziel_myslenie(w["tresc"])
         myslenie = (w.get("myslenie", "") + myslenie_z_tresci).strip()
@@ -3187,6 +3254,28 @@ class WidokCzatu(QTextBrowser):
                 tekst += f"  {sekundy} s"
             c.insertText(tekst, self._znaki(self.kolorWyciszony, kursywa=True))
         self._styl_kodu(ramka)
+
+    def _wstaw_zalaczniki(self, c, zalaczniki, po_tekscie):
+        # WHAT: miniatury zdjęć (do 260 px) i nazwy plików tekstowych w dymku pytania.
+        for i, z in enumerate(zalaczniki):
+            if po_tekscie or i:
+                c.insertText("\n")
+            if z["typ"] == "obraz":
+                adres = QUrl(f"zalacznik:{id(z)}")
+                if self.document().resource(QTextDocument.ResourceType.ImageResource, adres) is None:
+                    obraz = QImage.fromData(base64.b64decode(z["b64"]))
+                    self.document().addResource(QTextDocument.ResourceType.ImageResource, adres, obraz)
+                    z["_wymiary"] = (obraz.width(), obraz.height())
+                szer, wys = z.get("_wymiary", (260, 260))
+                skala = min(1.0, 260 / max(1, szer), 260 / max(1, wys))
+                f = QTextImageFormat()
+                f.setName(adres.toString())
+                f.setWidth(szer * skala)
+                f.setHeight(wys * skala)
+                c.insertImage(f)
+            else:
+                c.insertText(_("Plik: {nazwa} ({kb} KB)").format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024)),
+                             self._znaki(self.kolorWyciszony))
 
     def _styl_kodu(self, ramka):
         # WHAT: bloki kodu - tło i JetBrains Mono, zawijane, z linkiem "Kopiuj kod" nad
@@ -3284,6 +3373,7 @@ _IKONY_SVG = {
     "otworz": '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
     "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    "spinacz": '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
     # WHAT: stan modelu w tabeli hosta - kość RAM (wczytany do pamięci) i dysk (tylko na dysku)
     "pamiec": '<rect x="2" y="7" width="20" height="10" rx="1.5"/>'
@@ -4337,6 +4427,7 @@ class MainWindow(QMainWindow):
         self._modele = []               # WHY: modele ze wszystkich hostów (ModeleWorker)
         self._czat = []                 # WHY: bieżąca rozmowa (ekran "Czat") - przeżywa zmianę języka
         self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
+        self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
         self._tylko_moe = False         # WHY: pole "Tylko modele MoE" w wyszukiwarce; przeżywa przebudowę UI
@@ -6674,13 +6765,36 @@ class MainWindow(QMainWindow):
         self.widok_czatu = WidokCzatu()
         self.widok_czatu.pokaz_myslenie = _ustawienia().value("czat/rozumowanie", False, type=bool)
         uk.addWidget(self.widok_czatu, 1)
+        # --- załączniki: uwaga + "chipy" z nazwami nad polem ---
+        self.lbl_czat_uwaga = _etykieta("", "muted")
+        self.lbl_czat_uwaga.setObjectName("chatNotice")
+        self.lbl_czat_uwaga.setWordWrap(True)
+        self.lbl_czat_uwaga.hide()
+        uk.addWidget(self.lbl_czat_uwaga)
+        self.rzad_zalacznikow = QHBoxLayout()
+        self.rzad_zalacznikow.setSpacing(6)
+        uk.addLayout(self.rzad_zalacznikow)
         wpis = QHBoxLayout()
         wpis.setSpacing(10)
+        self.btn_czat_zalacz = QPushButton()
+        self.btn_czat_zalacz.setObjectName("attachButton")
+        self.btn_czat_zalacz.setIcon(ikona("spinacz", PALETA.tekst, rozmiar=20, grubosc=1.8))
+        self.btn_czat_zalacz.setIconSize(QSize(20, 20))
+        self.btn_czat_zalacz.setFixedSize(48, 76)
+        self.btn_czat_zalacz.setToolTip(_("Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). "
+                                          "Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V)."))
+        self.btn_czat_zalacz.clicked.connect(self._wybierz_zalaczniki)
+        wpis.addWidget(self.btn_czat_zalacz)
         self.pole_czat = QPlainTextEdit()
         self.pole_czat.setObjectName("chatInput")
         self.pole_czat.setPlaceholderText(_("Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)"))
         self.pole_czat.setFixedHeight(76)
         self.pole_czat.installEventFilter(self)
+        # WHY: pliki można upuścić na pole albo na rozmowę - filtr na "viewport",
+        #      bo to on dostaje zdarzenia przeciągania w polach tekstowych
+        self.pole_czat.viewport().installEventFilter(self)
+        self.widok_czatu.viewport().installEventFilter(self)
+        self.widok_czatu.viewport().setAcceptDrops(True)
         wpis.addWidget(self.pole_czat, 1)
         self.btn_czat_wyslij = self._przycisk(_("Wyślij"), rola="primary", slot=self.wyslij_czat)
         self.btn_czat_wyslij.setFixedHeight(76)
@@ -6736,24 +6850,116 @@ class MainWindow(QMainWindow):
 
         self._odswiez_modele_czatu()
         self._pokaz_czat()
+        self._pokaz_zalaczniki()
         self._odswiez_przycisk_czatu()
         return strona
 
     def eventFilter(self, obiekt, zdarzenie):
-        # WHAT: Enter w polu czatu wysyła, Shift+Enter dodaje nową linię.
-        if (obiekt is getattr(self, "pole_czat", None) and zdarzenie.type() == QEvent.Type.KeyPress
-                and zdarzenie.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-                and not zdarzenie.modifiers() & Qt.KeyboardModifier.ShiftModifier):
-            self.wyslij_czat()
-            return True
+        # WHAT: pole czatu - Enter wysyła (Shift+Enter = nowa linia), Ctrl+V z obrazem
+        #       w schowku dołącza zrzut ekranu; pole i rozmowa przyjmują upuszczone pliki.
+        pole = getattr(self, "pole_czat", None)
+        if pole is None:
+            return super().eventFilter(obiekt, zdarzenie)
+        typ = zdarzenie.type()
+        if obiekt is pole and typ == QEvent.Type.KeyPress:
+            if (zdarzenie.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                    and not zdarzenie.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                self.wyslij_czat()
+                return True
+            if zdarzenie.matches(QKeySequence.StandardKey.Paste) and QApplication.clipboard().mimeData().hasImage():
+                # WHY: zrzut ekranu ze schowka (Spectacle, PrintScreen) - jak w komunikatorach
+                self._dodaj_zalacznik(lambda: _obraz_do_wyslania(QApplication.clipboard().image(),
+                                                                   _("zrzut ekranu.jpg")))
+                return True
+        if obiekt in (pole.viewport(), self.widok_czatu.viewport()):
+            if typ in (QEvent.Type.DragEnter, QEvent.Type.DragMove) and zdarzenie.mimeData().hasUrls():
+                zdarzenie.acceptProposedAction()
+                return True
+            if typ == QEvent.Type.Drop and zdarzenie.mimeData().hasUrls():
+                for url in zdarzenie.mimeData().urls():
+                    if url.isLocalFile():
+                        self._dodaj_zalacznik(lambda p=url.toLocalFile(): wczytaj_zalacznik(p))
+                zdarzenie.acceptProposedAction()
+                return True
         return super().eventFilter(obiekt, zdarzenie)
 
+    # --- załączniki czatu ---------------------------------------------------
+    def _wybierz_zalaczniki(self):
+        pliki, _f = QFileDialog.getOpenFileNames(
+            self, _("Dołącz do wiadomości"), str(Path.home()),
+            _("Zdjęcia i pliki tekstowe (*)") + ";;" + _("Zdjęcia") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)")
+        for sciezka in pliki:
+            self._dodaj_zalacznik(lambda p=sciezka: wczytaj_zalacznik(p))
+
+    def _dodaj_zalacznik(self, wczytaj):
+        # WHAT: wczytuje załącznik (funkcja może rzucić ValueError z powodem) i odświeża pasek.
+        try:
+            z = wczytaj()
+        except (ValueError, OSError) as e:
+            self._uwaga_czatu(str(e), "warn")
+            return
+        self._zalaczniki.append(z)
+        self._uwaga_czatu("")
+        if z["typ"] == "tekst" and z["rozmiar"] > _DUZY_PLIK_TEKSTOWY:
+            self._uwaga_czatu(_("{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy "
+                                "(okno kontekstu, ustawiasz je w Ustawieniach).").format(nazwa=z["nazwa"]), "warn")
+        self._pokaz_zalaczniki()
+        self._odswiez_modele_czatu()  # WHY: ze zdjęciem lista pokazuje też modele OCR
+
+    def _usun_zalacznik(self, z):
+        if z in self._zalaczniki:
+            self._zalaczniki.remove(z)
+        self._uwaga_czatu("")
+        self._pokaz_zalaczniki()
+        self._odswiez_modele_czatu()
+
+    def _uwaga_czatu(self, tekst, stan="warn"):
+        self.lbl_czat_uwaga.setText(tekst)
+        self.lbl_czat_uwaga.setProperty("state", stan)
+        _odswiez_styl(self.lbl_czat_uwaga)
+        self.lbl_czat_uwaga.setVisible(bool(tekst))
+
+    def _pokaz_zalaczniki(self):
+        # WHAT: "chipy" z nazwami załączników nad polem, każdy z krzyżykiem do usunięcia.
+        while self.rzad_zalacznikow.count():
+            element = self.rzad_zalacznikow.takeAt(0)
+            chip = element.widget()
+            if chip:
+                # WHY: od razu zdjęty z okna - samo deleteLater zostawiało go na chwilę
+                #      jako luźną ramkę na rozmowie
+                chip.setParent(None)
+                chip.deleteLater()
+        for z in self._zalaczniki:
+            chip = QFrame()
+            chip.setObjectName("chatChip")
+            h = QHBoxLayout(chip)
+            h.setContentsMargins(10, 4, 4, 4)
+            h.setSpacing(4)
+            opis = _("zdjęcie") if z["typ"] == "obraz" else f"{max(1, z['rozmiar'] // 1024)} KB"
+            h.addWidget(QLabel(f"{z['nazwa']}  ·  {opis}"))
+            usun = QPushButton()
+            usun.setObjectName("iconButton")
+            usun.setIcon(ikona("zamknij", PALETA.wyciszony, rozmiar=14, grubosc=2))
+            usun.setFixedSize(24, 24)
+            usun.setToolTip(_("Usuń załącznik"))
+            usun.clicked.connect(lambda _c, zz=z: self._usun_zalacznik(zz))
+            h.addWidget(usun)
+            self.rzad_zalacznikow.addWidget(chip)
+        self.rzad_zalacznikow.addStretch(1)
+
     @staticmethod
-    def _umie_rozmawiac(model):
+    def _umie_rozmawiac(model, ze_zdjeciem=False):
         # WHAT: czy model obsługuje czat - możliwość "completion" z /api/show.
         # WHY:  modele bez niej (embeddingi, rerankery, generatory obrazów) i tak
         #       zwróciłyby błąd. Gdy Ollama nie podała możliwości (starsza wersja),
         #       odrzucamy tylko embeddingi, jak wcześniej.
+        # WHY:  modele OCR (glm-ocr, deepseek-ocr, olmOCR) mają "completion", ale służą
+        #       do odczytu tekstu z obrazów - w rozmowie powtarzają pytanie (sprawdzone
+        #       na glm-ocr). Ollama nie ma flagi "model specjalistyczny", więc po nazwie
+        #       (zgłoszenie użytkownika).
+        #       Ze zdjęciem w załącznikach wracają - to właśnie ich zadanie.
+        if "ocr" in model["nazwa"].lower() and not ze_zdjeciem:
+            return False
         if model.get("mozliwosci"):
             return "completion" in model["mozliwosci"]
         return model["rodzaj"] != "embedding"
@@ -6761,7 +6967,8 @@ class MainWindow(QMainWindow):
     def _modele_czatu(self):
         # WHAT: (model, host) do wyboru - tylko modele umiejące rozmawiać;
         #       tylko hosty online, bo tylko takie zbiera zbierz_modele.
-        return [(m, h) for m in self._modele if self._umie_rozmawiac(m) for h in m["hosty"]]
+        ze_zdjeciem = any(z["typ"] == "obraz" for z in getattr(self, "_zalaczniki", []))
+        return [(m, h) for m in self._modele if self._umie_rozmawiac(m, ze_zdjeciem) for h in m["hosty"]]
 
     def _odswiez_modele_czatu(self):
         if not hasattr(self, "combo_czat_model"):
@@ -6807,8 +7014,13 @@ class MainWindow(QMainWindow):
                 czesci.append(model["kwantyzacja"])
             tekst = " · ".join(czesci) + "\n" + _("na hoście: {host}").format(host=host["nazwa"])
             tekst += " · " + (_("w pamięci") if host["w_pamieci"] else _("wczyta się przy pierwszym pytaniu"))
+            tekst += "\n" + (_("widzi zdjęcia") if self._widzi_obrazy(model) else _("nie widzi zdjęć"))
             self.lbl_czat_model.setText(tekst)
         self._odswiez_przycisk_czatu()
+
+    @staticmethod
+    def _widzi_obrazy(model):
+        return "vision" in model.get("mozliwosci", [])
 
     def _przelacz_rozumowanie(self, wlacz):
         _ustawienia().setValue("czat/rozumowanie", wlacz)
@@ -6847,14 +7059,31 @@ class MainWindow(QMainWindow):
             return
         tekst = self.pole_czat.toPlainText().strip()
         model, host = self._wybrany_model_czatu()
-        if not tekst or not model:
+        if not (tekst or self._zalaczniki) or not model:
             return
+        if any(z["typ"] == "obraz" for z in self._zalaczniki) and not self._widzi_obrazy(model):
+            self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" "
+                                "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
+                              "warn")
+            return
+        wiadomosc = {"rola": "user", "tresc": tekst, "zalaczniki": list(self._zalaczniki)}
+        self._czat.append(wiadomosc)
         # WHY: historia dla modelu - bez błędów i bez rozumowania (model go nie potrzebuje,
-        #      a zjadałoby kontekst)
-        historia = [{"role": w["rola"], "content": _rozdziel_myslenie(w["tresc"])[1]}
-                    for w in self._czat if w["rola"] in ("user", "assistant") and not w.get("przerwano")]
-        historia.append({"role": "user", "content": tekst})
-        self._czat.append({"rola": "user", "tresc": tekst})
+        #      a zjadałoby kontekst); zdjęcia zostają przy swoich pytaniach, żeby model
+        #      pamiętał je w dalszej rozmowie ("a co jest w lewym rogu?")
+        historia = []
+        for w in self._czat:
+            if w["rola"] == "user":
+                wpis = {"role": "user", "content": _tresc_dla_modelu(w)}
+                obrazy = [z["b64"] for z in w.get("zalaczniki", []) if z["typ"] == "obraz"]
+                if obrazy:
+                    wpis["images"] = obrazy
+                historia.append(wpis)
+            elif w["rola"] == "assistant" and not w.get("przerwano"):
+                historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
+        self._zalaczniki = []
+        self._pokaz_zalaczniki()
+        self._uwaga_czatu("")
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
                            "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
                            "gb": model["rozmiar"] / 1024 ** 3})

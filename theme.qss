@@ -587,3 +587,12 @@ WidokCzatu {
 }
 QPlainTextEdit#chatInput { padding: 8px 10px; font-size: 10.5pt; }
 QPlainTextEdit#chatInput:focus { border-color: #3daee9; }
+/* Załączniki czatu: przycisk ze spinaczem, "chipy" z nazwami, uwaga nad polem */
+QPushButton#attachButton {
+    min-height: 0; padding: 0; border-radius: 10px;
+    background: #15181b; border: 1px solid #353b43;
+}
+QPushButton#attachButton:hover { border-color: #3daee9; }
+QFrame#card QFrame#chatChip { background: #2c3138; border: 1px solid #3a4048; border-radius: 8px; }
+QFrame#card QFrame#chatChip QPushButton#iconButton { min-height: 0; min-width: 0; }
+QFrame#card QLabel#chatNotice[state="warn"] { color: #f0b453; }

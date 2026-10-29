@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Cargando el modelo en memoria ({gb:.1f} GB): la primera pregunta tarda un poco, después las respuestas llegan enseguida...",
   "Kopiuj kod": "Copiar código",
   "Skopiowano do schowka": "Copiado al portapapeles",
-  "Otwórz Open WebUI w przeglądarce": "Abrir Open WebUI en el navegador"
+  "Otwórz Open WebUI w przeglądarce": "Abrir Open WebUI en el navegador",
+  "Dołącz do wiadomości": "Adjuntar al mensaje",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Adjunta una imagen o un archivo de texto (código, .txt, .md, .csv...). También puedes arrastrar un archivo a la ventana o pegar una captura de pantalla (Ctrl+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "Los PDF, documentos de Word y hojas de cálculo es mejor abrirlos en Open WebUI: sabe leerlos y buscar en ellos.",
+  "Plik: {nazwa} ({kb} KB)": "Archivo: {nazwa} ({kb} KB)",
+  "Usuń załącznik": "Quitar adjunto",
+  "Zdjęcia": "Imágenes",
+  "Zdjęcia i pliki tekstowe (*)": "Imágenes y archivos de texto (*)",
+  "nie udało się odczytać obrazu": "no se pudo leer la imagen",
+  "nie widzi zdjęć": "no ve imágenes",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "el archivo es demasiado grande para el chat (más de 1 MB): el modelo no podría meterlo en la memoria de la conversación",
+  "to nie jest zdjęcie ani plik tekstowy": "no es una imagen ni un archivo de texto",
+  "widzi zdjęcia": "ve imágenes",
+  "zdjęcie": "imagen",
+  "zrzut ekranu.jpg": "captura.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} no ve imágenes. Elige un modelo cuya descripción diga \"ve imágenes\" (p. ej. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} es grande: puede que el modelo no quepa entero en la memoria de la conversación (ventana de contexto, se ajusta en Ajustes)."
 }

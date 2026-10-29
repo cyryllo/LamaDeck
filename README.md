@@ -120,6 +120,9 @@ fonts are bundled, so it looks the same everywhere).
   tokens/s, token counts, model loading time, total time — handy for comparing models and
   Ollama settings
 - Optional view of the model's reasoning (models that "think", e.g. qwen3)
+- **Attach pictures and text files**: 📎 button, drag & drop or paste a screenshot (Ctrl+V).
+  Pictures go to models that can see them (vision), text files (code, .txt, .md, .csv…) are
+  added to the message. PDFs, Word documents and spreadsheets are left to Open WebUI
 - Conversations are not saved — for a full chat with history, use Open WebUI
 - Also opens straight from the tray panel ("Open chat")
 

@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Chargement du modèle en mémoire ({gb:.1f} Go) - la première question prend un moment, ensuite les réponses arrivent tout de suite...",
   "Kopiuj kod": "Copier le code",
   "Skopiowano do schowka": "Copié dans le presse-papiers",
-  "Otwórz Open WebUI w przeglądarce": "Ouvrir Open WebUI dans le navigateur"
+  "Otwórz Open WebUI w przeglądarce": "Ouvrir Open WebUI dans le navigateur",
+  "Dołącz do wiadomości": "Joindre au message",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Joindre une image ou un fichier texte (code, .txt, .md, .csv...). Vous pouvez aussi glisser un fichier dans la fenêtre ou coller une capture d'écran (Ctrl+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "Les PDF, documents Word et tableurs s'ouvrent mieux dans Open WebUI - il sait les lire et y chercher.",
+  "Plik: {nazwa} ({kb} KB)": "Fichier : {nazwa} ({kb} Ko)",
+  "Usuń załącznik": "Retirer la pièce jointe",
+  "Zdjęcia": "Images",
+  "Zdjęcia i pliki tekstowe (*)": "Images et fichiers texte (*)",
+  "nie udało się odczytać obrazu": "impossible de lire l'image",
+  "nie widzi zdjęć": "ne voit pas les images",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "le fichier est trop gros pour le chat (plus de 1 Mo) - le modèle ne pourrait pas le garder en mémoire de conversation",
+  "to nie jest zdjęcie ani plik tekstowy": "ce n'est ni une image ni un fichier texte",
+  "widzi zdjęcia": "voit les images",
+  "zdjęcie": "image",
+  "zrzut ekranu.jpg": "capture.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} ne voit pas les images. Choisissez un modèle dont la description indique « voit les images » (p. ex. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} est gros - le modèle risque de ne pas tout garder en mémoire de conversation (fenêtre de contexte, réglable dans Paramètres)."
 }

@@ -497,5 +497,21 @@
   "Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę trwa, potem odpowiedzi idą od razu...": "Loading the model into memory ({gb:.1f} GB) - the first question takes a while, after that answers come right away...",
   "Kopiuj kod": "Copy code",
   "Skopiowano do schowka": "Copied to clipboard",
-  "Otwórz Open WebUI w przeglądarce": "Open Open WebUI in the browser"
+  "Otwórz Open WebUI w przeglądarce": "Open Open WebUI in the browser",
+  "Dołącz do wiadomości": "Attach to the message",
+  "Dołącz zdjęcie albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V).": "Attach a picture or a text file (code, .txt, .md, .csv...). You can also drag a file into the window or paste a screenshot (Ctrl+V).",
+  "PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je czytać i przeszukiwać.": "PDFs, Word documents and spreadsheets are best opened in Open WebUI - it can read and search them.",
+  "Plik: {nazwa} ({kb} KB)": "File: {nazwa} ({kb} KB)",
+  "Usuń załącznik": "Remove attachment",
+  "Zdjęcia": "Pictures",
+  "Zdjęcia i pliki tekstowe (*)": "Pictures and text files (*)",
+  "nie udało się odczytać obrazu": "could not read the picture",
+  "nie widzi zdjęć": "can't see pictures",
+  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "the file is too big for the chat (over 1 MB) - the model couldn't fit it in the conversation memory",
+  "to nie jest zdjęcie ani plik tekstowy": "this is neither a picture nor a text file",
+  "widzi zdjęcia": "can see pictures",
+  "zdjęcie": "picture",
+  "zrzut ekranu.jpg": "screenshot.jpg",
+  "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} can't see pictures. Pick a model whose description says \"can see pictures\" (e.g. gemma3, qwen2.5vl, llava).",
+  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} is big - the model may not fit all of it in the conversation memory (context window, set it in Settings)."
 }
