@@ -596,3 +596,5 @@ QPushButton#attachButton:hover { border-color: #3daee9; }
 QFrame#card QFrame#chatChip { background: #2c3138; border: 1px solid #3a4048; border-radius: 8px; }
 QFrame#card QFrame#chatChip QPushButton#iconButton { min-height: 0; min-width: 0; }
 QFrame#card QLabel#chatNotice[state="warn"] { color: #f0b453; }
+/* Ustawienia → Czat: wiersz "brak modelu embeddingów" z przyciskiem pobierania - tło karty */
+QFrame#card QFrame#ragMissing { background: transparent; }

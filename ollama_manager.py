@@ -2539,11 +2539,11 @@ class RagWorker(WatekTla):
         try:
             fragmenty = _podziel_na_fragmenty(self.tekst)
             wektory = []
-            # WHY: po 16 naraz - pasek postępu żyje, a jedno zapytanie nie trwa minut
-            for i in range(0, len(fragmenty), 16):
+            # WHY: po 32 naraz - mniej zapytań przy dużych plikach, a pasek postępu nadal żyje
+            for i in range(0, len(fragmenty), 32):
                 if self._anuluj:
                     return
-                wektory += ollama_embeddingi(self.adres, self.model, [f[0] for f in fragmenty[i:i + 16]])
+                wektory += ollama_embeddingi(self.adres, self.model, [f[0] for f in fragmenty[i:i + 32]])
                 self.postep.emit(len(wektory), len(fragmenty))
             if len(wektory) != len(fragmenty):
                 raise RuntimeError(_("model embeddingów zwrócił złą liczbę wektorów"))
@@ -3105,7 +3105,8 @@ def _wlasciwosc_koloru(nazwa, domyslny):
 _ROZSZERZENIA_OBRAZOW = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _ROZSZERZENIA_DOKUMENTOW = {".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx", ".ods", ".ppt", ".pptx",
                             ".odp", ".epub"}
-_MAKS_PLIK_TEKSTOWY = 5 * 1024 * 1024   # WHY: większy plik to minuty liczenia embeddingów i setki MB w pamięci
+_MAKS_PLIK_TEKSTOWY = 20 * 1024 * 1024  # WHY: 20 MB = ok. 23 tys. fragmentów: 75 MB wektorów i ok. 2,6 s
+                                        #      wyszukiwania na pytanie (zmierzone); więcej = minuty czekania
 _DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: powyżej - tryb wyszukiwania (RAG), bo całość nie zmieści się
                                         #      w oknie kontekstu modelu (64k tokenów to ok. 150-250 KB tekstu)
 _FRAGMENT_ZNAKOW = 900                  # WHY: modele embeddingów mają małe okno (nomic: 512 tokenów)
@@ -3141,7 +3142,7 @@ def wczytaj_zalacznik(sciezka):
         raise ValueError(f"{sciezka.name}: " + _("PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je "
                            "czytać i przeszukiwać."))
     if sciezka.stat().st_size > _MAKS_PLIK_TEKSTOWY:
-        raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 5 MB) - większe dokumenty "
+        raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 20 MB) - większe dokumenty "
                                                  "obsłuży Open WebUI"))
     dane = sciezka.read_bytes()
     # WHY: plik tekstowy = UTF-8 bez bajtów zerowych; wszystko inne to plik binarny
@@ -3155,6 +3156,13 @@ def wczytaj_zalacznik(sciezka):
     # WHY: duży plik nie idzie w całości - "dokument" przechodzi w tryb wyszukiwania
     typ = "dokument" if len(dane) > _DUZY_PLIK_TEKSTOWY else "tekst"
     return {"typ": typ, "nazwa": sciezka.name, "rozmiar": len(dane), "tekst": tekst}
+
+
+# WHAT: model embeddingów proponowany, gdy na hostach nie ma żadnego (Ustawienia → Czat).
+# WHY:  wielojęzyczny (polskie dokumenty) - mniejszy nomic-embed-text (274 MB) jest głównie
+#       angielski. Rozmiar sprawdzony na ollama.com 2026-10-29.
+RAG_ZALECANY_MODEL = "nomic-embed-text-v2-moe"
+RAG_ZALECANY_ROZMIAR = "958 MB"
 
 
 # --- Wyszukiwanie w dużych plikach (RAG) - tylko Ollama, bez dodatkowych bibliotek ---
@@ -4796,6 +4804,7 @@ class MainWindow(QMainWindow):
             self.odswiez_info_webui()
         if klucz == "ustawienia":
             self.odswiez_wersje()
+            self.odswiez_modele()  # WHY: lista modeli embeddingów w karcie "Czat"
         if klucz == "dziennik":
             self.odswiez_dziennik()
         if klucz == "czat":
@@ -6478,6 +6487,7 @@ class MainWindow(QMainWindow):
         self._wypelnij_siatke_modeli()
         self._odswiez_schemat()
         self._odswiez_modele_czatu()
+        self._odswiez_modele_rag()
 
     def _filtruj_modele(self, klucz):
         self._filtr_modeli = klucz
@@ -7050,13 +7060,22 @@ class MainWindow(QMainWindow):
         self._pokaz_zalaczniki()
         self._odswiez_modele_czatu()  # WHY: ze zdjęciem lista pokazuje też modele OCR
 
+    def _modele_embeddingow(self):
+        # WHAT: [(nazwa, adres, nazwa hosta)] - modele embeddingów na hostach online.
+        return [(m["nazwa"], h["adres"], h["nazwa"]) for m in self._modele
+                if "embedding" in m.get("mozliwosci", []) or m["rodzaj"] == "embedding" for h in m["hosty"]]
+
     def _model_embeddingow(self):
-        # WHAT: (model, adres) do embeddingów - najlepiej na hoście wybranego modelu czatu.
-        # WHY:  Ollama liczy wektory tylko modelem typu "embedding" (np. nomic-embed-text);
-        #       ten sam model musi potem liczyć wektor pytania, więc go zapamiętujemy.
+        # WHAT: (model, adres) do embeddingów - wybrany w Ustawieniach, a przy "Automatycznie"
+        #       (albo gdy wybrany host jest offline) najlepiej na hoście modelu czatu.
+        # WHY:  Ollama liczy wektory tylko modelem typu "embedding"; ten sam model musi
+        #       potem liczyć wektor pytania, więc zapamiętujemy go przy dokumencie.
+        kandydaci = [(nazwa, adres) for nazwa, adres, _h in self._modele_embeddingow()]
+        wybrany = _ustawienia().value("czat/model_rag", "")
+        for nazwa, adres in kandydaci:
+            if f"{adres}|{nazwa}" == wybrany:
+                return nazwa, adres
         _model, host = self._wybrany_model_czatu()
-        kandydaci = [(m["nazwa"], h["adres"]) for m in self._modele
-                     if "embedding" in m.get("mozliwosci", []) or m["rodzaj"] == "embedding" for h in m["hosty"]]
         for nazwa, adres in kandydaci:
             if host and adres == host["adres"]:
                 return nazwa, adres
@@ -7067,8 +7086,8 @@ class MainWindow(QMainWindow):
         wybor = self._model_embeddingow()
         if not wybor:
             self._uwaga_czatu(_("{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model "
-                                "embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny "
-                                "host).").format(nazwa=z["nazwa"]), "warn")
+                                "embeddingów. Zalecany pobierzesz jednym przyciskiem w \"Ustawieniach\" (karta "
+                                "\"Czat\").").format(nazwa=z["nazwa"]), "warn")
             return False
         z["model_emb"], z["adres_emb"] = wybor
         z["gotowy"], z["procent"] = False, 0
@@ -7217,6 +7236,41 @@ class MainWindow(QMainWindow):
         model = next((m for m in self._modele if m["nazwa"] == nazwa), None)
         host = next((h for h in (model or {}).get("hosty", []) if h["adres"] == adres), None)
         return model, host
+
+    def _odswiez_modele_rag(self):
+        # WHAT: lista modeli embeddingów w Ustawieniach ("Automatycznie" + model · host).
+        if not hasattr(self, "combo_model_rag"):
+            return
+        modele = self._modele_embeddingow()
+        wybrany = _ustawienia().value("czat/model_rag", "")
+        self.combo_model_rag.blockSignals(True)
+        self.combo_model_rag.clear()
+        self.combo_model_rag.addItem(_("Automatycznie"), "")
+        for nazwa, adres, nazwa_hosta in modele:
+            self.combo_model_rag.addItem(f"{nazwa}  ·  {nazwa_hosta}", f"{adres}|{nazwa}")
+        if wybrany and self.combo_model_rag.findData(wybrany) < 0:
+            # WHY: wybrany model jest na hoście offline - nie gubimy wyboru, a czat
+            #      do czasu powrotu hosta działa jak "Automatycznie"
+            nazwa = wybrany.split("|", 1)[1]
+            self.combo_model_rag.addItem(_("{model} (host niedostępny)").format(model=nazwa), wybrany)
+        self.combo_model_rag.setCurrentIndex(max(0, self.combo_model_rag.findData(wybrany)))
+        self.combo_model_rag.blockSignals(False)
+        self.ramka_rag_brak.setVisible(not modele and bool(self.serwery))
+        self.btn_pobierz_rag.setEnabled(self._pobieranie is None)
+
+    def _zmiana_modelu_rag(self, *_a):
+        _ustawienia().setValue("czat/model_rag", self.combo_model_rag.currentData() or "")
+
+    def _pobierz_model_rag(self):
+        # WHAT: pobiera zalecany model embeddingów na host modelu czatu (albo pierwszy z listy)
+        #       i przechodzi na ekran Modele, gdzie widać postęp pobierania.
+        _model, host = self._wybrany_model_czatu()
+        if host:
+            adres, nazwa_hosta = host["adres"], host["nazwa"]
+        else:
+            adres, nazwa_hosta = self.serwery[0]["adres"], self.serwery[0]["nazwa"]
+        self._rozpocznij_pobieranie(RAG_ZALECANY_MODEL, adres, nazwa_hosta)
+        self._przejdz("modele")
 
     def _zmiana_modelu_czatu(self, *_a, zapisz=True):
         model, host = self._wybrany_model_czatu()
@@ -7974,6 +8028,47 @@ class MainWindow(QMainWindow):
         uk.addStretch(1)
         rzad.addWidget(karta, 1)
         v.addLayout(rzad)
+
+        # --- Czat: model do wyszukiwania w dużych plikach ---
+        karta, uk = self._karta()
+        uk.setSpacing(0)
+        uk.addWidget(_etykieta(_("Czat"), "h2"))
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(14)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel(_("Model do wyszukiwania w dużych plikach")))
+        opis = _etykieta(_("model embeddingów - przy plikach powyżej 100 KB zamienia ich fragmenty na wektory, "
+                           "żeby do pytania trafiły tylko pasujące. \"Automatycznie\" = pierwszy znaleziony, "
+                           "najlepiej na hoście modelu czatu."), "muted")
+        opis.setWordWrap(True)
+        teksty.addWidget(opis)
+        h.addLayout(teksty, 1)
+        self.combo_model_rag = QComboBox()
+        self.combo_model_rag.setMinimumWidth(320)
+        self.combo_model_rag.currentIndexChanged.connect(self._zmiana_modelu_rag)
+        h.addWidget(self.combo_model_rag, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(wiersz)
+        # WHY: gdy żadnego modelu embeddingów nie ma - jeden przycisk zamiast szukania nazwy
+        self.ramka_rag_brak = QFrame()
+        self.ramka_rag_brak.setObjectName("ragMissing")
+        h = QHBoxLayout(self.ramka_rag_brak)
+        h.setContentsMargins(0, 10, 0, 0)
+        brak = _etykieta(_("Na hostach nie ma jeszcze żadnego modelu embeddingów. Zalecany jest wielojęzyczny "
+                           "(dobrze radzi sobie z polskimi tekstami); możesz też pobrać inny na ekranie "
+                           "\"Modele\" i wybrać go tutaj."), "muted")
+        brak.setWordWrap(True)
+        h.addWidget(brak, 1)
+        self.btn_pobierz_rag = self._przycisk(
+            _("Pobierz {model} ({rozmiar})").format(model=RAG_ZALECANY_MODEL, rozmiar=RAG_ZALECANY_ROZMIAR),
+            "pobierz", slot=self._pobierz_model_rag)
+        h.addWidget(self.btn_pobierz_rag, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(self.ramka_rag_brak)
+        v.addWidget(karta)
+        self._odswiez_modele_rag()
 
         # --- Zmienne środowiskowe Ollamy ---
         karta, uk = self._karta()

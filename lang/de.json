@@ -519,9 +519,15 @@
   "Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci.": "Tipp: Ollama hält nur 1 Modell im Speicher (OLLAMA_MAX_LOADED_MODELS=1), daher macht das Chat-Modell bei jeder Frage dem Embedding-Modell Platz und wird neu geladen. Stelle in den \"Einstellungen\" 2 ein, wenn der Speicher reicht.",
   "linie": "Zeilen",
   "model embeddingów zwrócił złą liczbę wektorów": "das Embedding-Modell lieferte eine falsche Anzahl von Vektoren",
-  "plik jest za duży na czat (ponad 5 MB) - większe dokumenty obsłuży Open WebUI": "die Datei ist zu groß für den Chat (über 5 MB) - größere Dokumente verarbeitet Open WebUI",
   "przygotowuję {n}%": "bereite vor {n}%",
   "wyszukiwanie fragmentów": "Auszugssuche",
-  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny host).": "{nazwa} ist groß (über 100 KB) - für die Suche darin wird ein Embedding-Modell gebraucht, z. B. nomic-embed-text. Lade es im Bildschirm \"Modelle\" herunter (auf einen beliebigen Host).",
-  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa}: konnte nicht für die Suche vorbereitet werden - {blad}"
+  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa}: konnte nicht für die Suche vorbereitet werden - {blad}",
+  "Model do wyszukiwania w dużych plikach": "Modell für die Suche in großen Dateien",
+  "model embeddingów - przy plikach powyżej 100 KB zamienia ich fragmenty na wektory, żeby do pytania trafiły tylko pasujące. \"Automatycznie\" = pierwszy znaleziony, najlepiej na hoście modelu czatu.": "Embedding-Modell - bei Dateien über 100 KB wandelt es ihre Auszüge in Vektoren um, damit nur passende mit der Frage mitgehen. \"Automatisch\" = das erste gefundene, am besten auf dem Host des Chat-Modells.",
+  "Na hostach nie ma jeszcze żadnego modelu embeddingów. Zalecany jest wielojęzyczny (dobrze radzi sobie z polskimi tekstami); możesz też pobrać inny na ekranie \"Modele\" i wybrać go tutaj.": "Auf den Hosts gibt es noch kein Embedding-Modell. Empfohlen wird ein mehrsprachiges (kommt gut mit nicht-englischen Texten zurecht); du kannst auch ein anderes im Bildschirm \"Modelle\" herunterladen und hier auswählen.",
+  "Pobierz {model} ({rozmiar})": "{model} herunterladen ({rozmiar})",
+  "Automatycznie": "Automatisch",
+  "{model} (host niedostępny)": "{model} (Host nicht erreichbar)",
+  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów. Zalecany pobierzesz jednym przyciskiem w \"Ustawieniach\" (karta \"Czat\").": "{nazwa} ist groß (über 100 KB) - für die Suche darin wird ein Embedding-Modell gebraucht. Das empfohlene lädst du mit einem Klick in den \"Einstellungen\" (Karte \"Chat\").",
+  "plik jest za duży na czat (ponad 20 MB) - większe dokumenty obsłuży Open WebUI": "die Datei ist zu groß für den Chat (über 20 MB) - größere Dokumente verarbeitet Open WebUI"
 }

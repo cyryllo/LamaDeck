@@ -123,10 +123,12 @@ fonts are bundled, so it looks the same everywhere).
 - **Attach pictures and text files**: 📎 button, drag & drop or paste a screenshot (Ctrl+V).
   Pictures go to models that can see them (vision), text files (code, .txt, .md, .csv…) are
   added to the message. PDFs, Word documents and spreadsheets are left to Open WebUI
-- **Large text files (100 KB – 5 MB) are searched, not pasted**: the file is split into excerpts
+- **Large text files (100 KB – 20 MB) are searched, not pasted**: the file is split into excerpts
   and indexed with an embedding model in Ollama (e.g. `nomic-embed-text`); each question gets the
   best-matching excerpts, and the answer shows which lines they came from. Nothing beyond Ollama
-  is needed, and nothing is stored on disk
+  is needed, and nothing is stored on disk. The embedding model is chosen in Settings ("Chat"
+  card); without one, a button there downloads the recommended multilingual
+  `nomic-embed-text-v2-moe`
 - Conversations are not saved — for a full chat with history, use Open WebUI
 - Also opens straight from the tray panel ("Open chat")
 

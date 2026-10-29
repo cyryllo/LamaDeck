@@ -124,10 +124,12 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision), pliki
   tekstowe (kod, .txt, .md, .csv…) są dołączane do wiadomości. PDF, Word i arkusze zostają
   dla Open WebUI
-- **Duże pliki tekstowe (100 KB – 5 MB) są przeszukiwane, a nie wklejane** — plik jest cięty
+- **Duże pliki tekstowe (100 KB – 20 MB) są przeszukiwane, a nie wklejane** — plik jest cięty
   na fragmenty i indeksowany modelem embeddingów w Ollamie (np. `nomic-embed-text`); do każdego
   pytania trafiają najlepiej pasujące fragmenty, a pod odpowiedzią widać, z których linii. Nic
-  poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku
+  poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku. Model embeddingów wybierasz
+  w Ustawieniach (karta „Czat”); gdy żadnego nie ma, przycisk pobiera zalecany, wielojęzyczny
+  `nomic-embed-text-v2-moe`
 - Rozmowy nie są zapisywane — pełny czat z historią daje Open WebUI
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
