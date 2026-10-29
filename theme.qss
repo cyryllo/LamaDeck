@@ -565,3 +565,24 @@ QTableView::indicator:checked { background: #3daee9; border-color: #3daee9; }
 /* Strony przełączane wewnątrz karty (np. "Aliasy" / "Wszystkie modele" w routerze)
  * DLACZEGO: ogólna reguła "QWidget { background }" dawała im tło okna - ciemny pas w karcie */
 QFrame#card QStackedWidget, QFrame#card QStackedWidget > QWidget { background: transparent; }
+
+/* --- Ekran "Czat" ---
+ * Rozmowa to QTextBrowser (WidokCzatu) - dymki i kod rysuje dokument tekstowy,
+ * więc ich kolory idą przez qproperty, jak w widżetach rysowanych w kodzie. */
+QFrame#card QTextBrowser#chatView {
+    background: transparent;
+    border: none;
+    color: #e8eaed;
+    font-size: 10.5pt;
+}
+WidokCzatu {
+    qproperty-kolorTy: #7cc8f0;
+    qproperty-kolorModelu: #e8eaed;
+    qproperty-kolorBledu: #f47c84;
+    qproperty-kolorWyciszony: #a3abb5;
+    qproperty-tloTy: #1d3a4f;
+    qproperty-tloModelu: #2c3138;
+    qproperty-tloKodu: #15181b;
+}
+QPlainTextEdit#chatInput { padding: 8px 10px; font-size: 10.5pt; }
+QPlainTextEdit#chatInput:focus { border-color: #3daee9; }

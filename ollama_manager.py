@@ -43,7 +43,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
-    QImage, QBitmap, QRegion, QCursor,
+    QImage, QBitmap, QRegion, QCursor, QTextCursor, QTextFrameFormat, QTextBlockFormat, QTextCharFormat,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -53,7 +53,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
-    QSystemTrayIcon,
+    QSystemTrayIcon, QTextBrowser,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
@@ -2383,6 +2383,70 @@ class PullWorker(QThread):
             strumien.close()
 
 
+class CzatWorker(QThread):
+    """Jedna odpowiedź modelu na ekranie "Czat" (POST /api/chat, strumień).
+
+    WHY: wprost do Ollamy wybranego hosta, nie przez router - czat działa też
+         bez zainstalowanego LiteLLM. Ostatnia linia strumienia ("done": true)
+         niesie liczby tokenów i czasy, z których liczymy tokeny/s.
+    """
+    fragment = pyqtSignal(str, str)        # (kawałek odpowiedzi, kawałek rozumowania)
+    zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
+
+    def __init__(self, adres, model, wiadomosci):
+        super().__init__()
+        self.adres = adres
+        self.model = model
+        self.wiadomosci = wiadomosci
+        self._anuluj = False
+        self._odpowiedz = None
+
+    def anuluj(self):
+        # WHY: zamknięcie połączenia przerywa generowanie po stronie Ollamy.
+        self._anuluj = True
+        if self._odpowiedz is not None:
+            try:
+                self._odpowiedz.close()
+            except Exception:
+                pass
+
+    def run(self):
+        statystyki = {}
+        try:
+            # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
+            #      pierwszym słowem potrafi trwać ponad minutę.
+            with requests.post(f"{self.adres}/api/chat", stream=True, timeout=(10, 600),
+                               json={"model": self.model, "messages": self.wiadomosci, "stream": True}) as odp:
+                self._odpowiedz = odp
+                if odp.status_code != 200:
+                    try:
+                        blad = odp.json().get("error") or odp.text
+                    except ValueError:
+                        blad = odp.text
+                    raise RuntimeError(f"HTTP {odp.status_code}: {blad}")
+                for linia in odp.iter_lines():
+                    if self._anuluj:
+                        break
+                    if not linia:
+                        continue
+                    dane = json.loads(linia)
+                    if dane.get("error"):
+                        raise RuntimeError(dane["error"])
+                    wiadomosc = dane.get("message") or {}
+                    if wiadomosc.get("content") or wiadomosc.get("thinking"):
+                        self.fragment.emit(wiadomosc.get("content", ""), wiadomosc.get("thinking", ""))
+                    if dane.get("done"):
+                        statystyki = dane
+            if self._anuluj:
+                statystyki = {"anulowano": True}
+            self.zakonczono.emit(True, statystyki)
+        except Exception as e:
+            if self._anuluj:
+                self.zakonczono.emit(True, {"anulowano": True})
+            else:
+                self.zakonczono.emit(False, str(e))
+
+
 class ActionWorker(QThread):
     """Uruchamia dowolną krótką akcję (funkcję) w tle.
 
@@ -2929,6 +2993,153 @@ def _wlasciwosc_koloru(nazwa, domyslny):
     return pyqtProperty(QColor, pobierz, ustaw)
 
 
+def _rozdziel_myslenie(tresc):
+    # WHAT: (rozumowanie, odpowiedź) z treści, w której model sam wstawił <think>...</think>.
+    # WHY:  nowsza Ollama oddaje rozumowanie w osobnym polu "thinking", ale część
+    #       modeli (np. z Hugging Face) pisze je wprost w treści, w znacznikach.
+    if not tresc.lstrip().startswith("<think>"):
+        return "", tresc
+    reszta = tresc.lstrip()[len("<think>"):]
+    if "</think>" not in reszta:
+        return reszta, ""  # WHY: model wciąż myśli - odpowiedzi jeszcze nie ma
+    myslenie, odpowiedz = reszta.split("</think>", 1)
+    return myslenie, odpowiedz.lstrip()
+
+
+class WidokCzatu(QTextBrowser):
+    """Rozmowa na ekranie "Czat": nagłówek (kto mówi) i dymek z treścią.
+
+    WHY: QTextBrowser, a nie etykiety w dymkach - etykieta z Markdownem rozpychała
+         się przez długie linie kodu na szerokość całego okna. Tu Markdown modelu
+         (kod, listy, tabele) wstawia sam Qt (insertMarkdown), a długi kod się zawija.
+         Kolory dymków i kodu przychodzą z theme.qss przez qproperty.
+    """
+    kolorTy = _wlasciwosc_koloru("kolorTy", "#808080")
+    kolorModelu = _wlasciwosc_koloru("kolorModelu", "#808080")
+    kolorBledu = _wlasciwosc_koloru("kolorBledu", "#808080")
+    kolorWyciszony = _wlasciwosc_koloru("kolorWyciszony", "#808080")
+    tloTy = _wlasciwosc_koloru("tloTy", "#808080")
+    tloModelu = _wlasciwosc_koloru("tloModelu", "#808080")
+    tloKodu = _wlasciwosc_koloru("tloKodu", "#808080")
+
+    def __init__(self):
+        super().__init__()
+        self._kolory = {}
+        self.setObjectName("chatView")
+        self.setOpenExternalLinks(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.pokaz_myslenie = False
+        self._start_ostatniej = 0
+        self.ensurePolished()
+
+    def pokaz(self, wiadomosci, pusty_tekst=""):
+        # WHAT: cała rozmowa od nowa (nowa wiadomość, nowa rozmowa, zmiana języka).
+        self.document().clear()
+        if not wiadomosci:
+            c = QTextCursor(self.document())
+            format_bloku = QTextBlockFormat()
+            format_bloku.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            format_bloku.setTopMargin(80)
+            c.setBlockFormat(format_bloku)
+            c.insertText(pusty_tekst, self._znaki(self.kolorWyciszony))
+            return
+        for wiadomosc in wiadomosci[:-1]:
+            self._wstaw(wiadomosc)
+        self._start_ostatniej = self._koniec()
+        self._wstaw(wiadomosci[-1])
+        self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+
+    def odswiez_ostatnia(self, wiadomosc):
+        # WHAT: podmienia tylko ostatnią wiadomość - tę, która właśnie się pisze.
+        # WHY:  przebudowa całej długiej rozmowy kilka razy na sekundę byłaby
+        #       zbędnym kosztem. Przewijamy w dół tylko, gdy ktoś był na dole -
+        #       inaczej nie da się czytać starszych wiadomości w trakcie pisania.
+        pasek = self.verticalScrollBar()
+        na_dole = pasek.value() >= pasek.maximum() - 8
+        c = QTextCursor(self.document())
+        c.setPosition(self._start_ostatniej)
+        c.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        c.removeSelectedText()
+        self._wstaw(wiadomosc)
+        if na_dole:
+            pasek.setValue(pasek.maximum())
+
+    def _koniec(self):
+        return self.document().characterCount() - 1
+
+    def _znaki(self, kolor, gruby=False, kursywa=False):
+        f = QTextCharFormat()
+        f.setForeground(kolor)
+        if gruby:
+            f.setFontWeight(QFont.Weight.Bold)
+        f.setFontItalic(kursywa)
+        return f
+
+    def _wstaw(self, w):
+        c = QTextCursor(self.document())
+        c.movePosition(QTextCursor.MoveOperation.End)
+        if self._koniec() > 0:
+            c.insertBlock(QTextBlockFormat())
+        # --- nagłówek: kto mówi + statystyki odpowiedzi ---
+        kolor = {"user": self.kolorTy, "blad": self.kolorBledu}.get(w["rola"], self.kolorModelu)
+        # WHY: "Ty"/"Błąd" tłumaczone przy wyświetlaniu - rozmowa przeżywa zmianę języka
+        kto = {"user": _("Ty"), "blad": _("Błąd")}.get(w["rola"], w.get("kto", ""))
+        c.setCharFormat(self._znaki(kolor, gruby=True))
+        c.insertText(kto, self._znaki(kolor, gruby=True))
+        if w.get("stat"):
+            c.insertText("   " + w["stat"], self._znaki(self.kolorWyciszony))
+        # --- dymek ---
+        ramka_f = QTextFrameFormat()
+        ramka_f.setBackground(self.tloTy if w["rola"] == "user" else self.tloModelu)
+        ramka_f.setPadding(12)
+        ramka_f.setTopMargin(4)
+        ramka_f.setBottomMargin(16)
+        ramka_f.setBorder(0)
+        ramka = c.insertFrame(ramka_f)
+        if w["rola"] != "assistant":
+            # WHY: tekst użytkownika i błędy wprost, bez Markdownu - wklejony kod
+            #      czy gwiazdki mają zostać dokładnie takie, jak je wpisano.
+            c.insertText(w["tresc"], self._znaki(self.kolorBledu if w["rola"] == "blad" else self.kolorModelu))
+            return
+        myslenie_z_tresci, odpowiedz = _rozdziel_myslenie(w["tresc"])
+        myslenie = (w.get("myslenie", "") + myslenie_z_tresci).strip()
+        if myslenie and self.pokaz_myslenie:
+            c.insertText(_("Rozumowanie modelu") + "\n", self._znaki(self.kolorWyciszony, gruby=True))
+            c.insertText(myslenie + "\n\n", self._znaki(self.kolorWyciszony, kursywa=True))
+        if odpowiedz.strip():
+            c.insertMarkdown(odpowiedz)
+        elif w.get("trwa"):
+            c.insertText(_("model myśli...") if myslenie else _("czekam na odpowiedź..."),
+                         self._znaki(self.kolorWyciszony, kursywa=True))
+        self._styl_kodu(ramka)
+
+    def _styl_kodu(self, ramka):
+        # WHAT: bloki kodu - tło i JetBrains Mono, zawijane; `kod` w tekście - ta sama czcionka.
+        # WHY:  Qt rozpoznaje kod z Markdownu (czcionka o stałej szerokości), ale nie
+        #       daje mu tła, a długie linie zostawiłby niezawinięte (przewijanie w bok).
+        blok = ramka.firstCursorPosition().block()
+        while blok.isValid() and blok.position() < ramka.lastPosition():
+            format_bloku = blok.blockFormat()
+            kod = format_bloku.nonBreakableLines() or blok.charFormat().fontFixedPitch()
+            if kod:
+                format_bloku.setNonBreakableLines(False)
+                format_bloku.setBackground(self.tloKodu)
+                QTextCursor(blok).setBlockFormat(format_bloku)
+            it = blok.begin()
+            while not it.atEnd():
+                fragment = it.fragment()
+                if fragment.isValid() and (kod or fragment.charFormat().fontFixedPitch()):
+                    c = QTextCursor(self.document())
+                    c.setPosition(fragment.position())
+                    c.setPosition(fragment.position() + fragment.length(), QTextCursor.MoveMode.KeepAnchor)
+                    f = QTextCharFormat()
+                    f.setFontFamilies(["JetBrains Mono"])
+                    f.setFontPointSize(max(1.0, self.font().pointSizeF() - 0.5))
+                    c.mergeCharFormat(f)
+                it += 1
+            blok = blok.next()
+
+
 class Paleta(QWidget):
     """Niewidoczny widżet - przenosi kolory z theme.qss do ikon SVG."""
     tekst = _wlasciwosc_koloru("tekst", "#808080")
@@ -2967,6 +3178,7 @@ _IKONY_SVG = {
     "kosz": '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     "otworz": '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
     # WHAT: stan modelu w tabeli hosta - kość RAM (wczytany do pamięci) i dysk (tylko na dysku)
     "pamiec": '<rect x="2" y="7" width="20" height="10" rx="1.5"/>'
@@ -3788,7 +4000,7 @@ class OknoZasobnika(QWidget):
         self.btn_czat = QPushButton(_("Otwórz czat"))
         self.btn_czat.setObjectName("trayPrimary")
         self.btn_czat.setIcon(ikona("otworz", PALETA.naAkcencie, rozmiar=16, grubosc=2.2))
-        self.btn_czat.clicked.connect(lambda: self._i_zamknij(okno.otworz_webui))
+        self.btn_czat.clicked.connect(lambda: self._i_zamknij(okno.otworz_czat))
         v.addWidget(self.btn_czat)
         btn_panel = QPushButton(_("Otwórz panel zarządzania"))
         btn_panel.setObjectName("trayButton")
@@ -3844,7 +4056,6 @@ class OknoZasobnika(QWidget):
                     wiersz.setProperty("first", "true" if widoczne and klucz == widoczne[0] else "false")
                     _odswiez_styl(wiersz)
                 self._ramka_uslug.setVisible(bool(widoczne))
-                self.btn_czat.setVisible(stan["webui"])  # WHY: "Otwórz czat" bez WebUI nie ma sensu
                 self._dopasuj_wysokosc()
             for klucz, (zainstalowana, dziala) in uslugi.items():
                 kropka, opis, przelacznik = self._wiersze[klucz]
@@ -4006,6 +4217,8 @@ class MainWindow(QMainWindow):
         self._strona = "panel"          # WHY: wybrany ekran; przeżywa przebudowę UI (zmiana języka)
         self._stan = None               # WHY: ostatni wynik RefreshWorker (usługi tego komputera)
         self._modele = []               # WHY: modele ze wszystkich hostów (ModeleWorker)
+        self._czat = []                 # WHY: bieżąca rozmowa (ekran "Czat") - przeżywa zmianę języka
+        self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
         self._tylko_moe = False         # WHY: pole "Tylko modele MoE" w wyszukiwarce; przeżywa przebudowę UI
@@ -4069,6 +4282,7 @@ class MainWindow(QMainWindow):
             ("panel", "panel", _("Panel główny"), self._strona_panel),
             ("hosty", "hosty", _("Hosty Ollama"), self._strona_hosty),
             ("modele", "modele", _("Modele"), self._strona_modele),
+            ("czat", "czat", _("Czat"), self._strona_czat),
             ("router", "router", _("Router LiteLLM"), self._strona_router),
             ("webui", "webui", _("Open WebUI"), self._strona_webui),
             ("ustawienia", "ustawienia", _("Ustawienia"), self._strona_ustawienia),
@@ -4230,6 +4444,9 @@ class MainWindow(QMainWindow):
             self.odswiez_wersje()
         if klucz == "dziennik":
             self.odswiez_dziennik()
+        if klucz == "czat":
+            self.odswiez_modele()
+            self.pole_czat.setFocus()
 
     def _tytul_strony(self, tytul, opis):
         # WHAT: duży tytuł ekranu i jednozdaniowy opis pod nim (każdy ekran makiet).
@@ -4335,7 +4552,7 @@ class MainWindow(QMainWindow):
         self.odswiez()
         if (self._strona in ("panel", "hosty") and self.isVisible()) or self._zasobnik_otwarty():
             self.odswiez_hosty()
-        if self._strona in ("modele", "router") and self.isVisible():
+        if self._strona in ("modele", "router", "czat") and self.isVisible():
             self.odswiez_modele()
         if self._strona == "dziennik" and self.isVisible():
             self.odswiez_dziennik()
@@ -4781,6 +4998,13 @@ class MainWindow(QMainWindow):
                 QDesktopServices.openUrl(QUrl(_webui_url()))
 
         self._watki["webui"] = self._uruchom_akcje(_start, _("Uruchomienie Open WebUI"), _po)
+
+    def otworz_czat(self):
+        # WHAT: "Otwórz czat" w zasobniku - Open WebUI, a bez niego wbudowany czat.
+        if self._stan and self._stan["webui"]:
+            self.otworz_webui()
+        else:
+            self.pokaz_okno("czat")
 
     def otworz_webui(self):
         # WHAT: jeden przycisk, trzy znaczenia - instaluj / uruchom / otwórz.
@@ -5900,6 +6124,7 @@ class MainWindow(QMainWindow):
             gb=suma / gib, n=len(hosty_z_modelami)))
         self._wypelnij_siatke_modeli()
         self._odswiez_schemat()
+        self._odswiez_modele_czatu()
 
     def _filtruj_modele(self, klucz):
         self._filtr_modeli = klucz
@@ -6304,6 +6529,284 @@ class MainWindow(QMainWindow):
                                  komunikat)
         self.odswiez_modele()  # WHY: świeżo pobrany model powinien od razu pojawić się w siatce
         self.odswiez_hosty()
+
+    # =========================================================================
+    #  Ekran "Czat" (spoza makiet - prośba użytkownika, todo.md)
+    # =========================================================================
+    def _strona_czat(self):
+        # WHAT: prosty czat z modelem prosto z Ollamy - po lewej rozmowa, po prawej
+        #       wybór modelu i statystyki ostatniej odpowiedzi (tokeny/s).
+        # WHY:  do szybkich pytań i sprawdzenia modelu bez instalowania Open WebUI;
+        #       świadomie bez zapisywania rozmów (pełny czat z historią to WebUI).
+        strona = QWidget()
+        v = QVBoxLayout(strona)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(18)
+        naglowek = QHBoxLayout()
+        naglowek.addLayout(self._tytul_strony(
+            _("Czat"), _("Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.")), 1)
+        naglowek.addWidget(self._przycisk(_("Nowa rozmowa"), "plus", slot=self.nowa_rozmowa),
+                           0, Qt.AlignmentFlag.AlignTop)
+        v.addLayout(naglowek)
+
+        rzad = QHBoxLayout()
+        rzad.setSpacing(18)
+        # --- rozmowa ---
+        karta, uk = self._karta()
+        uk.setSpacing(12)
+        self.widok_czatu = WidokCzatu()
+        self.widok_czatu.pokaz_myslenie = _ustawienia().value("czat/rozumowanie", False, type=bool)
+        uk.addWidget(self.widok_czatu, 1)
+        wpis = QHBoxLayout()
+        wpis.setSpacing(10)
+        self.pole_czat = QPlainTextEdit()
+        self.pole_czat.setObjectName("chatInput")
+        self.pole_czat.setPlaceholderText(_("Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)"))
+        self.pole_czat.setFixedHeight(76)
+        self.pole_czat.installEventFilter(self)
+        wpis.addWidget(self.pole_czat, 1)
+        self.btn_czat_wyslij = self._przycisk(_("Wyślij"), rola="primary", slot=self.wyslij_czat)
+        self.btn_czat_wyslij.setFixedHeight(76)
+        self.btn_czat_wyslij.setMinimumWidth(120)
+        wpis.addWidget(self.btn_czat_wyslij)
+        uk.addLayout(wpis)
+        rzad.addWidget(karta, 1)
+
+        # --- model i statystyki ---
+        karta, uk = self._karta()
+        karta.setFixedWidth(340)
+        uk.addWidget(_etykieta(_("Model"), "h2"))
+        self.combo_czat_model = QComboBox()
+        self.combo_czat_model.currentIndexChanged.connect(self._zmiana_modelu_czatu)
+        uk.addWidget(self.combo_czat_model)
+        self.lbl_czat_model = _etykieta("", "muted")
+        self.lbl_czat_model.setWordWrap(True)
+        uk.addWidget(self.lbl_czat_model)
+        self.sw_czat_rozumowanie = self._wiersz_przelacznika(
+            uk, _("Pokazuj rozumowanie modelu"), _("modele, które \"myślą\" przed odpowiedzią (np. qwen3)"),
+            self._przelacz_rozumowanie)
+        self.sw_czat_rozumowanie.ustaw_cicho(self.widok_czatu.pokaz_myslenie)
+
+        uk.addWidget(_etykieta(_("Ostatnia odpowiedź"), "h2"))
+        self._lbl_stat_czatu = {}
+        for klucz, nazwa, opis in (
+                ("generowanie", _("Generowanie"), _("tokeny odpowiedzi na sekundę")),
+                ("prompt", _("Przetwarzanie pytania"), _("tokeny pytania i historii na sekundę")),
+                ("tokeny", _("Tokeny"), _("pytanie + historia / odpowiedź")),
+                ("ladowanie", _("Wczytanie modelu"), _("0 s, gdy model był już w pamięci")),
+                ("calosc", _("Czas całkowity"), "")):
+            wiersz = QFrame()
+            wiersz.setObjectName("settingRow")
+            h = QHBoxLayout(wiersz)
+            h.setContentsMargins(0, 8, 0, 8)
+            teksty = QVBoxLayout()
+            teksty.setSpacing(1)
+            teksty.addWidget(QLabel(nazwa))
+            if opis:
+                teksty.addWidget(_etykieta(opis, "muted"))
+            h.addLayout(teksty, 1)
+            wartosc = _etykieta("—", "mono")
+            h.addWidget(wartosc)
+            self._lbl_stat_czatu[klucz] = wartosc
+            uk.addWidget(wiersz)
+        uk.addStretch(1)
+        uwaga = _etykieta(_("Rozmowa nie jest zapisywana - znika po zamknięciu programu. "
+                            "Pełny czat z historią daje Open WebUI."), "muted")
+        uwaga.setWordWrap(True)
+        uk.addWidget(uwaga)
+        rzad.addWidget(karta)
+        v.addLayout(rzad, 1)
+
+        self._odswiez_modele_czatu()
+        self._pokaz_czat()
+        self._odswiez_przycisk_czatu()
+        return strona
+
+    def eventFilter(self, obiekt, zdarzenie):
+        # WHAT: Enter w polu czatu wysyła, Shift+Enter dodaje nową linię.
+        if (obiekt is getattr(self, "pole_czat", None) and zdarzenie.type() == QEvent.Type.KeyPress
+                and zdarzenie.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                and not zdarzenie.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.wyslij_czat()
+            return True
+        return super().eventFilter(obiekt, zdarzenie)
+
+    def _modele_czatu(self):
+        # WHAT: (model, host) do wyboru - bez embeddingów (nie umieją rozmawiać);
+        #       tylko hosty online, bo tylko takie zbiera zbierz_modele.
+        return [(m, h) for m in self._modele if m["rodzaj"] != "embedding" for h in m["hosty"]]
+
+    def _odswiez_modele_czatu(self):
+        if not hasattr(self, "combo_czat_model"):
+            return
+        pary = self._modele_czatu()
+        biezacy = self.combo_czat_model.currentData() or _ustawienia().value("czat/model", "")
+        kilka_hostow = len({h["adres"] for _m, h in pary}) > 1
+        self.combo_czat_model.blockSignals(True)
+        self.combo_czat_model.clear()
+        for m, h in pary:
+            # WHY: przy kilku hostach ten sam model jest kilka razy - nazwa hosta je rozróżnia
+            tekst = _skroc_nazwe_modelu_hf(m["nazwa"]) + (f"  ·  {h['nazwa']}" if kilka_hostow else "")
+            self.combo_czat_model.addItem(tekst, f"{h['adres']}|{m['nazwa']}")
+            self.combo_czat_model.setItemData(self.combo_czat_model.count() - 1,
+                                              f"{m['nazwa']} → {h['nazwa']}", Qt.ItemDataRole.ToolTipRole)
+        indeks = self.combo_czat_model.findData(biezacy)
+        self.combo_czat_model.setCurrentIndex(max(0, indeks))
+        self.combo_czat_model.blockSignals(False)
+        self._zmiana_modelu_czatu(zapisz=False)
+        if not self._czat:
+            self._pokaz_czat()  # WHY: tekst pustej rozmowy zależy od tego, czy są modele
+
+    def _wybrany_model_czatu(self):
+        dane = self.combo_czat_model.currentData()
+        if not dane:
+            return None, None
+        adres, nazwa = dane.split("|", 1)
+        model = next((m for m in self._modele if m["nazwa"] == nazwa), None)
+        host = next((h for h in (model or {}).get("hosty", []) if h["adres"] == adres), None)
+        return model, host
+
+    def _zmiana_modelu_czatu(self, *_a, zapisz=True):
+        model, host = self._wybrany_model_czatu()
+        if zapisz and self.combo_czat_model.currentData():
+            _ustawienia().setValue("czat/model", self.combo_czat_model.currentData())
+        if not model:
+            self.lbl_czat_model.setText("")
+        else:
+            czesci = [f"{model['rozmiar'] / 1024 ** 3:.1f} GB"]
+            if model.get("parametry"):
+                czesci.append(model["parametry"])
+            if model.get("kwantyzacja"):
+                czesci.append(model["kwantyzacja"])
+            tekst = " · ".join(czesci) + "\n" + _("na hoście: {host}").format(host=host["nazwa"])
+            tekst += " · " + (_("w pamięci") if host["w_pamieci"] else _("wczyta się przy pierwszym pytaniu"))
+            self.lbl_czat_model.setText(tekst)
+        self._odswiez_przycisk_czatu()
+
+    def _przelacz_rozumowanie(self, wlacz):
+        _ustawienia().setValue("czat/rozumowanie", wlacz)
+        self.widok_czatu.pokaz_myslenie = wlacz
+        self._pokaz_czat()
+
+    def _pokaz_czat(self):
+        if not hasattr(self, "widok_czatu"):
+            return
+        if self._modele_czatu():
+            pusty = _("Wybierz model po prawej i zadaj pytanie.")
+        else:
+            pusty = _("Brak modeli do rozmowy na hostach online. Pobierz model na ekranie \"Modele\".")
+        self.widok_czatu.pokaz(self._czat, pusty)
+
+    def _odswiez_przycisk_czatu(self):
+        if not hasattr(self, "btn_czat_wyslij"):
+            return
+        pisze = self._czat_worker is not None
+        self.btn_czat_wyslij.setText(_("Zatrzymaj") if pisze else _("Wyślij"))
+        self.btn_czat_wyslij.setObjectName("danger" if pisze else "primary")
+        _odswiez_styl(self.btn_czat_wyslij)
+        self.btn_czat_wyslij.setEnabled(pisze or self.combo_czat_model.currentData() is not None)
+
+    def nowa_rozmowa(self):
+        if self._czat_worker is not None:
+            self._czat_worker.anuluj()
+        self._czat = []
+        self._pokaz_czat()
+        self.pole_czat.setFocus()
+
+    def wyslij_czat(self):
+        # WHAT: ten sam przycisk wysyła albo przerywa pisanie odpowiedzi.
+        if self._czat_worker is not None:
+            self._czat_worker.anuluj()
+            return
+        tekst = self.pole_czat.toPlainText().strip()
+        model, host = self._wybrany_model_czatu()
+        if not tekst or not model:
+            return
+        # WHY: historia dla modelu - bez błędów i bez rozumowania (model go nie potrzebuje,
+        #      a zjadałoby kontekst)
+        historia = [{"role": w["rola"], "content": _rozdziel_myslenie(w["tresc"])[1]}
+                    for w in self._czat if w["rola"] in ("user", "assistant") and not w.get("przerwano")]
+        historia.append({"role": "user", "content": tekst})
+        self._czat.append({"rola": "user", "tresc": tekst})
+        self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
+                           "tresc": "", "myslenie": "", "trwa": True})
+        self.pole_czat.clear()
+        self._pokaz_czat()
+        worker = CzatWorker(host["adres"], model["nazwa"], historia)
+        self._czat_worker = worker
+        self._czat_odswiezenie_zaplanowane = False
+        worker.fragment.connect(self._czat_fragment)
+        worker.zakonczono.connect(self._czat_koniec)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+        self._odswiez_przycisk_czatu()
+
+    def _czat_fragment(self, tresc, myslenie):
+        if self.sender() is not self._czat_worker or not self._czat:
+            return  # WHY: spóźniony kawałek z przerwanej odpowiedzi (np. po "Nowa rozmowa")
+        ostatnia = self._czat[-1]
+        ostatnia["tresc"] += tresc
+        ostatnia["myslenie"] += myslenie
+        # WHY: model sypie kilkadziesiąt kawałków na sekundę - widok odświeżamy
+        #      najwyżej co 80 ms, a nie przy każdym słowie
+        if not self._czat_odswiezenie_zaplanowane:
+            self._czat_odswiezenie_zaplanowane = True
+            QTimer.singleShot(80, self._czat_odswiez_ostatnia)
+
+    def _czat_odswiez_ostatnia(self):
+        self._czat_odswiezenie_zaplanowane = False
+        if self._czat and hasattr(self, "widok_czatu"):
+            self.widok_czatu.odswiez_ostatnia(self._czat[-1])
+
+    def _czat_koniec(self, sukces, wynik):
+        if self.sender() is not self._czat_worker:
+            return
+        self._czat_worker = None
+        ostatnia = self._czat[-1] if self._czat else None
+        if ostatnia is not None and ostatnia.get("trwa"):
+            ostatnia["trwa"] = False
+            if not sukces:
+                if ostatnia["tresc"].strip():
+                    ostatnia["stat"] = _("błąd: {blad}").format(blad=wynik)
+                else:
+                    # WHY: surowy błąd + proste wyjaśnienie, jak na ekranie Dziennik
+                    wyjasnienie = wyjasnij_blad(wynik)
+                    ostatnia.update({"rola": "blad",
+                                     "tresc": wynik + (f"\n\n{wyjasnienie}" if wyjasnienie else "")})
+                self.wpis_log(_("Czat: błąd - {blad}").format(blad=wynik), "BŁĄD", "Ollama")
+            elif wynik.get("anulowano"):
+                ostatnia["stat"] = _("przerwano")
+                ostatnia["przerwano"] = not ostatnia["tresc"].strip()
+            else:
+                ostatnia["stat"] = self._statystyki_czatu(wynik)
+            self._pokaz_czat()
+        self._odswiez_przycisk_czatu()
+        self.odswiez_modele()  # WHY: model jest teraz w pamięci - widać to w opisie i na ekranie Modele
+
+    def _statystyki_czatu(self, d):
+        # WHAT: tokeny/s i czasy z ostatniej linii strumienia Ollamy (czasy w nanosekundach).
+        # WHY:  liczby podaje sama Ollama - bez własnego stopera, więc nie wlicza się
+        #       w nie czas sieci ani rysowania okna.
+        def na_sekunde(tokeny, ns):
+            return tokeny / (ns / 1e9) if tokeny and ns else None
+        gen = na_sekunde(d.get("eval_count"), d.get("eval_duration"))
+        prompt = na_sekunde(d.get("prompt_eval_count"), d.get("prompt_eval_duration"))
+        ladowanie = (d.get("load_duration") or 0) / 1e9
+        calosc = (d.get("total_duration") or 0) / 1e9
+        st = self._lbl_stat_czatu
+        st["generowanie"].setText(_("{n:.1f} tok/s").format(n=gen) if gen else "—")
+        st["prompt"].setText(_("{n:.1f} tok/s").format(n=prompt) if prompt else "—")
+        st["tokeny"].setText(f"{d.get('prompt_eval_count', 0)} / {d.get('eval_count', 0)}")
+        st["ladowanie"].setText(f"{ladowanie:.1f} s")
+        st["calosc"].setText(f"{calosc:.1f} s")
+        _odmaluj_rodzica(*st.values())
+        czesci = []
+        if gen:
+            czesci.append(_("{n:.1f} tok/s").format(n=gen))
+        if d.get("eval_count"):
+            czesci.append(_("{n} tokenów").format(n=d["eval_count"]))
+        czesci.append(f"{calosc:.1f} s")
+        return " · ".join(czesci)
 
     # =========================================================================
     #  Ekran "Open WebUI" (makieta WebUI.dc.html)

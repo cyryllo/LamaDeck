@@ -112,6 +112,16 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   usuwanie z jednego albo ze wszystkich hostów
 - Hugging Face to źródło społecznościowe — program podpowiada znanych autorów kwantyzacji
 
+**Czat**
+- Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
+  WebUI i bez routera
+- Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele); można ją przerwać
+- **Statystyki szybkości** każdej odpowiedzi, mierzone przez samą Ollamę: generowanie
+  i przetwarzanie pytania w tokenach/s, liczba tokenów, czas wczytania modelu, czas całkowity —
+  przydatne do porównywania modeli i ustawień Ollamy
+- Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
+- Rozmowy nie są zapisywane — pełny czat z historią daje Open WebUI
+
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
 - Ustawienia: otwieranie przeglądarki po starcie, wymaganie logowania (wyłączyć da się tylko,
@@ -128,8 +138,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Dziennik usługi Ollama wymaga uprawnień: wczytasz go raz (hasło) albo zezwolisz na stałe
 
 **Zasobnik systemowy** (opcjonalny, domyślnie wyłączony — włączasz w Ustawieniach)
-- Ikona przy zegarze z małym panelem: trzy usługi z przełącznikami, CPU / VRAM / RAM, modele
-  w pamięci i przyciski otwierające czat albo panel zarządzania
+- Ikona przy zegarze z małym panelem: zainstalowane usługi z przełącznikami, CPU / VRAM / RAM,
+  modele w pamięci i przyciski otwierające czat (Open WebUI, a bez niego wbudowany czat) albo
+  panel zarządzania
 - Zamknięcie okna chowa je do zasobnika; program kończysz z menu ikony
 - Opcjonalnie start programu po zalogowaniu, od razu schowanego w zasobniku
 - Działa tylko jedna kopia programu — ponowne uruchomienie po prostu pokazuje okno

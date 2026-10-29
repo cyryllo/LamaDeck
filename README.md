@@ -111,6 +111,17 @@ fonts are bundled, so it looks the same everywhere).
   host), delete from one or all hosts
 - Hugging Face is a community source — the app suggests well-known quantization authors
 
+**Chat**
+- A simple built-in chat with any model on any host, straight from Ollama — works without Open
+  WebUI and without the router
+- Answers stream in as they're written, with formatting (code blocks, lists, tables); stop at any
+  time
+- **Speed stats** for every answer, measured by Ollama itself: generation and prompt processing in
+  tokens/s, token counts, model loading time, total time — handy for comparing models and
+  Ollama settings
+- Optional view of the model's reasoning (models that "think", e.g. qwen3)
+- Conversations are not saved — for a full chat with history, use Open WebUI
+
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
 - Settings: open the browser after start, require login (only switchable off while there are no
@@ -128,8 +139,9 @@ fonts are bundled, so it looks the same everywhere).
 - The Ollama service log needs permission: load it once (password) or allow it permanently
 
 **System tray** (optional, off by default — turn it on in Settings)
-- A tray icon with a small panel: the three services with on/off switches, CPU / VRAM / RAM,
-  models in memory, and buttons to open the chat or the control panel
+- A tray icon with a small panel: the installed services with on/off switches, CPU / VRAM / RAM,
+  models in memory, and buttons to open the chat (Open WebUI, or the built-in chat without it)
+  or the control panel
 - Closing the window hides it in the tray; quit from the icon's menu
 - Optionally start the program after login, already hidden in the tray
 - Only one copy runs at a time — starting it again just brings the window back
