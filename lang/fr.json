@@ -454,5 +454,7 @@
   "wyłączony": "désactivé",
   "włączona": "activée",
   "włączony": "activé",
-  "{n} z {m} usług działa": "{n} services sur {m} en marche"
+  "{n} z {m} usług działa": "{n} services sur {m} en marche",
+  "Adres": "Adresse",
+  "Host": "Hôte"
 }

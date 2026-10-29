@@ -454,5 +454,7 @@
   "wyłączony": "off",
   "włączona": "on",
   "włączony": "on",
-  "{n} z {m} usług działa": "{n} of {m} services running"
+  "{n} z {m} usług działa": "{n} of {m} services running",
+  "Adres": "Address",
+  "Host": "Host"
 }

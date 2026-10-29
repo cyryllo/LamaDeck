@@ -544,3 +544,22 @@ QPushButton#iconButton {
     border: none; background: transparent;
 }
 QPushButton#iconButton:hover { background: #2a2f36; }
+
+/* --- Separator w pasku bocznym (usługi | ustawienia i dziennik) --- */
+QFrame#sidebarPanel QFrame#sidebarSeparator { background: #30363d; border: none; }
+
+/* --- Pola wyboru w komórkach tabel (np. "Modele w routerze") ---
+ * DLACZEGO: jak QCheckBox wyżej - systemowy jasny wskaźnik ginie na ciemnym tle */
+QTableView::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid #6b737d;
+    background: #1b1e22;
+}
+QTableView::indicator:hover { border-color: #3daee9; }
+QTableView::indicator:checked { background: #3daee9; border-color: #3daee9; }
+
+/* Strony przełączane wewnątrz karty (np. "Aliasy" / "Wszystkie modele" w routerze)
+ * DLACZEGO: ogólna reguła "QWidget { background }" dawała im tło okna - ciemny pas w karcie */
+QFrame#card QStackedWidget, QFrame#card QStackedWidget > QWidget { background: transparent; }

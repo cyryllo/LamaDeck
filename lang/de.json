@@ -454,5 +454,7 @@
   "wyłączony": "aus",
   "włączona": "an",
   "włączony": "an",
-  "{n} z {m} usług działa": "{n} von {m} Diensten laufen"
+  "{n} z {m} usług działa": "{n} von {m} Diensten laufen",
+  "Adres": "Adresse",
+  "Host": "Host"
 }

@@ -454,5 +454,7 @@
   "wyłączony": "disattivato",
   "włączona": "attivata",
   "włączony": "attivato",
-  "{n} z {m} usług działa": "{n} servizi su {m} in esecuzione"
+  "{n} z {m} usług działa": "{n} servizi su {m} in esecuzione",
+  "Adres": "Indirizzo",
+  "Host": "Host"
 }

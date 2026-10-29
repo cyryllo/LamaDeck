@@ -3592,24 +3592,32 @@ _TYTUL_OKNA_ZASOBNIKA = "Ollama Manager - zasobnik"
 #       Skrypt pyta KWin o obszar roboczy (ekran bez panelu): panel u góry =
 #       okienko u góry, inaczej na dole; zawsze przy prawej krawędzi, gdzie
 #       w KDE jest zasobnik. Sprawdzone na Plasma 6.3 (Wayland).
+#       Skrypt CZEKA na pojawienie się okna (windowAdded) i ustawia je od razu -
+#       przesuwanie dopiero po pokazaniu dawało mignięcie na środku ekranu
+#       (zgłoszenie użytkownika). Pętla po istniejących oknach obsługuje okienko,
+#       które już jest na ekranie w chwili wczytania skryptu.
 _SKRYPT_KWIN_ZASOBNIK = """
 (function () {
-  for (const w of workspace.windowList()) {
-    if (w.caption !== "%s") continue;
+  function ustaw(w) {
+    if (w.caption !== "%s") return;
     const obszar = workspace.clientArea(KWin.PlacementArea, w);
     const ekran = workspace.clientArea(KWin.FullScreenArea, w);
     const g = w.frameGeometry;
     const y = (obszar.y > ekran.y) ? obszar.y + 8 : obszar.y + obszar.height - g.height - 8;
     w.frameGeometry = {x: obszar.x + obszar.width - g.width - 8, y: y, width: g.width, height: g.height};
   }
+  workspace.windowAdded.connect(ustaw);
+  for (const w of workspace.windowList()) ustaw(w);
 })();
 """ % _TYTUL_OKNA_ZASOBNIKA
 
 
 def _kwin_przesun_okienko_zasobnika():
-    # WHAT: wczytuje i uruchamia jednorazowy skrypt KWin (DBus, bez roota).
-    # WHY:  stary skrypt o tej samej nazwie najpierw wyładowujemy - inaczej
-    #       KWin trzymałby kolejne kopie przy każdym otwarciu okienka.
+    # WHAT: wczytuje skrypt KWin (DBus, bez roota), który ustawia okienko zasobnika.
+    # WHY:  wołane RAZ, przed pierwszym pokazaniem okienka - skrypt zostaje w KWin
+    #       i ustawia okienko przy każdym kolejnym pojawieniu się. Stary skrypt
+    #       o tej samej nazwie (np. z poprzedniego uruchomienia programu)
+    #       najpierw wyładowujemy, żeby nie działały dwie kopie naraz.
     plik = Path(tempfile.gettempdir()) / f"ollama-manager-zasobnik-{getpass.getuser()}.js"
     try:
         plik.write_text(_SKRYPT_KWIN_ZASOBNIK)
@@ -3646,6 +3654,7 @@ class OknoZasobnika(QWidget):
         self.okno = okno
         self.zamkniete_o = 0.0
         self._bylo_aktywne = False
+        self._skrypt_kwin = False
         # WHY: zaokrąglone rogi panelu - tło okna musi być przezroczyste
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(380)
@@ -3836,11 +3845,14 @@ class OknoZasobnika(QWidget):
         self.odswiez()
         if self.wayland:
             self._bylo_aktywne = False
+            if not self._skrypt_kwin:
+                # WHY: skrypt musi już czekać w KWin, ZANIM okno się pojawi - wtedy
+                #      KWin stawia je od razu w rogu, bez mignięcia na środku
+                _kwin_przesun_okienko_zasobnika()
+                self._skrypt_kwin = True
             self.show()
             self.raise_()
             self.activateWindow()
-            # WHY: KWin może przesunąć okno dopiero, gdy już jest na ekranie
-            QTimer.singleShot(60, _kwin_przesun_okienko_zasobnika)
             return
         ekran = (QApplication.screenAt(punkt) or QApplication.primaryScreen()).availableGeometry()
         x = min(max(punkt.x() - self.width() // 2, ekran.left() + 8), ekran.right() - self.width() - 8)
@@ -3990,8 +4002,10 @@ class MainWindow(QMainWindow):
             ("dziennik", "dziennik", _("Dziennik"), self._strona_dziennik),
         ]
 
-    # WHAT: sekcje w dolnej grupie paska bocznego (nad linkiem do repozytorium).
-    _SEKCJE_NA_DOLE = ("router", "webui", "ustawienia", "dziennik")
+    # WHAT: sekcje w dolnej grupie paska bocznego (nad linkiem do repozytorium) -
+    #       usługi, separator, a pod nim ustawienia i dziennik programu.
+    _SEKCJE_NA_DOLE = ("router", "webui")
+    _SEKCJE_PROGRAMU = ("ustawienia", "dziennik")
 
     def _buduj_ui(self):
         # WHAT: pasek boczny po lewej, ekrany (QStackedWidget) po prawej.
@@ -4059,7 +4073,12 @@ class MainWindow(QMainWindow):
         #      w typowych programach KDE; zaznaczenie pilnujemy ręcznie w _przejdz.
         self.lista_sekcji = QListWidget()
         self.lista_dolna = QListWidget()
-        for lista in (self.lista_sekcji, self.lista_dolna):
+        self.lista_programu = QListWidget()
+        # WHY: trzy listy (u góry codzienna praca, na dole usługi i - pod separatorem -
+        #      ustawienia z dziennikiem; prośba użytkownika o separator) - zaznaczenie
+        #      w całym pasku pilnuje _przejdz.
+        self._listy_paska = (self.lista_sekcji, self.lista_dolna, self.lista_programu)
+        for lista in self._listy_paska:
             lista.setObjectName("sidebar")
             lista.setIconSize(QSize(18, 18))
             lista.setAccessibleName(_("Sekcje programu"))
@@ -4068,15 +4087,28 @@ class MainWindow(QMainWindow):
         for klucz, nazwa_ikony, nazwa_sekcji, _b in sekcje:
             element = QListWidgetItem(ikona(nazwa_ikony, PALETA.boczny, PALETA.bocznyWybrany, 18, 1.8), nazwa_sekcji)
             element.setData(Qt.ItemDataRole.UserRole, klucz)
-            (self.lista_dolna if klucz in self._SEKCJE_NA_DOLE else self.lista_sekcji).addItem(element)
-        # WHY: dolna lista ma dokładnie tyle wysokości, ile jej pozycje - bez przewijania
-        self.lista_dolna.setFixedHeight(
-            sum(self.lista_dolna.sizeHintForRow(i) for i in range(self.lista_dolna.count()))
-            + 2 * self.lista_dolna.frameWidth() + 4)
-        for lista in (self.lista_sekcji, self.lista_dolna):
+            if klucz in self._SEKCJE_NA_DOLE:
+                self.lista_dolna.addItem(element)
+            elif klucz in self._SEKCJE_PROGRAMU:
+                self.lista_programu.addItem(element)
+            else:
+                self.lista_sekcji.addItem(element)
+        # WHY: dolne listy mają dokładnie tyle wysokości, ile ich pozycje - bez przewijania
+        for lista in (self.lista_dolna, self.lista_programu):
+            lista.setFixedHeight(sum(lista.sizeHintForRow(i) for i in range(lista.count()))
+                                 + 2 * lista.frameWidth() + 4)
+        for lista in self._listy_paska:
             lista.currentItemChanged.connect(lambda e, _p: e and self._przejdz(e.data(Qt.ItemDataRole.UserRole)))
         v.addWidget(self.lista_sekcji, 1)
         v.addWidget(self.lista_dolna)
+        separator = QFrame()
+        separator.setObjectName("sidebarSeparator")
+        separator.setFixedHeight(1)
+        ramka_separatora = QHBoxLayout()
+        ramka_separatora.setContentsMargins(20, 6, 20, 6)
+        ramka_separatora.addWidget(separator)
+        v.addLayout(ramka_separatora)
+        v.addWidget(self.lista_programu)
 
         link = QPushButton("github.com/cyryllo/Ollama-manager")
         link.setObjectName("sidebarLink")
@@ -4091,7 +4123,7 @@ class MainWindow(QMainWindow):
             return
         self._strona = klucz
         self.strony.setCurrentIndex(self._indeksy_stron[klucz])
-        for lista in (self.lista_sekcji, self.lista_dolna):
+        for lista in self._listy_paska:
             lista.blockSignals(True)
             lista.clearSelection()
             for i in range(lista.count()):
@@ -5235,7 +5267,24 @@ class MainWindow(QMainWindow):
         self.btn_odswiez_agregator = self._przycisk(_("Odśwież listę"), "odswiez", slot=self.odswiez_liste_agregatora)
         pasek.addWidget(self.btn_odswiez_agregator)
         vm.addLayout(pasek)
-        self.lista_agregator = QListWidget()
+        # WHAT: tabela (Model | Host | Adres) z polem wyboru przy modelu.
+        # WHY:  zwykła lista zlewała się w jeden blok tekstu (zgłoszenie użytkownika) -
+        #       wiersze z liniami i nagłówki jak w pozostałych tabelach programu.
+        self.lista_agregator = QTableWidget(0, 3)
+        self.lista_agregator.setHorizontalHeaderLabels([_("Model"), _("Host"), _("Adres")])
+        nagl = self.lista_agregator.horizontalHeader()
+        nagl.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        nagl.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for kolumna in (1, 2):
+            nagl.setSectionResizeMode(kolumna, QHeaderView.ResizeMode.ResizeToContents)
+        self.lista_agregator.verticalHeader().setVisible(False)
+        self.lista_agregator.verticalHeader().setDefaultSectionSize(40)
+        self.lista_agregator.setShowGrid(False)
+        self.lista_agregator.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.lista_agregator.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.lista_agregator.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.lista_agregator.setWordWrap(False)
+        self.lista_agregator.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         self.lista_agregator.itemChanged.connect(self._zmiana_modelu_agregatora)
         vm.addWidget(self.lista_agregator, 1)
         self.stos_routera.addWidget(strona_modeli)
@@ -5483,19 +5532,31 @@ class MainWindow(QMainWindow):
 
         def _po_sprawdzeniu(wpisy):
             self.btn_odswiez_agregator.setEnabled(True)
-            self.lista_agregator.blockSignals(True)
-            self.lista_agregator.clear()
+            tabela = self.lista_agregator
+            tabela.blockSignals(True)
+            tabela.clearSpans()
+            tabela.setRowCount(max(1, len(wpisy)))
             if not wpisy:
-                self.lista_agregator.addItem(_("Brak dostępnych modeli (hosty nieosiągalne albo puste)."))
+                tabela.setItem(0, 0, QTableWidgetItem(_("Brak dostępnych modeli (hosty nieosiągalne albo puste).")))
+                tabela.setSpan(0, 0, 1, 3)
             wylaczone = _litellm_wylaczone()
-            for nazwa_hosta, model, adres in wpisy:
-                item = QListWidgetItem(f"{model}  —  {nazwa_hosta} ({adres})")
+            mono = QFont("JetBrains Mono")
+            for wiersz, (nazwa_hosta, model, adres) in enumerate(wpisy):
+                item = QTableWidgetItem(model)
+                item.setFont(mono)
+                item.setToolTip(model)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(
                     Qt.CheckState.Unchecked if f"{adres}|{model}" in wylaczone else Qt.CheckState.Checked)
+                # WHY: dane do zapisu wyboru tylko w kolumnie z polem wyboru -
+                #      _zmiana_modelu_agregatora pomija komórki bez nich
                 item.setData(Qt.ItemDataRole.UserRole, (adres, model))
-                self.lista_agregator.addItem(item)
-            self.lista_agregator.blockSignals(False)
+                tabela.setItem(wiersz, 0, item)
+                tabela.setItem(wiersz, 1, QTableWidgetItem(nazwa_hosta))
+                pozycja_adresu = QTableWidgetItem(urlparse(adres).netloc or adres)
+                pozycja_adresu.setFont(mono)
+                tabela.setItem(wiersz, 2, pozycja_adresu)
+            tabela.blockSignals(False)
 
         if not self._uruchom_watek("agregator", worker, worker.wynik, _po_sprawdzeniu):
             self.btn_odswiez_agregator.setEnabled(True)

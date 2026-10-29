@@ -454,5 +454,7 @@
   "wyłączony": "desativado",
   "włączona": "ativada",
   "włączony": "ativado",
-  "{n} z {m} usług działa": "{n} de {m} serviços em execução"
+  "{n} z {m} usług działa": "{n} de {m} serviços em execução",
+  "Adres": "Endereço",
+  "Host": "Host"
 }
