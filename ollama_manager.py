@@ -2654,6 +2654,17 @@ class DialogTekst(QDialog):
         layout.addLayout(pasek)
 
 
+def _odmaluj_rodzica(*etykiety):
+    # WHAT: po zmianie napisów odmalowuje CAŁE widżety-rodziców (kafelek, karta).
+    # WHY:  przy ułamkowym skalowaniu ekranu (Wayland, np. 115%) Qt przy zmianie
+    #       samego napisu odmalowuje tylko jego prostokąt, a krawędź wypada w połowie
+    #       piksela - zostawał 1-pikselowy ciemny pasek pod napisem, który zmienia
+    #       się co kilka sekund (zgłoszenie użytkownika: "czarny pasek pod ilością ms").
+    #       Odmalowanie rodzica pokrywa ten wiersz pikseli tłem kafelka.
+    for rodzic in {e.parentWidget() for e in etykiety if e is not None and e.parentWidget() is not None}:
+        rodzic.update()
+
+
 def _odswiez_styl(widget):
     # WHAT: przelicza QSS po zmianie właściwości (np. setProperty("state", "ok")).
     # WHY:  Qt nie stosuje reguł typu QLabel[state="ok"] sam z siebie po zmianie
@@ -3837,6 +3848,7 @@ class OknoZasobnika(QWidget):
         if not zaladowane:
             self._chipy.addWidget(_etykieta(_("żaden model nie jest w pamięci"), "muted"))
         self._chipy.addStretch(1)
+        _odmaluj_rodzica(self.lbl_podsumowanie, *self._kafelki.values())
 
     def pokaz_przy(self, punkt):
         # WHAT: okienko przy kursorze (czyli przy ikonie), w całości na ekranie.
@@ -4606,6 +4618,7 @@ class MainWindow(QMainWindow):
             mb = p["siec"] / 1024 ** 2
             tekst = f"{mb:.1f} MB/s" if mb >= 0.1 else f"{p['siec'] / 1024:.0f} KB/s"
             self.lbl_siec.setText(_("Ruch sieciowy · {predkosc}").format(predkosc=tekst))
+        _odmaluj_rodzica(self.lbl_siec, self.lbl_cpu_wykres, self.lbl_gpu)
 
     # --- Akcje panelu: usługi ------------------------------------------------
     def przelacz_ollame(self, wlacz):
@@ -5094,6 +5107,7 @@ class MainWindow(QMainWindow):
             lbl.setAccessibleName(opis)
             self.tabela_host_modele.setCellWidget(wiersz, 3, lbl)
         self.lbl_host_ostrzezenie.setVisible(bool(stan) and not online)
+        _odmaluj_rodzica(self.lbl_host_vram, self.lbl_host_ram, self.lbl_host_ping, self.lbl_host_usluga)
 
     def odswiez_hosty(self):
         self.btn_sprawdz_hosty.setEnabled(False)
