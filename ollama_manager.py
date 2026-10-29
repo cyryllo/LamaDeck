@@ -56,6 +56,7 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
+from PyQt6.QtDBus import QDBusInterface
 
 # --- Konfiguracja ---------------------------------------------------------
 # WHAT: wersja aplikacji - widoczna w tytule okna.
@@ -3582,6 +3583,46 @@ def ustaw_autostart_programu(wlacz):
     )
 
 
+# WHAT: tytuł okienka zasobnika - po nim skrypt KWin znajduje okno do przesunięcia.
+_TYTUL_OKNA_ZASOBNIKA = "Ollama Manager - zasobnik"
+
+# WHAT: skrypt KWin stawiający okienko w rogu nad zasobnikiem (przy panelu).
+# WHY:  na Waylandzie program nie może sam ustawić położenia okna ani poznać
+#       położenia kursora poza swoimi oknami - zna je tylko menedżer okien.
+#       Skrypt pyta KWin o obszar roboczy (ekran bez panelu): panel u góry =
+#       okienko u góry, inaczej na dole; zawsze przy prawej krawędzi, gdzie
+#       w KDE jest zasobnik. Sprawdzone na Plasma 6.3 (Wayland).
+_SKRYPT_KWIN_ZASOBNIK = """
+(function () {
+  for (const w of workspace.windowList()) {
+    if (w.caption !== "%s") continue;
+    const obszar = workspace.clientArea(KWin.PlacementArea, w);
+    const ekran = workspace.clientArea(KWin.FullScreenArea, w);
+    const g = w.frameGeometry;
+    const y = (obszar.y > ekran.y) ? obszar.y + 8 : obszar.y + obszar.height - g.height - 8;
+    w.frameGeometry = {x: obszar.x + obszar.width - g.width - 8, y: y, width: g.width, height: g.height};
+  }
+})();
+""" % _TYTUL_OKNA_ZASOBNIKA
+
+
+def _kwin_przesun_okienko_zasobnika():
+    # WHAT: wczytuje i uruchamia jednorazowy skrypt KWin (DBus, bez roota).
+    # WHY:  stary skrypt o tej samej nazwie najpierw wyładowujemy - inaczej
+    #       KWin trzymałby kolejne kopie przy każdym otwarciu okienka.
+    plik = Path(tempfile.gettempdir()) / f"ollama-manager-zasobnik-{getpass.getuser()}.js"
+    try:
+        plik.write_text(_SKRYPT_KWIN_ZASOBNIK)
+    except OSError:
+        return
+    kwin = QDBusInterface("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting")
+    if not kwin.isValid():
+        return  # WHY: inny menedżer okien niż KWin - okienko zostaje tam, gdzie je postawił
+    kwin.call("unloadScript", "ollama-manager-zasobnik")
+    kwin.call("loadScript", str(plik), "ollama-manager-zasobnik")
+    kwin.call("start")
+
+
 class OknoZasobnika(QWidget):
     """Okienko po kliknięciu ikony w zasobniku: usługi, zasoby, modele w pamięci.
 
@@ -3591,9 +3632,20 @@ class OknoZasobnika(QWidget):
     """
 
     def __init__(self, okno):
-        super().__init__(None, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        # WHY: na Waylandzie okno typu Popup musi wisieć na WIDOCZNYM oknie programu -
+        #      przy schowanym głównym oknie w ogóle się nie pokazywało, a przy
+        #      otwartym wyskakiwało obok niego. Tam to zwykłe okno bez ramki,
+        #      zawsze na wierzchu, ustawiane przez KWin (_kwin_przesun_okienko_zasobnika)
+        #      i chowane, gdy klikniesz gdzie indziej (changeEvent). Na X11 Popup
+        #      przy kursorze działa dobrze, więc zostaje.
+        self.wayland = QApplication.platformName() == "wayland"
+        flagi = Qt.WindowType.FramelessWindowHint
+        flagi |= (Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint) if self.wayland else Qt.WindowType.Popup
+        super().__init__(None, flagi)
+        self.setWindowTitle(_TYTUL_OKNA_ZASOBNIKA)
         self.okno = okno
         self.zamkniete_o = 0.0
+        self._bylo_aktywne = False
         # WHY: zaokrąglone rogi panelu - tło okna musi być przezroczyste
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(380)
@@ -3700,6 +3752,16 @@ class OknoZasobnika(QWidget):
         self.hide()
         akcja()
 
+    def changeEvent(self, zdarzenie):
+        # WHAT: na Waylandzie okienko znika, gdy klikniesz poza nim (traci aktywność) -
+        #       tak jak Popup na X11 i okienka apletów KDE.
+        if zdarzenie.type() == QEvent.Type.ActivationChange and self.wayland:
+            if self.isActiveWindow():
+                self._bylo_aktywne = True
+            elif self._bylo_aktywne and self.isVisible():
+                self.hide()
+        super().changeEvent(zdarzenie)
+
     def hideEvent(self, zdarzenie):
         # WHY: kliknięcie ikony przy otwartym okienku najpierw je zamyka (Qt.Popup),
         #      a zaraz potem przychodzi sygnał kliknięcia - bez tej chwili okienko
@@ -3772,6 +3834,14 @@ class OknoZasobnika(QWidget):
         # WHY:  geometria ikony zasobnika bywa pusta (KDE/Wayland) - kursor w chwili
         #       kliknięcia jest zawsze tuż przy niej.
         self.odswiez()
+        if self.wayland:
+            self._bylo_aktywne = False
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            # WHY: KWin może przesunąć okno dopiero, gdy już jest na ekranie
+            QTimer.singleShot(60, _kwin_przesun_okienko_zasobnika)
+            return
         ekran = (QApplication.screenAt(punkt) or QApplication.primaryScreen()).availableGeometry()
         x = min(max(punkt.x() - self.width() // 2, ekran.left() + 8), ekran.right() - self.width() - 8)
         y = punkt.y() - self.height() - 12 if punkt.y() > ekran.center().y() else punkt.y() + 12
@@ -3906,16 +3976,22 @@ class MainWindow(QMainWindow):
 
     # --- Budowa okna ---------------------------------------------------------
     def _sekcje(self):
-        # WHAT: ekrany w kolejności makiety + "Ustawienia" na dole paska.
+        # WHAT: ekrany w kolejności paska bocznego - u góry codzienna praca
+        #       (panel, hosty, modele), na dole router, Open WebUI, ustawienia
+        #       i dziennik (patrz _SEKCJE_NA_DOLE).
+        # WHY:  układ wskazany przez użytkownika (2026-10-29), inny niż w makiecie.
         return [
             ("panel", "panel", _("Panel główny"), self._strona_panel),
             ("hosty", "hosty", _("Hosty Ollama"), self._strona_hosty),
-            ("router", "router", _("Router LiteLLM"), self._strona_router),
             ("modele", "modele", _("Modele"), self._strona_modele),
+            ("router", "router", _("Router LiteLLM"), self._strona_router),
             ("webui", "webui", _("Open WebUI"), self._strona_webui),
-            ("dziennik", "dziennik", _("Dziennik"), self._strona_dziennik),
             ("ustawienia", "ustawienia", _("Ustawienia"), self._strona_ustawienia),
+            ("dziennik", "dziennik", _("Dziennik"), self._strona_dziennik),
         ]
+
+    # WHAT: sekcje w dolnej grupie paska bocznego (nad linkiem do repozytorium).
+    _SEKCJE_NA_DOLE = ("router", "webui", "ustawienia", "dziennik")
 
     def _buduj_ui(self):
         # WHAT: pasek boczny po lewej, ekrany (QStackedWidget) po prawej.
@@ -3979,8 +4055,8 @@ class MainWindow(QMainWindow):
         marka.addLayout(napisy, 1)
         v.addLayout(marka)
 
-        # WHY: dwie listy (główne sekcje i "Ustawienia" na dole) - jak w typowych
-        #      programach KDE; zaznaczenie pilnujemy ręcznie w _przejdz.
+        # WHY: dwie listy (u góry codzienna praca, na dole _SEKCJE_NA_DOLE) - jak
+        #      w typowych programach KDE; zaznaczenie pilnujemy ręcznie w _przejdz.
         self.lista_sekcji = QListWidget()
         self.lista_dolna = QListWidget()
         for lista in (self.lista_sekcji, self.lista_dolna):
@@ -3992,8 +4068,11 @@ class MainWindow(QMainWindow):
         for klucz, nazwa_ikony, nazwa_sekcji, _b in sekcje:
             element = QListWidgetItem(ikona(nazwa_ikony, PALETA.boczny, PALETA.bocznyWybrany, 18, 1.8), nazwa_sekcji)
             element.setData(Qt.ItemDataRole.UserRole, klucz)
-            (self.lista_dolna if klucz == "ustawienia" else self.lista_sekcji).addItem(element)
-        self.lista_dolna.setFixedHeight(48)
+            (self.lista_dolna if klucz in self._SEKCJE_NA_DOLE else self.lista_sekcji).addItem(element)
+        # WHY: dolna lista ma dokładnie tyle wysokości, ile jej pozycje - bez przewijania
+        self.lista_dolna.setFixedHeight(
+            sum(self.lista_dolna.sizeHintForRow(i) for i in range(self.lista_dolna.count()))
+            + 2 * self.lista_dolna.frameWidth() + 4)
         for lista in (self.lista_sekcji, self.lista_dolna):
             lista.currentItemChanged.connect(lambda e, _p: e and self._przejdz(e.data(Qt.ItemDataRole.UserRole)))
         v.addWidget(self.lista_sekcji, 1)
