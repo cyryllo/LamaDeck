@@ -507,3 +507,40 @@ QPushButton#logHelpLink:hover { background: transparent; text-decoration: underl
 QStatusBar { background: #16191d; color: #a3abb5; border-top: 1px solid #2a2f36; }
 QStatusBar QLabel { background: transparent; }
 QMenu::item { padding: 6px 16px; }
+
+/* --- Okienko zasobnika (makieta Tray) ---
+ * DLACZEGO selektory z "QFrame#trayPanel" na początku: ogólna reguła
+ * "QFrame#trayPanel QLabel" (tło przezroczyste) wygrałaby z samym "QLabel#..." */
+QFrame#trayPanel {
+    background: #202429;
+    border: 1px solid #3a4048;
+    border-radius: 12px;
+}
+QFrame#trayPanel QLabel { background: transparent; }
+QFrame#trayPanel QLabel#trayTitle { font-size: 11pt; font-weight: 700; }
+QFrame#trayPanel QFrame#trayServices {
+    background: #262a30;
+    border: 1px solid #353b43;
+    border-radius: 10px;
+}
+QFrame#trayPanel QFrame#trayRow { background: transparent; border: none; border-top: 1px solid #353b43; }
+QFrame#trayPanel QFrame#trayRow[first="true"] { border-top: none; }
+QFrame#trayPanel QLabel#trayDot { border-radius: 4px; background: #6b737d; }
+QFrame#trayPanel QLabel#trayDot[state="ok"] { background: #5fd38d; }
+QFrame#trayPanel QFrame#trayTile { background: #262a30; border: none; border-radius: 8px; }
+QFrame#trayPanel QLabel#trayChip {
+    padding: 4px 10px; border-radius: 11px;
+    background: #1d3a4f; color: #9fd6f3;
+    font-family: "JetBrains Mono"; font-size: 9pt;
+}
+QPushButton#trayPrimary {
+    min-height: 44px; border-radius: 8px; border: none;
+    background: #3daee9; color: #0b1a24; font-weight: 700;
+}
+QPushButton#trayPrimary:hover { background: #5bbcee; }
+QPushButton#trayButton { min-height: 44px; border-radius: 8px; }
+QPushButton#iconButton {
+    min-height: 36px; min-width: 36px; padding: 0;
+    border: none; background: transparent;
+}
+QPushButton#iconButton:hover { background: #2a2f36; }

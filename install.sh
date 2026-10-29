@@ -75,6 +75,9 @@ remove_app() {
     echo "Removing Ollama Manager..."
     rm -rf "$TARGET_DIR"
     rm -f "$DESKTOP_FILE" "$ICON_FILE" "$OLD_ICON_FILE"
+    # WHY: the app's own "start after login" option (Settings) writes this file -
+    #      left behind, KDE would try to start a removed program at every login.
+    rm -f "$HOME/.config/autostart/ollama-manager.desktop"
     command -v update-desktop-database >/dev/null 2>&1 \
         && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     echo "Done. Ollama Manager has been removed (pip dependencies are kept - other tools may share them)."

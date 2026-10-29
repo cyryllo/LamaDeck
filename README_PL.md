@@ -127,6 +127,13 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Zapis do pliku, czyszczenie widoku, automatyczne przewijanie
 - Dziennik usługi Ollama wymaga uprawnień: wczytasz go raz (hasło) albo zezwolisz na stałe
 
+**Zasobnik systemowy** (opcjonalny, domyślnie wyłączony — włączasz w Ustawieniach)
+- Ikona przy zegarze z małym panelem: trzy usługi z przełącznikami, CPU / VRAM / RAM, modele
+  w pamięci i przyciski otwierające czat albo panel zarządzania
+- Zamknięcie okna chowa je do zasobnika; program kończysz z menu ikony
+- Opcjonalnie start programu po zalogowaniu, od razu schowanego w zasobniku
+- Działa tylko jedna kopia programu — ponowne uruchomienie po prostu pokazuje okno
+
 **Ustawienia**
 - Język interfejsu — polski, angielski, niemiecki, hiszpański, francuski, portugalski, włoski;
   zmiana od razu, zapamiętana między uruchomieniami

@@ -127,6 +127,13 @@ fonts are bundled, so it looks the same everywhere).
 - Save to a file, clear the view, auto-scroll
 - The Ollama service log needs permission: load it once (password) or allow it permanently
 
+**System tray** (optional, off by default — turn it on in Settings)
+- A tray icon with a small panel: the three services with on/off switches, CPU / VRAM / RAM,
+  models in memory, and buttons to open the chat or the control panel
+- Closing the window hides it in the tray; quit from the icon's menu
+- Optionally start the program after login, already hidden in the tray
+- Only one copy runs at a time — starting it again just brings the window back
+
 **Settings**
 - Interface language — Polish, English, German, Spanish, French, Portuguese, Italian; switches
   instantly, remembered between runs

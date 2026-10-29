@@ -43,7 +43,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
-    QImage, QBitmap, QRegion,
+    QImage, QBitmap, QRegion, QCursor,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -53,7 +53,9 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
+    QSystemTrayIcon,
 )
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 # --- Konfiguracja ---------------------------------------------------------
 # WHAT: wersja aplikacji - widoczna w tytule okna.
@@ -3543,6 +3545,241 @@ class KartaModelu(QFrame):
         v.addLayout(akcje)
 
 
+# =============================================================================
+#  Zasobnik systemowy (makieta Tray.dc.html) - ikona przy zegarze KDE
+# =============================================================================
+_PLIK_AUTOSTARTU = Path.home() / ".config" / "autostart" / "ollama-manager.desktop"
+
+
+def zasobnik_wlaczony():
+    # WHY: domyślnie WYŁĄCZONY (decyzja użytkownika) - z włączonym zasobnikiem
+    #      krzyżyk chowa okno zamiast zamykać program, to nie może zaskoczyć.
+    return _ustawienia().value("zasobnik/wlaczony", False, type=bool)
+
+
+def autostart_programu_wlaczony():
+    return _PLIK_AUTOSTARTU.exists()
+
+
+def ustaw_autostart_programu(wlacz):
+    # WHAT: wpis w ~/.config/autostart - KDE uruchamia program po zalogowaniu,
+    #       od razu schowany w zasobniku (--w-zasobniku).
+    # WHY:  bez roota i bez systemd - to standardowy autostart programów pulpitu.
+    #       Wskazuje dokładnie ten skrypt i ten Python, które teraz działają, więc
+    #       działa tak samo dla install.sh, .deb i uruchomienia z klonu repo.
+    if not wlacz:
+        _PLIK_AUTOSTARTU.unlink(missing_ok=True)
+        return
+    _PLIK_AUTOSTARTU.parent.mkdir(parents=True, exist_ok=True)
+    _PLIK_AUTOSTARTU.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Ollama Manager\n"
+        f'Exec="{sys.executable}" "{Path(__file__).resolve()}" --w-zasobniku\n'
+        "Icon=ollama-manager\n"
+        "X-KDE-autostart-after=panel\n"
+        "Terminal=false\n"
+    )
+
+
+class OknoZasobnika(QWidget):
+    """Okienko po kliknięciu ikony w zasobniku: usługi, zasoby, modele w pamięci.
+
+    WHY: Qt.Popup - samo znika po kliknięciu obok, jak okienka apletów KDE.
+         Dane bierze z głównego okna (stan usług, hosty, ostatnia próbka
+         zasobów), a przełączniki wołają te same funkcje co panel główny.
+    """
+
+    def __init__(self, okno):
+        super().__init__(None, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.okno = okno
+        self.zamkniete_o = 0.0
+        # WHY: zaokrąglone rogi panelu - tło okna musi być przezroczyste
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedWidth(380)
+        zewn = QVBoxLayout(self)
+        zewn.setContentsMargins(0, 0, 0, 0)
+        panel = QFrame()
+        panel.setObjectName("trayPanel")
+        zewn.addWidget(panel)
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(18, 18, 18, 18)
+        v.setSpacing(14)
+
+        gora = QHBoxLayout()
+        gora.setSpacing(12)
+        logo = QLabel()
+        logo.setPixmap(_ikona_programu().pixmap(40, 40))
+        gora.addWidget(logo)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(0)
+        tytul = QLabel(_("Lokalny stos AI"))
+        tytul.setObjectName("trayTitle")
+        teksty.addWidget(tytul)
+        self.lbl_podsumowanie = QLabel("—")
+        self.lbl_podsumowanie.setObjectName("allState")
+        teksty.addWidget(self.lbl_podsumowanie)
+        gora.addLayout(teksty, 1)
+        ustawienia = QPushButton()
+        ustawienia.setObjectName("iconButton")
+        ustawienia.setIcon(ikona("ustawienia", PALETA.boczny, rozmiar=18, grubosc=1.8))
+        ustawienia.setToolTip(_("Ustawienia"))
+        ustawienia.setAccessibleName(_("Ustawienia"))
+        ustawienia.clicked.connect(lambda: self._i_zamknij(lambda: okno.pokaz_okno("ustawienia")))
+        gora.addWidget(ustawienia)
+        v.addLayout(gora)
+
+        uslugi = QFrame()
+        uslugi.setObjectName("trayServices")
+        vu = QVBoxLayout(uslugi)
+        vu.setContentsMargins(0, 0, 0, 0)
+        vu.setSpacing(0)
+        self._wiersze = {}
+        for i, (klucz, nazwa, slot) in enumerate((("ollama", "Ollama", okno.przelacz_ollame),
+                                                  ("litellm", _("Router LiteLLM"), okno.przelacz_litellm),
+                                                  ("webui", "Open WebUI", okno.przelacz_webui))):
+            wiersz = QFrame()
+            wiersz.setObjectName("trayRow")
+            wiersz.setProperty("first", "true" if i == 0 else "false")
+            h = QHBoxLayout(wiersz)
+            h.setContentsMargins(14, 12, 14, 12)
+            h.setSpacing(12)
+            kropka = QLabel()
+            kropka.setObjectName("trayDot")
+            kropka.setFixedSize(9, 9)
+            h.addWidget(kropka)
+            napisy = QVBoxLayout()
+            napisy.setSpacing(0)
+            napisy.addWidget(QLabel(nazwa))
+            opis = _etykieta("", "mono", muted="true")
+            napisy.addWidget(opis)
+            h.addLayout(napisy, 1)
+            przelacznik = Przelacznik(nazwa)
+            przelacznik.clicked.connect(slot)
+            h.addWidget(przelacznik)
+            vu.addWidget(wiersz)
+            self._wiersze[klucz] = (kropka, opis, przelacznik)
+        v.addWidget(uslugi)
+
+        # WHY: w makiecie trzeci kafelek to "Tokeny/s" - takiej liczby żadna usługa
+        #      nie podaje, więc jest RAM (zasada: nie zmyślamy danych).
+        kafelki = QHBoxLayout()
+        kafelki.setSpacing(8)
+        self._kafelki = {}
+        for klucz in ("CPU", "VRAM", "RAM"):
+            kafelek = QFrame()
+            kafelek.setObjectName("trayTile")
+            vk = QVBoxLayout(kafelek)
+            vk.setContentsMargins(10, 10, 10, 10)
+            vk.setSpacing(2)
+            vk.addWidget(_etykieta(klucz, "muted"))
+            wartosc = _etykieta("—", "value")
+            vk.addWidget(wartosc)
+            kafelki.addWidget(kafelek, 1)
+            self._kafelki[klucz] = wartosc
+        v.addLayout(kafelki)
+
+        v.addWidget(_etykieta(_("W pamięci"), "muted"))
+        self._chipy = QHBoxLayout()
+        self._chipy.setSpacing(6)
+        v.addLayout(self._chipy)
+        v.addStretch(1)
+
+        self.btn_czat = QPushButton(_("Otwórz czat"))
+        self.btn_czat.setObjectName("trayPrimary")
+        self.btn_czat.setIcon(ikona("otworz", PALETA.naAkcencie, rozmiar=16, grubosc=2.2))
+        self.btn_czat.clicked.connect(lambda: self._i_zamknij(okno.otworz_webui))
+        v.addWidget(self.btn_czat)
+        btn_panel = QPushButton(_("Otwórz panel zarządzania"))
+        btn_panel.setObjectName("trayButton")
+        btn_panel.clicked.connect(lambda: self._i_zamknij(okno.pokaz_okno))
+        v.addWidget(btn_panel)
+        self.setFixedHeight(560)
+
+    def _i_zamknij(self, akcja):
+        self.hide()
+        akcja()
+
+    def hideEvent(self, zdarzenie):
+        # WHY: kliknięcie ikony przy otwartym okienku najpierw je zamyka (Qt.Popup),
+        #      a zaraz potem przychodzi sygnał kliknięcia - bez tej chwili okienko
+        #      otwierałoby się od razu z powrotem.
+        self.zamkniete_o = time.monotonic()
+        super().hideEvent(zdarzenie)
+
+    def odswiez(self):
+        # WHAT: stan z głównego okna -> podsumowanie, przełączniki, zasoby, modele w pamięci.
+        okno = self.okno
+        stan = okno._stan
+        if stan:
+            uslugi = {"ollama": (stan["zainstalowana"], stan["active"]),
+                      "litellm": (stan["litellm"], stan["litellm_dziala"]),
+                      "webui": (stan["webui"], stan["webui_dziala"])}
+            online = sum(1 for srv in okno.serwery if (okno._hosty_stan.get(srv["adres"]) or {}).get("online"))
+            opisy = {"ollama": _("{n} z {m} hostów online").format(n=online, m=len(okno.serwery)),
+                     "litellm": f":{urlparse(LITELLM_URL).port or 4000}",
+                     "webui": f":{_webui_port()}"}
+            for klucz, (zainstalowana, dziala) in uslugi.items():
+                kropka, opis, przelacznik = self._wiersze[klucz]
+                kropka.setProperty("state", "ok" if dziala else "off")
+                _odswiez_styl(kropka)
+                opis.setText(opisy[klucz] if zainstalowana else _("Nie zainstalowane"))
+                przelacznik.setEnabled(zainstalowana and not okno._w_toku(klucz))
+                przelacznik.ustaw_cicho(dziala)
+            zainstalowane = [d for z, d in uslugi.values() if z]
+            dzialajace = sum(zainstalowane)
+            if zainstalowane and dzialajace == len(zainstalowane):
+                tekst, kolor = _("Wszystko działa"), "ok"
+            elif dzialajace:
+                tekst, kolor = _("{n} z {m} usług działa").format(n=dzialajace, m=len(zainstalowane)), "warn"
+            else:
+                tekst, kolor = _("Wszystko zatrzymane"), "error"
+            self.lbl_podsumowanie.setText(tekst)
+            self.lbl_podsumowanie.setProperty("state", kolor)
+            _odswiez_styl(self.lbl_podsumowanie)
+
+        p = okno._ostatnie_zasoby
+        if p:
+            if p["cpu"] is not None:
+                self._kafelki["CPU"].setText(f"{p['cpu']:.0f}%")
+            if p["vram_calkowite"]:
+                self._kafelki["VRAM"].setText(f"{100 * p['vram_uzyte'] / p['vram_calkowite']:.0f}%")
+            if p["ram_calkowite"]:
+                self._kafelki["RAM"].setText(f"{100 * p['ram_uzyte'] / p['ram_calkowite']:.0f}%")
+
+        while self._chipy.count():
+            element = self._chipy.takeAt(0)
+            if element.widget():
+                element.widget().deleteLater()
+        zaladowane = []
+        for st in okno._hosty_stan.values():
+            for m in st.get("modele", []):
+                if m["w_pamieci"] and m["nazwa"] not in zaladowane:
+                    zaladowane.append(m["nazwa"])
+        for nazwa in zaladowane[:3]:
+            chip = QLabel(_skroc_nazwe_modelu_hf(nazwa))
+            chip.setObjectName("trayChip")
+            chip.setToolTip(nazwa)
+            self._chipy.addWidget(chip)
+        if len(zaladowane) > 3:
+            self._chipy.addWidget(_etykieta(f"+{len(zaladowane) - 3}", "muted"))
+        if not zaladowane:
+            self._chipy.addWidget(_etykieta(_("żaden model nie jest w pamięci"), "muted"))
+        self._chipy.addStretch(1)
+
+    def pokaz_przy(self, punkt):
+        # WHAT: okienko przy kursorze (czyli przy ikonie), w całości na ekranie.
+        # WHY:  geometria ikony zasobnika bywa pusta (KDE/Wayland) - kursor w chwili
+        #       kliknięcia jest zawsze tuż przy niej.
+        self.odswiez()
+        ekran = (QApplication.screenAt(punkt) or QApplication.primaryScreen()).availableGeometry()
+        x = min(max(punkt.x() - self.width() // 2, ekran.left() + 8), ekran.right() - self.width() - 8)
+        y = punkt.y() - self.height() - 12 if punkt.y() > ekran.center().y() else punkt.y() + 12
+        y = min(max(y, ekran.top() + 8), ekran.bottom() - self.height() - 8)
+        self.move(x, y)
+        self.show()
+
+
 class WierszDziennika(QFrame):
     """Wpis z makiety "Dziennik": czas, usługa, poziom, treść i - przy błędzie - wyjaśnienie."""
 
@@ -3632,6 +3869,10 @@ class MainWindow(QMainWindow):
         self._ustawienia_wczytane = False
         self._webui_info = {}
         self._wersje = {}
+        self._ostatnie_zasoby = None    # WHY: ostatnia próbka zasobów - pokazuje ją też okienko zasobnika
+        self.zasobnik = None            # WHY: ikona w zasobniku (QSystemTrayIcon), gdy włączona w Ustawieniach
+        self.okno_zasobnika = None
+        self._konczenie = False         # WHY: "Zakończ" z menu ikony - wtedy krzyżyk ma naprawdę zamknąć program
 
         # WHY: język wczytujemy PRZED _buduj_ui() - widgety od razu dostają właściwe napisy.
         self._jezyk_aktywny = _wczytaj_jezyk_zapisany()
@@ -3648,6 +3889,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(min(1600, ekran.width()) if ekran else 1600,
                             min(900, ekran.height()) if ekran else 900)
         self._buduj_ui()
+        self._ustaw_zasobnik(zasobnik_wlaczony())
 
         # WHAT: odświeżanie co 10 s (stan usług + dane widocznego ekranu) i co 2 s
         #       zasoby komputera - tylko gdy panel główny jest na ekranie.
@@ -3881,9 +4123,12 @@ class MainWindow(QMainWindow):
         worker.start()
         return worker
 
+    def _zasobnik_otwarty(self):
+        return bool(self.okno_zasobnika and self.okno_zasobnika.isVisible())
+
     def _tyk(self):
         self.odswiez()
-        if self._strona in ("panel", "hosty") and self.isVisible():
+        if (self._strona in ("panel", "hosty") and self.isVisible()) or self._zasobnik_otwarty():
             self.odswiez_hosty()
         if self._strona in ("modele", "router") and self.isVisible():
             self.odswiez_modele()
@@ -3897,6 +4142,7 @@ class MainWindow(QMainWindow):
     def _po_odswiezeniu(self, stan):
         # WHAT: stan usług tego komputera -> panel główny, ekran WebUI, Router, Ustawienia.
         self._stan = stan
+        self._odswiez_zasobnik()
         self._odswiez_panel_uslug(stan)
         self._odswiez_webui(stan)
         self._odswiez_router_stan(stan)
@@ -4217,12 +4463,15 @@ class MainWindow(QMainWindow):
             n=len(aliasy), strategia=nazwy[_litellm_strategia()]))
 
     def _tyk_zasobow(self):
-        if self._strona != "panel" or not self.isVisible():
+        if not ((self._strona == "panel" and self.isVisible()) or self._zasobnik_otwarty()):
             return
         worker = ZasobyWorker(self._probnik)
         self._uruchom_watek("zasoby", worker, worker.wynik, self._po_zasobach)
 
     def _po_zasobach(self, p):
+        self._ostatnie_zasoby = p
+        if self._zasobnik_otwarty():
+            self.okno_zasobnika.odswiez()
         gib = 1024 ** 3
         if p["cpu"] is not None:
             self.pr_cpu.ustaw(p["cpu"] / 100, f"{p['cpu']:.0f}%", "CPU")
@@ -4761,6 +5010,7 @@ class MainWindow(QMainWindow):
         self._pokaz_szczegoly_hosta()
         self._odswiez_panel_hostow()
         self._odswiez_schemat()
+        self._odswiez_zasobnik()
 
     def dodaj_host(self):
         dialog = DialogDodajHost(self.serwery, self)
@@ -6293,6 +6543,16 @@ class MainWindow(QMainWindow):
         self.sw_webui_autostart = self._wiersz_przelacznika(
             uk, _("Open WebUI startuje po zalogowaniu"), _("usługa użytkownika, bez hasła"),
             self.przelacz_webui_autostart)
+        self.sw_zasobnik = self._wiersz_przelacznika(
+            uk, _("Ikona w zasobniku systemowym"),
+            _("krzyżyk chowa okno do zasobnika, program zamykasz przez \"Zakończ\" w menu ikony"),
+            self.przelacz_zasobnik)
+        self.sw_zasobnik.setChecked(zasobnik_wlaczony())
+        self.sw_autostart_programu = self._wiersz_przelacznika(
+            uk, _("Uruchamiaj program po zalogowaniu"), _("od razu schowany w zasobniku"),
+            self.przelacz_autostart_programu)
+        self.sw_autostart_programu.setChecked(autostart_programu_wlaczony())
+        self.sw_autostart_programu.setEnabled(zasobnik_wlaczony())
         uk.addStretch(1)
         rzad.addWidget(karta, 1)
 
@@ -6616,6 +6876,118 @@ class MainWindow(QMainWindow):
         self._ustawienia_wczytane = False  # WHY: po restarcie formularz pokaże faktycznie zapisany stan
         self._uruchom_akcje(lambda: usluga_zapisz_env(zmienne, ip_allow), _("Zapisanie ustawień Ollamy"))
 
+    # =========================================================================
+    #  Zasobnik systemowy
+    # =========================================================================
+    def _ustaw_zasobnik(self, wlacz):
+        # WHAT: pokazuje albo chowa ikonę w zasobniku.
+        # WHY:  przy włączonym zasobniku zamknięcie okna nie może kończyć programu -
+        #       także zamknięcie okna dialogowego, gdy główne jest schowane (Qt
+        #       uznałby je za "ostatnie okno" i zakończył cały program).
+        dostepny = QSystemTrayIcon.isSystemTrayAvailable()
+        if wlacz and dostepny:
+            if self.zasobnik is None:
+                self.zasobnik = QSystemTrayIcon(_ikona_programu(), self)
+                self.zasobnik.activated.connect(self._klik_zasobnika)
+            self._zbuduj_menu_zasobnika()
+            self.zasobnik.show()
+            self._odswiez_zasobnik()
+        elif self.zasobnik is not None:
+            self.zasobnik.hide()
+        QApplication.setQuitOnLastWindowClosed(not (wlacz and dostepny))
+
+    def _zbuduj_menu_zasobnika(self):
+        # WHY: osobna funkcja - po zmianie języka menu trzeba zbudować na nowo
+        menu = QMenu(self)
+        menu.addAction(_("Otwórz panel zarządzania"), self.pokaz_okno)
+        menu.addAction(_("Otwórz czat"), self.otworz_webui)
+        menu.addSeparator()
+        menu.addAction(_("Zakończ"), self.zakoncz)
+        self.zasobnik.setContextMenu(menu)
+        self._menu_zasobnika = menu
+
+    def _odswiez_zasobnik(self):
+        if self.zasobnik is None:
+            return
+        stan = self._stan
+        if stan:
+            dzialajace = sum(1 for z, d in ((stan["zainstalowana"], stan["active"]),
+                                            (stan["litellm"], stan["litellm_dziala"]),
+                                            (stan["webui"], stan["webui_dziala"])) if z and d)
+            self.zasobnik.setToolTip("Ollama Manager - " + _("działa: {n}").format(n=dzialajace))
+        if self._zasobnik_otwarty():
+            self.okno_zasobnika.odswiez()
+
+    def _klik_zasobnika(self, powod):
+        # WHAT: lewy klik = okienko z makiety, środkowy = główne okno (prawy = menu, robi Qt).
+        if powod == QSystemTrayIcon.ActivationReason.MiddleClick:
+            self.pokaz_okno()
+            return
+        if powod != QSystemTrayIcon.ActivationReason.Trigger:
+            return
+        if self.okno_zasobnika is None:
+            self.okno_zasobnika = OknoZasobnika(self)
+        if self.okno_zasobnika.isVisible() or time.monotonic() - self.okno_zasobnika.zamkniete_o < 0.3:
+            self.okno_zasobnika.hide()
+            return
+        self.okno_zasobnika.pokaz_przy(QCursor.pos())
+        # WHY: świeże dane od razu, nie dopiero przy następnym tyknięciu zegara
+        self.odswiez_hosty()
+        self._tyk_zasobow()
+
+    def pokaz_okno(self, strona=None):
+        if strona:
+            self._przejdz(strona)
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def zakoncz(self):
+        self._konczenie = True
+        QApplication.quit()
+
+    def closeEvent(self, zdarzenie):
+        # WHAT: z włączonym zasobnikiem krzyżyk tylko chowa okno (decyzja użytkownika);
+        #       program kończy "Zakończ" w menu ikony.
+        if self.zasobnik is not None and self.zasobnik.isVisible() and not self._konczenie:
+            zdarzenie.ignore()
+            self.hide()
+            if not _ustawienia().value("zasobnik/powiadomiono", False, type=bool):
+                # WHY: raz - żeby nikt nie myślał, że program się zamknął, a on dalej działa
+                _ustawienia().setValue("zasobnik/powiadomiono", True)
+                self.zasobnik.showMessage(
+                    "Ollama Manager",
+                    _("Program działa dalej w zasobniku. Zamkniesz go przez \"Zakończ\" w menu ikony."),
+                    _ikona_programu(), 8000)
+            return
+        zdarzenie.accept()
+
+    def przelacz_zasobnik(self, wlacz):
+        if wlacz and not QSystemTrayIcon.isSystemTrayAvailable():
+            QMessageBox.warning(self, _("Zasobnik systemowy"),
+                                _("Zasobnik systemowy jest niedostępny w tym środowisku pulpitu."))
+            self.sw_zasobnik.ustaw_cicho(False)
+            return
+        _ustawienia().setValue("zasobnik/wlaczony", wlacz)
+        self._ustaw_zasobnik(wlacz)
+        if not wlacz and autostart_programu_wlaczony():
+            # WHY: start po zalogowaniu chowa okno do zasobnika - bez zasobnika
+            #      program startowałby niewidoczny, więc autostart też wyłączamy.
+            ustaw_autostart_programu(False)
+            self.sw_autostart_programu.ustaw_cicho(False)
+        self.sw_autostart_programu.setEnabled(wlacz)
+        self.wpis_log(_("Ikona w zasobniku: {stan}.").format(stan=_("włączona") if wlacz else _("wyłączona")))
+
+    def przelacz_autostart_programu(self, wlacz):
+        try:
+            ustaw_autostart_programu(wlacz)
+        except OSError as e:
+            self.wpis_log(_("Nie udało się zmienić autostartu programu: {blad}").format(blad=e), "BŁĄD")
+            self.sw_autostart_programu.ustaw_cicho(autostart_programu_wlaczony())
+            return
+        self.wpis_log(_("Start programu po zalogowaniu: {stan}.").format(
+            stan=_("włączony") if wlacz else _("wyłączony")))
+
     def _zmien_jezyk(self, index):
         # WHY: przebudowujemy CAŁE okno tą samą funkcją co przy starcie - żywa
         #      zmiana języka bez restartu, bo widżety i tak budujemy z danych w self.
@@ -6627,6 +6999,12 @@ class MainWindow(QMainWindow):
         _zapisz_jezyk(kod)
         self.setWindowTitle(_("Ollama Manager - lokalny stos AI"))
         self._buduj_ui()
+        # WHY: okienko i menu zasobnika też mają napisy - budujemy je od nowa
+        if self.okno_zasobnika is not None:
+            self.okno_zasobnika.deleteLater()
+            self.okno_zasobnika = None
+        if self.zasobnik is not None and self.zasobnik.isVisible():
+            self._zbuduj_menu_zasobnika()
         self.odswiez()
 
 
@@ -6675,9 +7053,36 @@ def main():
     # WHY: KDE (Wayland) łączy okno z wpisem .desktop po tej nazwie - pasek zadań
     #      pokaże wtedy ikonę z menu, a nie ogólną ikonę Pythona.
     app.setDesktopFileName("ollama-manager")
+    w_zasobniku = "--w-zasobniku" in sys.argv
+
+    # WHAT: tylko jedna kopia programu naraz.
+    # WHY:  z zasobnikiem program działa w tle (np. z autostartu) - drugie
+    #       uruchomienie z menu pokazuje istniejące okno, zamiast drugiej ikony.
+    nazwa_gniazda = f"ollama-manager-{getpass.getuser()}"
+    gniazdo = QLocalSocket()
+    gniazdo.connectToServer(nazwa_gniazda)
+    if gniazdo.waitForConnected(300):
+        if not w_zasobniku:
+            gniazdo.write(b"pokaz")
+            gniazdo.waitForBytesWritten(300)
+        return
+    QLocalServer.removeServer(nazwa_gniazda)  # WHY: gniazdo po kopii, która się wywaliła
+    serwer = QLocalServer()
+    serwer.listen(nazwa_gniazda)
+
     _wczytaj_motyw(app)
     okno = MainWindow()
-    okno.show()
+    def _nowe_polaczenie():
+        # WHY: okno pokazujemy tylko na wiadomość "pokaz" - kopia z autostartu
+        #      (--w-zasobniku) łączy się bez niej i ma po prostu się zakończyć.
+        polaczenie = serwer.nextPendingConnection()
+        polaczenie.readyRead.connect(
+            lambda: okno.pokaz_okno() if bytes(polaczenie.readAll()).startswith(b"pokaz") else None)
+
+    serwer.newConnection.connect(_nowe_polaczenie)
+    # WHY: z autostartu (--w-zasobniku) tylko ikona - o ile zasobnik naprawdę działa
+    if not (w_zasobniku and okno.zasobnik is not None and okno.zasobnik.isVisible()):
+        okno.show()
     sys.exit(app.exec())
 
 
