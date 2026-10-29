@@ -142,7 +142,8 @@ fonts are bundled, so it looks the same everywhere).
   is needed, and nothing is stored on disk. The embedding model is chosen in Settings ("Chat"
   card); without one, a button there downloads the recommended multilingual
   `nomic-embed-text-v2-moe`
-- Conversations are not saved — for a full chat with history, use Open WebUI
+- Conversations are not saved yet — automatic saving is coming to the chat before 1.0 (see the
+  [roadmap](#roadmap-to-10)); if you need chat history right now, Open WebUI has it
 - Also opens straight from the tray panel ("Open chat")
 
 **Open WebUI**

@@ -143,7 +143,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku. Model embeddingów wybierasz
   w Ustawieniach (karta „Czat”); gdy żadnego nie ma, przycisk pobiera zalecany, wielojęzyczny
   `nomic-embed-text-v2-moe`
-- Rozmowy nie są zapisywane — pełny czat z historią daje Open WebUI
+- Rozmowy nie są jeszcze zapisywane — automatyczne zapisywanie trafi do czatu przed wersją 1.0
+  (patrz [plan](#plan-do-wersji-10)); jeśli historia rozmów potrzebna jest już teraz, daje ją
+  Open WebUI
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
 **Open WebUI**
