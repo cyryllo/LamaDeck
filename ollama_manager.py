@@ -4123,6 +4123,11 @@ class MainWindow(QMainWindow):
             lista.setAccessibleName(_("Sekcje programu"))
             lista.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             lista.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            # WHY: bez fokusu. Lista z fokusem, ale bez bieżącej pozycji (bo wybrany
+            #      ekran jest w innej z trzech list), po powrocie okna na wierzch
+            #      (Alt+Tab, "Ustawienia" w okienku zasobnika) sama wybierała pierwszą
+            #      pozycję - i program przeskakiwał na Panel główny (zgłoszenie użytkownika).
+            lista.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         for klucz, nazwa_ikony, nazwa_sekcji, _b in sekcje:
             element = QListWidgetItem(ikona(nazwa_ikony, PALETA.boczny, PALETA.bocznyWybrany, 18, 1.8), nazwa_sekcji)
             element.setData(Qt.ItemDataRole.UserRole, klucz)
