@@ -3758,6 +3758,7 @@ class OknoZasobnika(QWidget):
             h.addWidget(przelacznik)
             vu.addWidget(wiersz)
             self._wiersze[klucz] = (kropka, opis, przelacznik)
+        self._ramka_uslug = uslugi
         v.addWidget(uslugi)
 
         # WHY: w makiecie trzeci kafelek to "Tokeny/s" - takiej liczby żadna usługa
@@ -3793,6 +3794,9 @@ class OknoZasobnika(QWidget):
         btn_panel.setObjectName("trayButton")
         btn_panel.clicked.connect(lambda: self._i_zamknij(okno.pokaz_okno))
         v.addWidget(btn_panel)
+        # WHY: 560 px jak w makiecie - przy wszystkich usługach; bez niektórych
+        #      okienko kurczy się o schowane wiersze (_dopasuj_wysokosc)
+        self._pelna_wysokosc = self._wysokosc_ukladu()
         self.setFixedHeight(560)
 
     def _i_zamknij(self, akcja):
@@ -3828,6 +3832,20 @@ class OknoZasobnika(QWidget):
             opisy = {"ollama": _("{n} z {m} hostów online").format(n=online, m=len(okno.serwery)),
                      "litellm": f":{urlparse(LITELLM_URL).port or 4000}",
                      "webui": f":{_webui_port()}"}
+            # WHAT: wiersze usług, których nie ma, znikają (jak w pasku bocznym i Ustawieniach
+            #       głównego okna); instalacja jest na panelu głównym.
+            widoczne = [k for k, (z, _d) in uslugi.items() if z]
+            if widoczne != getattr(self, "_widoczne_uslugi", None):
+                self._widoczne_uslugi = widoczne
+                for klucz, (_k, _o, przelacznik) in self._wiersze.items():
+                    wiersz = przelacznik.parentWidget()
+                    wiersz.setVisible(klucz in widoczne)
+                    # WHY: górna kreska oddziela wiersze - pierwszy WIDOCZNY jej nie ma
+                    wiersz.setProperty("first", "true" if widoczne and klucz == widoczne[0] else "false")
+                    _odswiez_styl(wiersz)
+                self._ramka_uslug.setVisible(bool(widoczne))
+                self.btn_czat.setVisible(stan["webui"])  # WHY: "Otwórz czat" bez WebUI nie ma sensu
+                self._dopasuj_wysokosc()
             for klucz, (zainstalowana, dziala) in uslugi.items():
                 kropka, opis, przelacznik = self._wiersze[klucz]
                 kropka.setProperty("state", "ok" if dziala else "off")
@@ -3837,7 +3855,9 @@ class OknoZasobnika(QWidget):
                 przelacznik.ustaw_cicho(dziala)
             zainstalowane = [d for z, d in uslugi.values() if z]
             dzialajace = sum(zainstalowane)
-            if zainstalowane and dzialajace == len(zainstalowane):
+            if not zainstalowane:
+                tekst, kolor = _("Nic nie jest zainstalowane"), "off"
+            elif dzialajace == len(zainstalowane):
                 tekst, kolor = _("Wszystko działa"), "ok"
             elif dzialajace:
                 tekst, kolor = _("{n} z {m} usług działa").format(n=dzialajace, m=len(zainstalowane)), "warn"
@@ -3876,6 +3896,20 @@ class OknoZasobnika(QWidget):
             self._chipy.addWidget(_etykieta(_("żaden model nie jest w pamięci"), "muted"))
         self._chipy.addStretch(1)
         _odmaluj_rodzica(self.lbl_podsumowanie, *self._kafelki.values())
+
+    def _wysokosc_ukladu(self):
+        # WHY: przed pierwszym pokazaniem układy nie są jeszcze przeliczone i
+        #      sizeHint() kłamie - najpierw style i przeliczenie układów.
+        for widget in [self] + self.findChildren(QWidget):
+            widget.ensurePolished()
+            if widget.layout():
+                widget.layout().invalidate()
+                widget.layout().activate()
+        return self.sizeHint().height()
+
+    def _dopasuj_wysokosc(self):
+        # WHAT: okienko krótsze dokładnie o schowane wiersze usług i "Otwórz czat".
+        self.setFixedHeight(560 - max(0, self._pelna_wysokosc - self._wysokosc_ukladu()))
 
     def pokaz_przy(self, punkt):
         # WHAT: okienko przy kursorze (czyli przy ikonie), w całości na ekranie.
@@ -4072,6 +4106,10 @@ class MainWindow(QMainWindow):
             self._indeksy_stron[klucz] = self.strony.addWidget(opakowanie)
         glowny.addWidget(self.strony, 1)
         self.statusBar().setSizeGripEnabled(False)
+        # WHY: przed pierwszym odczytem stanu (RefreshWorker) - szybkie sprawdzenie
+        #      binarek, żeby pozycje routera/WebUI nie mrugały przy starcie
+        self._pokaz_sekcje_uslug(self._stan or {"litellm": litellm_zainstalowane(),
+                                                "webui": webui_zainstalowane()})
         self._przejdz(self._strona)
         if self._stan:
             self._po_odswiezeniu(self._stan)
@@ -4137,10 +4175,8 @@ class MainWindow(QMainWindow):
                 self.lista_programu.addItem(element)
             else:
                 self.lista_sekcji.addItem(element)
-        # WHY: dolne listy mają dokładnie tyle wysokości, ile ich pozycje - bez przewijania
-        for lista in (self.lista_dolna, self.lista_programu):
-            lista.setFixedHeight(sum(lista.sizeHintForRow(i) for i in range(lista.count()))
-                                 + 2 * lista.frameWidth() + 4)
+        self._dopasuj_wysokosc_listy(self.lista_dolna)
+        self._dopasuj_wysokosc_listy(self.lista_programu)
         for lista in self._listy_paska:
             lista.currentItemChanged.connect(lambda e, _p: e and self._przejdz(e.data(Qt.ItemDataRole.UserRole)))
         v.addWidget(self.lista_sekcji, 1)
@@ -4148,10 +4184,14 @@ class MainWindow(QMainWindow):
         separator = QFrame()
         separator.setObjectName("sidebarSeparator")
         separator.setFixedHeight(1)
-        ramka_separatora = QHBoxLayout()
+        # WHY: w osobnym widżecie, żeby dało się schować separator razem z marginesami
+        #      (gdy nie ma ani routera, ani Open WebUI - patrz _pokaz_sekcje_uslug)
+        self.ramka_separatora = QWidget()
+        self.ramka_separatora.setObjectName("sidebarSeparatorRow")
+        ramka_separatora = QHBoxLayout(self.ramka_separatora)
         ramka_separatora.setContentsMargins(20, 6, 20, 6)
         ramka_separatora.addWidget(separator)
-        v.addLayout(ramka_separatora)
+        v.addWidget(self.ramka_separatora)
         v.addWidget(self.lista_programu)
 
         link = QPushButton("github.com/cyryllo/Ollama-manager")
@@ -4304,9 +4344,35 @@ class MainWindow(QMainWindow):
         worker = RefreshWorker()
         self._uruchom_watek("stan", worker, worker.wynik, self._po_odswiezeniu)
 
+    @staticmethod
+    def _dopasuj_wysokosc_listy(lista):
+        # WHY: dolne listy paska mają dokładnie tyle wysokości, ile WIDOCZNE pozycje -
+        #      bez przewijania; pusta lista znika całkiem.
+        wiersze = [i for i in range(lista.count()) if not lista.isRowHidden(i)]
+        lista.setVisible(bool(wiersze))
+        lista.setFixedHeight(sum(lista.sizeHintForRow(i) for i in wiersze) + 2 * lista.frameWidth() + 4)
+
+    def _pokaz_sekcje_uslug(self, stan):
+        # WHAT: "Router LiteLLM" i "Open WebUI" w pasku bocznym tylko, gdy są zainstalowane.
+        # WHY:  prośba użytkownika - kto ich nie używa, ma krótsze menu. Instalacja
+        #       zostaje na panelu głównym (przycisk "Zainstaluj" w karcie usługi),
+        #       a po niej pozycja sama się pojawia przy kolejnym odświeżeniu (10 s).
+        ukryte = {"router": not stan.get("litellm"), "webui": not stan.get("webui")}
+        lista = self.lista_dolna
+        for i in range(lista.count()):
+            klucz = lista.item(i).data(Qt.ItemDataRole.UserRole)
+            lista.setRowHidden(i, ukryte.get(klucz, False))
+        self._dopasuj_wysokosc_listy(lista)
+        self.ramka_separatora.setVisible(lista.isVisible())
+        # WHY: "Edytuj trasy" prowadzi na ekran routera - bez routera nie ma dokąd
+        self.btn_edytuj_trasy.setVisible(not ukryte["router"])
+        if ukryte.get(self._strona):
+            self._przejdz("panel")  # WHY: usługę odinstalowano, gdy jej ekran był otwarty
+
     def _po_odswiezeniu(self, stan):
         # WHAT: stan usług tego komputera -> panel główny, ekran WebUI, Router, Ustawienia.
         self._stan = stan
+        self._pokaz_sekcje_uslug(stan)
         self._odswiez_zasobnik()
         self._odswiez_panel_uslug(stan)
         self._odswiez_webui(stan)
@@ -4430,11 +4496,11 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(0, 10, 0, 0)
         self.lbl_router_stopka = _etykieta("", "muted")
         h.addWidget(self.lbl_router_stopka, 1)
-        btn = QPushButton(_("Edytuj trasy"))
-        btn.setObjectName("link")
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(lambda: self._przejdz("router"))
-        h.addWidget(btn)
+        self.btn_edytuj_trasy = QPushButton(_("Edytuj trasy"))
+        self.btn_edytuj_trasy.setObjectName("link")
+        self.btn_edytuj_trasy.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_edytuj_trasy.clicked.connect(lambda: self._przejdz("router"))
+        h.addWidget(self.btn_edytuj_trasy)
         uk.addWidget(stopka)
         self._odswiez_panel_routera()
         return karta
@@ -6785,6 +6851,13 @@ class MainWindow(QMainWindow):
         uwaga.setWordWrap(True)
         uwaga.setContentsMargins(0, 10, 0, 0)
         uk.addWidget(uwaga)
+        self.lbl_uwaga_wersji = uwaga
+        # WHY: gdy żadnej usługi nie ma, wiersze wersji są schowane - karta nie może być pusta
+        self.lbl_brak_uslug = _etykieta(_("Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je "
+                                          "przyciskami \"Zainstaluj\" na panelu głównym."), "muted")
+        self.lbl_brak_uslug.setWordWrap(True)
+        self.lbl_brak_uslug.setContentsMargins(0, 10, 0, 0)
+        uk.addWidget(self.lbl_brak_uslug)
         uk.addStretch(1)
         rzad.addWidget(karta, 1)
         v.addLayout(rzad)
@@ -6942,6 +7015,17 @@ class MainWindow(QMainWindow):
         self.sw_webui_autostart.setEnabled(stan["webui"])
         self.sw_webui_autostart.ustaw_cicho(stan["webui_autostart"])
         self.btn_sprawdz_aktualizacje_webui.setEnabled(stan["webui"] and not self._w_toku("aktualizacja_webui"))
+        # WHAT: wiersze autostartu i wersji usługi, której nie ma, znikają (jak jej pozycja
+        #       w pasku bocznym - _pokaz_sekcje_uslug); po instalacji same wracają.
+        for widget, zainstalowana in ((self.sw_ollama_autostart, stan["zainstalowana"]),
+                                      (self.btn_aktualizacje_ollamy, stan["zainstalowana"]),
+                                      (self.sw_litellm_autostart, stan["litellm"]),
+                                      (self.btn_aktualizacje_litellm, stan["litellm"]),
+                                      (self.sw_webui_autostart, stan["webui"]),
+                                      (self.btn_sprawdz_aktualizacje_webui, stan["webui"])):
+            widget.parentWidget().setVisible(zainstalowana)  # WHY: rodzic = cały wiersz (settingRow)
+        self.lbl_uwaga_wersji.setVisible(stan["zainstalowana"])
+        self.lbl_brak_uslug.setVisible(not (stan["zainstalowana"] or stan["litellm"] or stan["webui"]))
         for widget in self._pola_zmiennych + [self.pole_wlasne_zmienne, self.btn_zalecane_zaawansowane,
                                               self.btn_zapisz_zaawansowane]:
             widget.setEnabled(stan["zainstalowana"])

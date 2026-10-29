@@ -460,5 +460,7 @@
   "Gotowe": "Fertig",
   "Błąd": "Fehler",
   "Pobieranie zakończone": "Download abgeschlossen",
-  "Pobieranie nie powiodło się": "Download fehlgeschlagen"
+  "Pobieranie nie powiodło się": "Download fehlgeschlagen",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "Noch ist kein Dienst installiert. Installiere sie mit den Schaltflächen \"Installieren\" in der Übersicht.",
+  "Nic nie jest zainstalowane": "Nichts ist installiert"
 }

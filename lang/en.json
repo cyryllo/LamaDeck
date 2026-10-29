@@ -460,5 +460,7 @@
   "Gotowe": "Done",
   "Błąd": "Error",
   "Pobieranie zakończone": "Download finished",
-  "Pobieranie nie powiodło się": "Download failed"
+  "Pobieranie nie powiodło się": "Download failed",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "No service is installed yet. Install them with the \"Install\" buttons on the dashboard.",
+  "Nic nie jest zainstalowane": "Nothing is installed"
 }

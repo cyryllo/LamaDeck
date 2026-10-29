@@ -460,5 +460,7 @@
   "Gotowe": "Listo",
   "Błąd": "Error",
   "Pobieranie zakończone": "Descarga completada",
-  "Pobieranie nie powiodło się": "La descarga ha fallado"
+  "Pobieranie nie powiodło się": "La descarga ha fallado",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "Todavía no hay ningún servicio instalado. Instálalos con los botones \"Instalar\" del panel principal.",
+  "Nic nie jest zainstalowane": "No hay nada instalado"
 }

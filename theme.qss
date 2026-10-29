@@ -547,6 +547,8 @@ QPushButton#iconButton:hover { background: #2a2f36; }
 
 /* --- Separator w pasku bocznym (usługi | ustawienia i dziennik) --- */
 QFrame#sidebarPanel QFrame#sidebarSeparator { background: #30363d; border: none; }
+/* ramka z marginesami wokół separatora - tło paska, nie okna */
+QFrame#sidebarPanel QWidget#sidebarSeparatorRow { background: transparent; }
 
 /* --- Pola wyboru w komórkach tabel (np. "Modele w routerze") ---
  * DLACZEGO: jak QCheckBox wyżej - systemowy jasny wskaźnik ginie na ciemnym tle */

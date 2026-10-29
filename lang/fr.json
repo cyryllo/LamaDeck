@@ -460,5 +460,7 @@
   "Gotowe": "Terminé",
   "Błąd": "Erreur",
   "Pobieranie zakończone": "Téléchargement terminé",
-  "Pobieranie nie powiodło się": "Échec du téléchargement"
+  "Pobieranie nie powiodło się": "Échec du téléchargement",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "Aucun service n'est encore installé. Installez-les avec les boutons « Installer » du tableau de bord.",
+  "Nic nie jest zainstalowane": "Rien n'est installé"
 }

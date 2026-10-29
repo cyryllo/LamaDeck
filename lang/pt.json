@@ -460,5 +460,7 @@
   "Gotowe": "Concluído",
   "Błąd": "Erro",
   "Pobieranie zakończone": "Transferência concluída",
-  "Pobieranie nie powiodło się": "A transferência falhou"
+  "Pobieranie nie powiodło się": "A transferência falhou",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "Ainda não há nenhum serviço instalado. Instale-os com os botões \"Instalar\" no painel principal.",
+  "Nic nie jest zainstalowane": "Nada está instalado"
 }

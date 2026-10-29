@@ -460,5 +460,7 @@
   "Gotowe": "Fatto",
   "Błąd": "Errore",
   "Pobieranie zakończone": "Download completato",
-  "Pobieranie nie powiodło się": "Download non riuscito"
+  "Pobieranie nie powiodło się": "Download non riuscito",
+  "Żadna usługa nie jest jeszcze zainstalowana. Zainstalujesz je przyciskami \"Zainstaluj\" na panelu głównym.": "Nessun servizio è ancora installato. Installali con i pulsanti \"Installa\" nella dashboard.",
+  "Nic nie jest zainstalowane": "Nulla è installato"
 }
