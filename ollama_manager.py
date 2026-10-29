@@ -23,6 +23,10 @@ import os
 import re
 import secrets
 import base64
+import heapq
+import math
+import operator
+from array import array
 import shlex
 import socket
 import sqlite3
@@ -88,13 +92,15 @@ LITELLM_URL = "http://localhost:4000"
 # WHAT: profil startowy dla przycisku "Zastosuj zalecane wartości" w zakładce
 #       Zaawansowane - wypełnia formularz, NIC nie zapisuje samo z siebie.
 # WHY:  dobrane pod BC-250 (Vulkan+iGPU włączone, kontekst 16k, keep_alive 30m,
-#       jeden model/zapytanie naraz, q8_0 dla mniejszego zużycia VRAM) - to
+#       dwa modele w pamięci - czat + model embeddingów do wyszukiwania w dużych
+#       plikach na ekranie Czat (przy jednym każde pytanie wymieniało model czatu
+#       i wczytywało go od nowa); jedno zapytanie naraz, q8_0 dla mniejszego zużycia VRAM) - to
 #       tylko punkt startu do przejrzenia i ewentualnej korekty przed "Zapisz",
 #       appka nigdy nie wstrzykuje tych wartości automatycznie/po cichu.
 OLLAMA_ZALECANE = {
     "OLLAMA_KEEP_ALIVE": "30m",
     "OLLAMA_CONTEXT_LENGTH": "16384",
-    "OLLAMA_MAX_LOADED_MODELS": "1",
+    "OLLAMA_MAX_LOADED_MODELS": "2",
     "OLLAMA_NUM_PARALLEL": "1",
     "OLLAMA_FLASH_ATTENTION": "1",
     "OLLAMA_KV_CACHE_TYPE": "q8_0",
@@ -2419,13 +2425,15 @@ class CzatWorker(WatekTla):
     """
     fragment = pyqtSignal(str, str)        # (kawałek odpowiedzi, kawałek rozumowania)
     ladowanie = pyqtSignal()               # model nie jest w pamięci - pierwsze słowo chwilę potrwa
+    zrodla = pyqtSignal(object)            # [(plik, [(linia_od, linia_do), ...])] - fragmenty z dużych plików
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
-    def __init__(self, adres, model, wiadomosci):
+    def __init__(self, adres, model, wiadomosci, dokumenty=None):
         super().__init__()
         self.adres = adres
         self.model = model
         self.wiadomosci = wiadomosci
+        self.dokumenty = dokumenty or []
         self._anuluj = False
         self._odpowiedz = None
 
@@ -2450,11 +2458,34 @@ class CzatWorker(WatekTla):
         except (requests.RequestException, ValueError):
             return None
 
+    def _dolacz_fragmenty(self):
+        # WHAT: do OSTATNIEGO pytania dokleja fragmenty dużych plików pasujące do niego.
+        # WHY:  tylko do bieżącego pytania - starsze pytania zostają bez fragmentów,
+        #       żeby historia nie zjadała okna kontekstu.
+        pytanie = self.wiadomosci[-1]["content"] or " "
+        wektory_pytania = {}
+        czesci, zrodla = [], []
+        for d in self.dokumenty:
+            klucz = (d["adres_emb"], d["model_emb"])
+            if klucz not in wektory_pytania:
+                wektory_pytania[klucz] = ollama_embeddingi(d["adres_emb"], d["model_emb"], [pytanie], pytanie=True)[0]
+            numery = wyszukaj_fragmenty(d, wektory_pytania[klucz])
+            czesci.append(_("Fragmenty pliku {nazwa}, wyszukane jako pasujące do pytania. Odpowiedz na ich "
+                            "podstawie; jeśli nie wystarczą, powiedz to wprost.").format(nazwa=d["nazwa"]))
+            for i in numery:
+                tekst, od, do = d["fragmenty"][i]
+                czesci.append(f"[{_('linie')} {od}-{do}]\n```\n{tekst}\n```")
+            zrodla.append((d["nazwa"], [d["fragmenty"][i][1:] for i in numery]))
+        self.wiadomosci[-1] = dict(self.wiadomosci[-1], content="\n\n".join(czesci + [self.wiadomosci[-1]["content"]]))
+        self.zrodla.emit(zrodla)
+
     def run(self):
         statystyki = {}
-        if self._model_w_pamieci() is False:
-            self.ladowanie.emit()
         try:
+            if self.dokumenty:
+                self._dolacz_fragmenty()
+            if self._model_w_pamieci() is False:
+                self.ladowanie.emit()
             # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
             #      pierwszym słowem potrafi trwać ponad minutę.
             with requests.post(f"{self.adres}/api/chat", stream=True, timeout=(10, 600),
@@ -2487,6 +2518,38 @@ class CzatWorker(WatekTla):
                 self.zakonczono.emit(True, {"anulowano": True})
             else:
                 self.zakonczono.emit(False, str(e))
+
+
+class RagWorker(WatekTla):
+    """Przygotowuje duży plik do wyszukiwania: fragmenty + wektory z Ollamy (/api/embed)."""
+    postep = pyqtSignal(int, int)          # (gotowe fragmenty, wszystkie)
+    zakonczono = pyqtSignal(bool, object)  # (sukces, {"fragmenty", "wektory"} albo tekst błędu)
+
+    def __init__(self, adres, model, tekst):
+        super().__init__()
+        self.adres = adres
+        self.model = model
+        self.tekst = tekst
+        self._anuluj = False
+
+    def anuluj(self):
+        self._anuluj = True
+
+    def run(self):
+        try:
+            fragmenty = _podziel_na_fragmenty(self.tekst)
+            wektory = []
+            # WHY: po 16 naraz - pasek postępu żyje, a jedno zapytanie nie trwa minut
+            for i in range(0, len(fragmenty), 16):
+                if self._anuluj:
+                    return
+                wektory += ollama_embeddingi(self.adres, self.model, [f[0] for f in fragmenty[i:i + 16]])
+                self.postep.emit(len(wektory), len(fragmenty))
+            if len(wektory) != len(fragmenty):
+                raise RuntimeError(_("model embeddingów zwrócił złą liczbę wektorów"))
+            self.zakonczono.emit(True, {"fragmenty": fragmenty, "wektory": wektory})
+        except Exception as e:
+            self.zakonczono.emit(False, str(e))
 
 
 class ActionWorker(WatekTla):
@@ -3042,8 +3105,12 @@ def _wlasciwosc_koloru(nazwa, domyslny):
 _ROZSZERZENIA_OBRAZOW = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _ROZSZERZENIA_DOKUMENTOW = {".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx", ".ods", ".ppt", ".pptx",
                             ".odp", ".epub"}
-_MAKS_PLIK_TEKSTOWY = 1024 * 1024       # WHY: większy plik i tak nie zmieści się w kontekście modelu
-_DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: od tej wielkości ostrzegamy o oknie kontekstu
+_MAKS_PLIK_TEKSTOWY = 5 * 1024 * 1024   # WHY: większy plik to minuty liczenia embeddingów i setki MB w pamięci
+_DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: powyżej - tryb wyszukiwania (RAG), bo całość nie zmieści się
+                                        #      w oknie kontekstu modelu (64k tokenów to ok. 150-250 KB tekstu)
+_FRAGMENT_ZNAKOW = 900                  # WHY: modele embeddingów mają małe okno (nomic: 512 tokenów)
+_FRAGMENT_ZAKLADKA = 150                # WHY: zdanie przecięte na granicy fragmentów trafia do obu
+_FRAGMENTOW_NA_PYTANIE = 6
 _MAKS_BOK_OBRAZU = 2048                 # WHY: modele i tak zmniejszają obraz - nie wysyłamy zbędnych MB
 
 
@@ -3074,8 +3141,8 @@ def wczytaj_zalacznik(sciezka):
         raise ValueError(f"{sciezka.name}: " + _("PDF, dokumenty Word i arkusze najlepiej otworzyć w Open WebUI - umie je "
                            "czytać i przeszukiwać."))
     if sciezka.stat().st_size > _MAKS_PLIK_TEKSTOWY:
-        raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci "
-                           "rozmowy"))
+        raise ValueError(f"{sciezka.name}: " + _("plik jest za duży na czat (ponad 5 MB) - większe dokumenty "
+                                                 "obsłuży Open WebUI"))
     dane = sciezka.read_bytes()
     # WHY: plik tekstowy = UTF-8 bez bajtów zerowych; wszystko inne to plik binarny
     #      (program, archiwum...), którego model i tak by nie zrozumiał
@@ -3085,7 +3152,75 @@ def wczytaj_zalacznik(sciezka):
         tekst = dane.decode("utf-8")
     except UnicodeDecodeError:
         raise ValueError(f"{sciezka.name}: " + _("to nie jest zdjęcie ani plik tekstowy")) from None
-    return {"typ": "tekst", "nazwa": sciezka.name, "rozmiar": len(dane), "tekst": tekst}
+    # WHY: duży plik nie idzie w całości - "dokument" przechodzi w tryb wyszukiwania
+    typ = "dokument" if len(dane) > _DUZY_PLIK_TEKSTOWY else "tekst"
+    return {"typ": typ, "nazwa": sciezka.name, "rozmiar": len(dane), "tekst": tekst}
+
+
+# --- Wyszukiwanie w dużych plikach (RAG) - tylko Ollama, bez dodatkowych bibliotek ---
+# WHAT: plik cięty na fragmenty, każdy zamieniany na wektor przez model embeddingów
+#       w Ollamie (/api/embed); przy pytaniu - kilka fragmentów najbliższych pytaniu.
+# WHY:  bez bazy wektorów - rozmowa i tak nie jest zapisywana, a kilka tysięcy
+#       fragmentów przeszukuje się w czystym Pythonie w ułamku sekundy.
+def _podziel_na_fragmenty(tekst):
+    # WHAT: [(tekst, linia_od, linia_do)] po ok. _FRAGMENT_ZNAKOW znaków, z zakładką.
+    # WHY:  numery linii - pod odpowiedzią widać, z której części pliku są fragmenty.
+    kawalki = []  # (numer linii, tekst) - bardzo długie linie pocięte
+    for nr, linia in enumerate(tekst.splitlines(), 1):
+        while len(linia) > _FRAGMENT_ZNAKOW:
+            kawalki.append((nr, linia[:_FRAGMENT_ZNAKOW]))
+            linia = linia[_FRAGMENT_ZNAKOW:]
+        kawalki.append((nr, linia))
+    fragmenty, biezace, dlugosc = [], [], 0
+    for kawalek in kawalki:
+        biezace.append(kawalek)
+        dlugosc += len(kawalek[1]) + 1
+        if dlugosc >= _FRAGMENT_ZNAKOW:
+            fragmenty.append(biezace)
+            zakladka, ile = [], 0
+            for k in reversed(biezace):
+                if ile + len(k[1]) > _FRAGMENT_ZAKLADKA:
+                    break
+                zakladka.insert(0, k)
+                ile += len(k[1]) + 1
+            biezace, dlugosc = zakladka, ile
+    if biezace and (not fragmenty or biezace[-1] != fragmenty[-1][-1]):
+        fragmenty.append(biezace)
+    wynik = []
+    for f in fragmenty:
+        tresc = "\n".join(k[1] for k in f)
+        if tresc.strip():
+            wynik.append((tresc, f[0][0], f[-1][0]))
+    return wynik
+
+
+def ollama_embeddingi(adres, model, teksty, pytanie=False):
+    # WHAT: wektory (znormalizowane, array('f')) dla listy tekstów z /api/embed.
+    # WHY:  rodzina nomic wymaga przedrostków zadania (z karty modelu) - bez nich
+    #       wyszukiwanie wyraźnie słabnie; inne modele dostają tekst bez zmian.
+    if "nomic" in model.lower():
+        przedrostek = "search_query: " if pytanie else "search_document: "
+        teksty = [przedrostek + t for t in teksty]
+    odp = requests.post(f"{adres}/api/embed", json={"model": model, "input": teksty}, timeout=(10, 300))
+    if odp.status_code != 200:
+        try:
+            blad = odp.json().get("error") or odp.text
+        except ValueError:
+            blad = odp.text
+        raise RuntimeError(f"{model}: {blad}")
+    wektory = []
+    for w in odp.json().get("embeddings", []):
+        dlugosc = math.sqrt(sum(x * x for x in w)) or 1.0
+        wektory.append(array("f", (x / dlugosc for x in w)))
+    return wektory
+
+
+def wyszukaj_fragmenty(dokument, wektor_pytania, ile=_FRAGMENTOW_NA_PYTANIE):
+    # WHAT: numery fragmentów najbliższych pytaniu (iloczyn skalarny znormalizowanych
+    #       wektorów = podobieństwo kosinusowe), posortowane wg położenia w pliku.
+    wyniki = heapq.nlargest(ile, range(len(dokument["wektory"])),
+                            key=lambda i: sum(map(operator.mul, dokument["wektory"][i], wektor_pytania)))
+    return sorted(wyniki)
 
 
 def _tresc_dla_modelu(wiadomosc):
@@ -3240,9 +3375,16 @@ class WidokCzatu(QTextBrowser):
             c.insertText(myslenie + "\n\n", self._znaki(self.kolorWyciszony, kursywa=True))
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
+            # WHAT: pod odpowiedzią - z których linii dużych plików wzięto fragmenty
+            for nazwa, zakresy in w.get("zrodla") or []:
+                linie = ", ".join(f"{od}-{do}" if od != do else str(od) for od, do in zakresy)
+                c.insertText("\n" + _("Na podstawie fragmentów: {nazwa}, linie {linie}").format(nazwa=nazwa, linie=linie),
+                             self._znaki(self.kolorWyciszony, kursywa=True))
         elif w.get("trwa"):
             if myslenie:
                 tekst = _("model myśli...")
+            elif w.get("szuka"):
+                tekst = _("Szukam pasujących fragmentów w pliku...")
             elif w.get("laduje"):
                 tekst = _("Wczytuję model do pamięci ({gb:.1f} GB) - przy pierwszym pytaniu to chwilę "
                           "trwa, potem odpowiedzi idą od razu...").format(gb=w.get("gb", 0))
@@ -3274,8 +3416,10 @@ class WidokCzatu(QTextBrowser):
                 f.setHeight(wys * skala)
                 c.insertImage(f)
             else:
-                c.insertText(_("Plik: {nazwa} ({kb} KB)").format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024)),
-                             self._znaki(self.kolorWyciszony))
+                tekst = _("Plik: {nazwa} ({kb} KB)").format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024))
+                if z["typ"] == "dokument":
+                    tekst += " - " + _("wyszukiwanie fragmentów")
+                c.insertText(tekst, self._znaki(self.kolorWyciszony))
 
     def _styl_kodu(self, ramka):
         # WHAT: bloki kodu - tło i JetBrains Mono, zawijane, z linkiem "Kopiuj kod" nad
@@ -4428,6 +4572,7 @@ class MainWindow(QMainWindow):
         self._czat = []                 # WHY: bieżąca rozmowa (ekran "Czat") - przeżywa zmianę języka
         self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
         self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
+        self._etykiety_zalacznikow = {}  # WHY: id(załącznika) -> etykieta chipa (postęp przygotowania)
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
         self._tylko_moe = False         # WHY: pole "Tylko modele MoE" w wyszukiwarce; przeżywa przebudowę UI
@@ -6898,15 +7043,86 @@ class MainWindow(QMainWindow):
         except (ValueError, OSError) as e:
             self._uwaga_czatu(str(e), "warn")
             return
-        self._zalaczniki.append(z)
         self._uwaga_czatu("")
-        if z["typ"] == "tekst" and z["rozmiar"] > _DUZY_PLIK_TEKSTOWY:
-            self._uwaga_czatu(_("{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy "
-                                "(okno kontekstu, ustawiasz je w Ustawieniach).").format(nazwa=z["nazwa"]), "warn")
+        if z["typ"] == "dokument" and not self._przygotuj_dokument(z):
+            return
+        self._zalaczniki.append(z)
         self._pokaz_zalaczniki()
         self._odswiez_modele_czatu()  # WHY: ze zdjęciem lista pokazuje też modele OCR
 
+    def _model_embeddingow(self):
+        # WHAT: (model, adres) do embeddingów - najlepiej na hoście wybranego modelu czatu.
+        # WHY:  Ollama liczy wektory tylko modelem typu "embedding" (np. nomic-embed-text);
+        #       ten sam model musi potem liczyć wektor pytania, więc go zapamiętujemy.
+        _model, host = self._wybrany_model_czatu()
+        kandydaci = [(m["nazwa"], h["adres"]) for m in self._modele
+                     if "embedding" in m.get("mozliwosci", []) or m["rodzaj"] == "embedding" for h in m["hosty"]]
+        for nazwa, adres in kandydaci:
+            if host and adres == host["adres"]:
+                return nazwa, adres
+        return kandydaci[0] if kandydaci else None
+
+    def _przygotuj_dokument(self, z):
+        # WHAT: duży plik -> RagWorker (fragmenty + wektory) w tle; postęp na chipie.
+        wybor = self._model_embeddingow()
+        if not wybor:
+            self._uwaga_czatu(_("{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model "
+                                "embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny "
+                                "host).").format(nazwa=z["nazwa"]), "warn")
+            return False
+        z["model_emb"], z["adres_emb"] = wybor
+        z["gotowy"], z["procent"] = False, 0
+        worker = RagWorker(z["adres_emb"], z["model_emb"], z.pop("tekst"))
+        z["_watek"] = worker
+        worker.postep.connect(lambda gotowe, wszystkie, zz=z: self._postep_dokumentu(zz, gotowe, wszystkie))
+        worker.zakonczono.connect(lambda ok, wynik, zz=z: self._dokument_gotowy(zz, ok, wynik))
+        worker.start()
+        return True
+
+    def _postep_dokumentu(self, z, gotowe, wszystkie):
+        z["procent"] = int(100 * gotowe / max(1, wszystkie))
+        etykieta = self._etykiety_zalacznikow.get(id(z))
+        if etykieta is not None:
+            # WHY: miejsce na najdłuższy wariant ("100%"), mierzone czcionką już ze stylu -
+            #      inaczej rosnący procent był ucinany
+            etykieta.setMinimumWidth(etykieta.fontMetrics().horizontalAdvance(
+                self._opis_zalacznika(dict(z, procent=100))) + 6)
+            etykieta.setText(self._opis_zalacznika(z))
+
+    def _dokument_gotowy(self, z, ok, wynik):
+        z.pop("_watek", None)
+        if z not in self._zalaczniki:
+            return  # WHY: usunięty w trakcie przygotowania
+        if not ok:
+            self._zalaczniki.remove(z)
+            self._uwaga_czatu(_("{nazwa}: nie udało się przygotować do wyszukiwania - {blad}").format(
+                nazwa=z["nazwa"], blad=wynik), "warn")
+        else:
+            z.update(wynik, gotowy=True)
+            self._uwaga_czatu("")
+            # WHY: przy jednym modelu w pamięci (OLLAMA_MAX_LOADED_MODELS=1) każde pytanie
+            #      wyrzuca model czatu na rzecz modelu embeddingów - i wczytuje go od nowa
+            env = (self._stan or {}).get("env_ollama", {})
+            if (urlparse(z["adres_emb"]).hostname in ("localhost", "127.0.0.1")
+                    and env.get("OLLAMA_MAX_LOADED_MODELS") == "1"):
+                self._uwaga_czatu(_("Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), "
+                                    "więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i "
+                                    "wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci."), "warn")
+        self._pokaz_zalaczniki()
+
+    def _opis_zalacznika(self, z):
+        if z["typ"] == "obraz":
+            opis = _("zdjęcie")
+        else:
+            opis = f"{max(1, z['rozmiar'] // 1024)} KB"
+        if z["typ"] == "dokument":
+            opis += "  ·  " + (_("wyszukiwanie fragmentów") if z.get("gotowy")
+                               else _("przygotowuję {n}%").format(n=z.get("procent", 0)))
+        return f"{z['nazwa']}  ·  {opis}"
+
     def _usun_zalacznik(self, z):
+        if z.get("_watek") is not None:
+            z["_watek"].anuluj()
         if z in self._zalaczniki:
             self._zalaczniki.remove(z)
         self._uwaga_czatu("")
@@ -6921,6 +7137,7 @@ class MainWindow(QMainWindow):
 
     def _pokaz_zalaczniki(self):
         # WHAT: "chipy" z nazwami załączników nad polem, każdy z krzyżykiem do usunięcia.
+        self._etykiety_zalacznikow = {}
         while self.rzad_zalacznikow.count():
             element = self.rzad_zalacznikow.takeAt(0)
             chip = element.widget()
@@ -6935,8 +7152,9 @@ class MainWindow(QMainWindow):
             h = QHBoxLayout(chip)
             h.setContentsMargins(10, 4, 4, 4)
             h.setSpacing(4)
-            opis = _("zdjęcie") if z["typ"] == "obraz" else f"{max(1, z['rozmiar'] // 1024)} KB"
-            h.addWidget(QLabel(f"{z['nazwa']}  ·  {opis}"))
+            etykieta = QLabel(self._opis_zalacznika(z))
+            self._etykiety_zalacznikow[id(z)] = etykieta
+            h.addWidget(etykieta)
             usun = QPushButton()
             usun.setObjectName("iconButton")
             usun.setIcon(ikona("zamknij", PALETA.wyciszony, rozmiar=14, grubosc=2))
@@ -7061,6 +7279,9 @@ class MainWindow(QMainWindow):
         model, host = self._wybrany_model_czatu()
         if not (tekst or self._zalaczniki) or not model:
             return
+        if any(z["typ"] == "dokument" and not z.get("gotowy") for z in self._zalaczniki):
+            self._uwaga_czatu(_("Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania."), "warn")
+            return
         if any(z["typ"] == "obraz" for z in self._zalaczniki) and not self._widzi_obrazy(model):
             self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" "
                                 "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
@@ -7089,11 +7310,19 @@ class MainWindow(QMainWindow):
                            "gb": model["rozmiar"] / 1024 ** 3})
         self.pole_czat.clear()
         self._pokaz_czat(do_dolu=True)
-        worker = CzatWorker(host["adres"], model["nazwa"], historia)
+        # WHY: duże pliki z CAŁEJ rozmowy - można dopytywać o dokument dołączony wcześniej
+        dokumenty = [{"nazwa": z["nazwa"], "fragmenty": z["fragmenty"], "wektory": z["wektory"],
+                      "model_emb": z["model_emb"], "adres_emb": z["adres_emb"]}
+                     for w in self._czat if w["rola"] == "user"
+                     for z in w.get("zalaczniki", []) if z["typ"] == "dokument" and z.get("gotowy")]
+        if dokumenty:
+            self._czat[-1]["szuka"] = True
+        worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty)
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
         worker.ladowanie.connect(self._czat_ladowanie)
+        worker.zrodla.connect(self._czat_zrodla)
         worker.zakonczono.connect(self._czat_koniec)
         # WHY: co sekundę odświeżamy licznik czekania, dopóki nie przyjdzie pierwsze słowo
         if not hasattr(self, "_czat_zegar"):
@@ -7103,6 +7332,12 @@ class MainWindow(QMainWindow):
         self._czat_zegar.start()
         worker.start()
         self._odswiez_przycisk_czatu()
+
+    def _czat_zrodla(self, zrodla):
+        if self.sender() is self._czat_worker and self._czat:
+            self._czat[-1]["szuka"] = False
+            self._czat[-1]["zrodla"] = zrodla
+            self._czat_odswiez_ostatnia()
 
     def _czat_ladowanie(self):
         if self.sender() is self._czat_worker and self._czat:

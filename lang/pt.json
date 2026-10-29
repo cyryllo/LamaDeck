@@ -507,11 +507,21 @@
   "Zdjęcia i pliki tekstowe (*)": "Imagens e ficheiros de texto (*)",
   "nie udało się odczytać obrazu": "não foi possível ler a imagem",
   "nie widzi zdjęć": "não vê imagens",
-  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "o ficheiro é demasiado grande para o chat (mais de 1 MB) - o modelo não o conseguiria guardar na memória da conversa",
   "to nie jest zdjęcie ani plik tekstowy": "não é uma imagem nem um ficheiro de texto",
   "widzi zdjęcia": "vê imagens",
   "zdjęcie": "imagem",
   "zrzut ekranu.jpg": "captura.jpg",
   "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} não vê imagens. Escolha um modelo cuja descrição diga \"vê imagens\" (ex. gemma3, qwen2.5vl, llava).",
-  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} é grande - o modelo pode não conseguir guardá-lo todo na memória da conversa (janela de contexto, define-se nas Definições)."
+  "Fragmenty pliku {nazwa}, wyszukane jako pasujące do pytania. Odpowiedz na ich podstawie; jeśli nie wystarczą, powiedz to wprost.": "Excertos do ficheiro {nazwa}, encontrados como relevantes para a pergunta. Responde com base neles; se não chegarem, di-o claramente.",
+  "Na podstawie fragmentów: {nazwa}, linie {linie}": "Com base em excertos: {nazwa}, linhas {linie}",
+  "Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania.": "Aguarde um momento - o ficheiro grande ainda está a ser preparado para a pesquisa.",
+  "Szukam pasujących fragmentów w pliku...": "A procurar excertos relevantes no ficheiro...",
+  "Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci.": "Dica: o Ollama mantém apenas 1 modelo em memória (OLLAMA_MAX_LOADED_MODELS=1), por isso a cada pergunta o modelo de chat dará lugar ao de embeddings e voltará a carregar. Defina 2 nas \"Definições\" se houver memória suficiente.",
+  "linie": "linhas",
+  "model embeddingów zwrócił złą liczbę wektorów": "o modelo de embeddings devolveu um número errado de vetores",
+  "plik jest za duży na czat (ponad 5 MB) - większe dokumenty obsłuży Open WebUI": "o ficheiro é demasiado grande para o chat (mais de 5 MB) - documentos maiores ficam para o Open WebUI",
+  "przygotowuję {n}%": "a preparar {n}%",
+  "wyszukiwanie fragmentów": "pesquisa de excertos",
+  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny host).": "{nazwa} é grande (mais de 100 KB) - para pesquisar nele é preciso um modelo de embeddings, ex. nomic-embed-text. Transfira-o no ecrã \"Modelos\" (para qualquer host).",
+  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa}: não foi possível preparar para a pesquisa - {blad}"
 }

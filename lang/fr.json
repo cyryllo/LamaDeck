@@ -507,11 +507,21 @@
   "Zdjęcia i pliki tekstowe (*)": "Images et fichiers texte (*)",
   "nie udało się odczytać obrazu": "impossible de lire l'image",
   "nie widzi zdjęć": "ne voit pas les images",
-  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "le fichier est trop gros pour le chat (plus de 1 Mo) - le modèle ne pourrait pas le garder en mémoire de conversation",
   "to nie jest zdjęcie ani plik tekstowy": "ce n'est ni une image ni un fichier texte",
   "widzi zdjęcia": "voit les images",
   "zdjęcie": "image",
   "zrzut ekranu.jpg": "capture.jpg",
   "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} ne voit pas les images. Choisissez un modèle dont la description indique « voit les images » (p. ex. gemma3, qwen2.5vl, llava).",
-  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} est gros - le modèle risque de ne pas tout garder en mémoire de conversation (fenêtre de contexte, réglable dans Paramètres)."
+  "Fragmenty pliku {nazwa}, wyszukane jako pasujące do pytania. Odpowiedz na ich podstawie; jeśli nie wystarczą, powiedz to wprost.": "Extraits du fichier {nazwa}, trouvés comme correspondant à la question. Réponds en t'appuyant sur eux ; s'ils ne suffisent pas, dis-le franchement.",
+  "Na podstawie fragmentów: {nazwa}, linie {linie}": "D'après les extraits : {nazwa}, lignes {linie}",
+  "Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania.": "Patientez - le gros fichier est encore en préparation pour la recherche.",
+  "Szukam pasujących fragmentów w pliku...": "Recherche d'extraits correspondants dans le fichier...",
+  "Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci.": "Astuce : Ollama ne garde qu'un modèle en mémoire (OLLAMA_MAX_LOADED_MODELS=1), donc à chaque question le modèle de chat cède la place au modèle d'embeddings et se recharge. Mettez 2 dans « Paramètres » si la mémoire suffit.",
+  "linie": "lignes",
+  "model embeddingów zwrócił złą liczbę wektorów": "le modèle d'embeddings a renvoyé un mauvais nombre de vecteurs",
+  "plik jest za duży na czat (ponad 5 MB) - większe dokumenty obsłuży Open WebUI": "le fichier est trop gros pour le chat (plus de 5 Mo) - Open WebUI gère les documents plus volumineux",
+  "przygotowuję {n}%": "préparation {n}%",
+  "wyszukiwanie fragmentów": "recherche d'extraits",
+  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny host).": "{nazwa} est volumineux (plus de 100 Ko) - pour y chercher, il faut un modèle d'embeddings, p. ex. nomic-embed-text. Téléchargez-le dans l'écran « Modèles » (sur n'importe quel hôte).",
+  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa} : impossible de préparer pour la recherche - {blad}"
 }

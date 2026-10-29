@@ -507,11 +507,21 @@
   "Zdjęcia i pliki tekstowe (*)": "Immagini e file di testo (*)",
   "nie udało się odczytać obrazu": "impossibile leggere l'immagine",
   "nie widzi zdjęć": "non vede le immagini",
-  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "il file è troppo grande per la chat (oltre 1 MB): il modello non riuscirebbe a tenerlo nella memoria della conversazione",
   "to nie jest zdjęcie ani plik tekstowy": "non è né un'immagine né un file di testo",
   "widzi zdjęcia": "vede le immagini",
   "zdjęcie": "immagine",
   "zrzut ekranu.jpg": "screenshot.jpg",
   "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} non vede le immagini. Scegli un modello la cui descrizione dice \"vede le immagini\" (es. gemma3, qwen2.5vl, llava).",
-  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} è grande: il modello potrebbe non riuscire a tenerlo tutto nella memoria della conversazione (finestra di contesto, si imposta in Impostazioni)."
+  "Fragmenty pliku {nazwa}, wyszukane jako pasujące do pytania. Odpowiedz na ich podstawie; jeśli nie wystarczą, powiedz to wprost.": "Estratti del file {nazwa}, trovati come pertinenti alla domanda. Rispondi basandoti su di essi; se non bastano, dillo chiaramente.",
+  "Na podstawie fragmentów: {nazwa}, linie {linie}": "In base agli estratti: {nazwa}, righe {linie}",
+  "Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania.": "Aspetta un attimo: il file grande è ancora in preparazione per la ricerca.",
+  "Szukam pasujących fragmentów w pliku...": "Cerco estratti pertinenti nel file...",
+  "Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci.": "Suggerimento: Ollama tiene in memoria solo 1 modello (OLLAMA_MAX_LOADED_MODELS=1), quindi a ogni domanda il modello di chat lascerà il posto a quello di embedding e verrà ricaricato. Imposta 2 in \"Impostazioni\" se la memoria basta.",
+  "linie": "righe",
+  "model embeddingów zwrócił złą liczbę wektorów": "il modello di embedding ha restituito un numero errato di vettori",
+  "plik jest za duży na czat (ponad 5 MB) - większe dokumenty obsłuży Open WebUI": "il file è troppo grande per la chat (oltre 5 MB): i documenti più grandi li gestisce Open WebUI",
+  "przygotowuję {n}%": "preparazione {n}%",
+  "wyszukiwanie fragmentów": "ricerca di estratti",
+  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny host).": "{nazwa} è grande (oltre 100 KB): per cercarvi serve un modello di embedding, ad es. nomic-embed-text. Scaricalo nella schermata \"Modelli\" (su qualsiasi host).",
+  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa}: impossibile preparare per la ricerca - {blad}"
 }

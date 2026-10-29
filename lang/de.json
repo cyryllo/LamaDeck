@@ -507,11 +507,21 @@
   "Zdjęcia i pliki tekstowe (*)": "Bilder und Textdateien (*)",
   "nie udało się odczytać obrazu": "Bild konnte nicht gelesen werden",
   "nie widzi zdjęć": "sieht keine Bilder",
-  "plik jest za duży na czat (ponad 1 MB) - model nie zmieściłby go w pamięci rozmowy": "die Datei ist zu groß für den Chat (über 1 MB) - das Modell bekäme sie nicht in den Gesprächsspeicher",
   "to nie jest zdjęcie ani plik tekstowy": "das ist weder ein Bild noch eine Textdatei",
   "widzi zdjęcia": "sieht Bilder",
   "zdjęcie": "Bild",
   "zrzut ekranu.jpg": "Bildschirmfoto.jpg",
   "{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} sieht keine Bilder. Wähle ein Modell, bei dem \"sieht Bilder\" steht (z. B. gemma3, qwen2.5vl, llava).",
-  "{nazwa} jest duży - model może nie zmieścić całości w pamięci rozmowy (okno kontekstu, ustawiasz je w Ustawieniach).": "{nazwa} ist groß - das Modell bekommt eventuell nicht alles in den Gesprächsspeicher (Kontextfenster, einstellbar in den Einstellungen)."
+  "Fragmenty pliku {nazwa}, wyszukane jako pasujące do pytania. Odpowiedz na ich podstawie; jeśli nie wystarczą, powiedz to wprost.": "Auszüge aus der Datei {nazwa}, als passend zur Frage gefunden. Antworte auf ihrer Grundlage; wenn sie nicht reichen, sag es offen.",
+  "Na podstawie fragmentów: {nazwa}, linie {linie}": "Auf Grundlage von Auszügen: {nazwa}, Zeilen {linie}",
+  "Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania.": "Einen Moment - die große Datei wird noch für die Suche vorbereitet.",
+  "Szukam pasujących fragmentów w pliku...": "Suche passende Auszüge in der Datei...",
+  "Wskazówka: Ollama trzyma w pamięci tylko 1 model (OLLAMA_MAX_LOADED_MODELS=1), więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci.": "Tipp: Ollama hält nur 1 Modell im Speicher (OLLAMA_MAX_LOADED_MODELS=1), daher macht das Chat-Modell bei jeder Frage dem Embedding-Modell Platz und wird neu geladen. Stelle in den \"Einstellungen\" 2 ein, wenn der Speicher reicht.",
+  "linie": "Zeilen",
+  "model embeddingów zwrócił złą liczbę wektorów": "das Embedding-Modell lieferte eine falsche Anzahl von Vektoren",
+  "plik jest za duży na czat (ponad 5 MB) - większe dokumenty obsłuży Open WebUI": "die Datei ist zu groß für den Chat (über 5 MB) - größere Dokumente verarbeitet Open WebUI",
+  "przygotowuję {n}%": "bereite vor {n}%",
+  "wyszukiwanie fragmentów": "Auszugssuche",
+  "{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model embeddingów, np. nomic-embed-text. Pobierz go na ekranie \"Modele\" (na dowolny host).": "{nazwa} ist groß (über 100 KB) - für die Suche darin wird ein Embedding-Modell gebraucht, z. B. nomic-embed-text. Lade es im Bildschirm \"Modelle\" herunter (auf einen beliebigen Host).",
+  "{nazwa}: nie udało się przygotować do wyszukiwania - {blad}": "{nazwa}: konnte nicht für die Suche vorbereitet werden - {blad}"
 }
