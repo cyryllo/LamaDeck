@@ -471,7 +471,6 @@
   "Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)": "Escreva uma mensagem... (Enter envia, Shift+Enter - nova linha)",
   "Nowa rozmowa": "Nova conversa",
   "Ostatnia odpowiedź": "Última resposta",
-  "Pokazuj rozumowanie modelu": "Mostrar o raciocínio do modelo",
   "Przetwarzanie pytania": "Processamento da pergunta",
   "Rozumowanie modelu": "Raciocínio do modelo",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "Chat rápido com um modelo diretamente do Ollama - sem Open WebUI nem navegador.",
@@ -483,7 +482,6 @@
   "błąd: {blad}": "erro: {blad}",
   "czekam na odpowiedź...": "à espera da resposta...",
   "model myśli...": "o modelo está a pensar...",
-  "modele, które \"myślą\" przed odpowiedzią (np. qwen3)": "modelos que \"pensam\" antes de responder (ex. qwen3)",
   "na hoście: {host}": "no host: {host}",
   "przerwano": "interrompido",
   "pytanie + historia / odpowiedź": "pergunta + histórico / resposta",
@@ -563,8 +561,10 @@
   "Strona: {nazwa} ({kb} KB)": "Página: {nazwa} ({kb} KB)",
   "Pobieram: {linki}...": "A transferir: {linki}...",
   "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Enviar\" enviará a pergunta sem esta página.",
-  "Kontekst rozmowy": "Contexto da conversa",
-  "{uzyte} / {okno} tokenów ({proc}%)": "{uzyte} / {okno} tokens ({proc}%)",
-  "Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "A janela de contexto está quase cheia - o modelo começa a esquecer o início da conversa. Comece uma conversa nova ou aumente OLLAMA_CONTEXT_LENGTH nas Definições.",
-  "Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Está a aproximar-se do limite da janela de contexto - em breve o modelo começará a esquecer o início da conversa. Comece uma conversa nova ou aumente OLLAMA_CONTEXT_LENGTH nas Definições."
+  "{uzyte} / {okno} ({proc}%)": "{uzyte} / {okno} ({proc}%)",
+  "Prawie pełne - model zapomina już początek rozmowy. Zacznij nową albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Quase cheio - o modelo já esquece o início. Comece uma conversa nova ou aumente OLLAMA_CONTEXT_LENGTH nas Definições.",
+  "Blisko limitu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Perto do limite - em breve o modelo esquecerá o início. Comece uma conversa nova ou aumente OLLAMA_CONTEXT_LENGTH nas Definições.",
+  "pokazuj, jak model \"myśli\" przed odpowiedzią (np. qwen3)": "mostrar como o modelo \"pensa\" antes de responder (ex. qwen3)",
+  "tokeny rozmowy / okno kontekstu, z jakim działa model": "tokens da conversa / janela de contexto com que o modelo funciona",
+  "{n} tok/s": "{n} tok/s"
 }

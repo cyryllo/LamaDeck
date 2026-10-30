@@ -471,7 +471,6 @@
   "Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)": "Type a message... (Enter sends, Shift+Enter - new line)",
   "Nowa rozmowa": "New conversation",
   "Ostatnia odpowiedź": "Last answer",
-  "Pokazuj rozumowanie modelu": "Show model reasoning",
   "Przetwarzanie pytania": "Prompt processing",
   "Rozumowanie modelu": "Model reasoning",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "A quick chat with a model straight from Ollama - no Open WebUI, no browser.",
@@ -483,7 +482,6 @@
   "błąd: {blad}": "error: {blad}",
   "czekam na odpowiedź...": "waiting for the answer...",
   "model myśli...": "the model is thinking...",
-  "modele, które \"myślą\" przed odpowiedzią (np. qwen3)": "models that \"think\" before answering (e.g. qwen3)",
   "na hoście: {host}": "on host: {host}",
   "przerwano": "stopped",
   "pytanie + historia / odpowiedź": "prompt + history / answer",
@@ -563,8 +561,10 @@
   "Strona: {nazwa} ({kb} KB)": "Page: {nazwa} ({kb} KB)",
   "Pobieram: {linki}...": "Downloading: {linki}...",
   "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Send\" will send the question without this page.",
-  "Kontekst rozmowy": "Conversation context",
-  "{uzyte} / {okno} tokenów ({proc}%)": "{uzyte} / {okno} tokens ({proc}%)",
-  "Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "The context window is almost full - the model is starting to forget the beginning of the conversation. Start a new conversation or increase OLLAMA_CONTEXT_LENGTH in Settings.",
-  "Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "You're approaching the context window limit - soon the model will start forgetting the beginning of the conversation. Start a new conversation or increase OLLAMA_CONTEXT_LENGTH in Settings."
+  "{uzyte} / {okno} ({proc}%)": "{uzyte} / {okno} ({proc}%)",
+  "Prawie pełne - model zapomina już początek rozmowy. Zacznij nową albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Almost full - the model is already forgetting the beginning. Start a new conversation or increase OLLAMA_CONTEXT_LENGTH in Settings.",
+  "Blisko limitu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Close to the limit - soon the model will start forgetting the beginning. Start a new conversation or increase OLLAMA_CONTEXT_LENGTH in Settings.",
+  "pokazuj, jak model \"myśli\" przed odpowiedzią (np. qwen3)": "show how the model \"thinks\" before answering (e.g. qwen3)",
+  "tokeny rozmowy / okno kontekstu, z jakim działa model": "conversation tokens / the context window the model runs with",
+  "{n} tok/s": "{n} tok/s"
 }

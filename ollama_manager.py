@@ -7426,7 +7426,7 @@ class MainWindow(QMainWindow):
         rzad.setSpacing(18)
         # --- zapisane rozmowy ---
         karta, uk = self._karta()
-        karta.setFixedWidth(280)
+        karta.setFixedWidth(340)  # WHY: szersza kosztem prawej karty - tytuły rozmów w 1-2 liniach
         uk.addWidget(_etykieta(_("Rozmowy"), "h2"))
         self.pole_szukaj_rozmow = QLineEdit()
         self.pole_szukaj_rozmow.setPlaceholderText(_("Szukaj w rozmowach..."))
@@ -7496,24 +7496,39 @@ class MainWindow(QMainWindow):
         rzad.addWidget(karta, 1)
 
         # --- model i statystyki ---
+        # WHY: zwarta i wąska (prośba użytkownika) - więcej miejsca dla rozmowy i listy rozmów;
+        #      opisy statystyk w dymkach po najechaniu, nie pod każdą liczbą
         karta, uk = self._karta()
-        karta.setFixedWidth(340)
-        uk.addWidget(_etykieta(_("Model"), "h2"))
+        karta.setFixedWidth(290)
+        uk.setSpacing(8)
+        uk.addWidget(_etykieta(_("Model"), "h3"))
         self.combo_czat_model = QComboBox()
         self.combo_czat_model.currentIndexChanged.connect(self._zmiana_modelu_czatu)
         uk.addWidget(self.combo_czat_model)
         self.lbl_czat_model = _etykieta("", "muted")
         self.lbl_czat_model.setWordWrap(True)
         uk.addWidget(self.lbl_czat_model)
-        self.sw_czat_rozumowanie = self._wiersz_przelacznika(
-            uk, _("Pokazuj rozumowanie modelu"), _("modele, które \"myślą\" przed odpowiedzią (np. qwen3)"),
-            self._przelacz_rozumowanie)
+        wiersz = QHBoxLayout()
+        lbl = QLabel(_("Rozumowanie modelu"))
+        opis = _("pokazuj, jak model \"myśli\" przed odpowiedzią (np. qwen3)")
+        lbl.setToolTip(opis)
+        wiersz.addWidget(lbl, 1)
+        self.sw_czat_rozumowanie = Przelacznik(_("Rozumowanie modelu"))
+        self.sw_czat_rozumowanie.setToolTip(opis)
+        self.sw_czat_rozumowanie.clicked.connect(self._przelacz_rozumowanie)
         self.sw_czat_rozumowanie.ustaw_cicho(self.widok_czatu.pokaz_myslenie)
+        wiersz.addWidget(self.sw_czat_rozumowanie)
+        uk.addLayout(wiersz)
 
-        # WHAT: ile okna kontekstu zajmuje rozmowa - pasek i podpowiedź przy zapełnieniu.
-        uk.addWidget(_etykieta(_("Kontekst rozmowy"), "h2"))
+        # WHAT: ile okna kontekstu zajmuje rozmowa - liczba w linii nagłówka, pasek i rada.
+        uk.addSpacing(8)
+        wiersz = QHBoxLayout()
+        wiersz.addWidget(_etykieta(_("Kontekst"), "h3"))
+        wiersz.addStretch(1)
         self.lbl_kontekst = _etykieta("—", "mono")
-        uk.addWidget(self.lbl_kontekst)
+        self.lbl_kontekst.setToolTip(_("tokeny rozmowy / okno kontekstu, z jakim działa model"))
+        wiersz.addWidget(self.lbl_kontekst)
+        uk.addLayout(wiersz)
         self.pasek_kontekstu = QProgressBar()
         self.pasek_kontekstu.setObjectName("meter")
         self.pasek_kontekstu.setTextVisible(False)
@@ -7522,35 +7537,31 @@ class MainWindow(QMainWindow):
         self.lbl_kontekst_rada = _etykieta("", "muted")
         self.lbl_kontekst_rada.setObjectName("contextHint")
         self.lbl_kontekst_rada.setWordWrap(True)
-        self.lbl_kontekst_rada.setContentsMargins(0, 0, 0, 6)
         self.lbl_kontekst_rada.hide()
         uk.addWidget(self.lbl_kontekst_rada)
 
-        uk.addWidget(_etykieta(_("Ostatnia odpowiedź"), "h2"))
+        uk.addSpacing(8)
+        uk.addWidget(_etykieta(_("Ostatnia odpowiedź"), "h3"))
+        siatka = QGridLayout()
+        siatka.setHorizontalSpacing(10)
+        siatka.setVerticalSpacing(6)
+        siatka.setColumnStretch(0, 1)
         self._lbl_stat_czatu = {}
-        for klucz, nazwa, opis in (
+        for nr, (klucz, nazwa, opis) in enumerate((
                 ("generowanie", _("Generowanie"), _("tokeny odpowiedzi na sekundę")),
                 ("prompt", _("Przetwarzanie pytania"), _("tokeny pytania i historii na sekundę")),
                 ("tokeny", _("Tokeny"), _("pytanie + historia / odpowiedź")),
                 ("ladowanie", _("Wczytanie modelu"), _("0 s, gdy model był już w pamięci")),
-                ("calosc", _("Czas całkowity"), "")):
-            wiersz = QFrame()
-            wiersz.setObjectName("settingRow")
-            h = QHBoxLayout(wiersz)
-            h.setContentsMargins(0, 8, 0, 8)
-            teksty = QVBoxLayout()
-            teksty.setSpacing(1)
-            teksty.addWidget(QLabel(nazwa))
-            if opis:
-                # WHY: zawijany - przy dłuższym tłumaczeniu wartość po prawej ucinała opis
-                lbl_opis = _etykieta(opis, "muted")
-                lbl_opis.setWordWrap(True)
-                teksty.addWidget(lbl_opis)
-            h.addLayout(teksty, 1)
+                ("calosc", _("Czas całkowity"), ""))):
+            lbl = _etykieta(nazwa, "muted")
+            lbl.setToolTip(opis)
+            lbl.setWordWrap(True)  # WHY: dłuższe tłumaczenia ("Verarbeitung der Frage") w dwóch liniach
+            siatka.addWidget(lbl, nr, 0)
             wartosc = _etykieta("—", "mono")
-            h.addWidget(wartosc)
+            wartosc.setToolTip(opis)
+            siatka.addWidget(wartosc, nr, 1, Qt.AlignmentFlag.AlignRight)
             self._lbl_stat_czatu[klucz] = wartosc
-            uk.addWidget(wiersz)
+        uk.addLayout(siatka)
         uk.addStretch(1)
         rzad.addWidget(karta)
         v.addLayout(rzad, 1)
@@ -8246,17 +8257,18 @@ class MainWindow(QMainWindow):
             self.pasek_kontekstu.setValue(0)
         else:
             udzial = uzyte / okno
-            self.lbl_kontekst.setText(_("{uzyte} / {okno} tokenów ({proc}%)").format(
+            # WHY: bez słowa "tokenów" - w wąskiej karcie liczba stoi w linii nagłówka (opis w dymku)
+            self.lbl_kontekst.setText(_("{uzyte} / {okno} ({proc}%)").format(
                 uzyte=liczba(uzyte), okno=liczba(okno), proc=min(100, round(100 * udzial))))
             self.pasek_kontekstu.setValue(min(1000, round(1000 * udzial)))
             if udzial >= 0.95:
                 stan = "error"
-                rada = _("Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. "
-                         "Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
+                rada = _("Prawie pełne - model zapomina już początek rozmowy. Zacznij nową albo zwiększ "
+                         "OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
             elif udzial >= 0.8:
                 stan = "warn"
-                rada = _("Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek "
-                         "rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
+                rada = _("Blisko limitu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową albo "
+                         "zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
         self.pasek_kontekstu.setProperty("state", stan)
         _odswiez_styl(self.pasek_kontekstu)
         self.lbl_kontekst_rada.setText(rada)
@@ -8275,8 +8287,12 @@ class MainWindow(QMainWindow):
         ladowanie = (d.get("load_duration") or 0) / 1e9
         calosc = (d.get("total_duration") or 0) / 1e9
         st = self._lbl_stat_czatu
-        st["generowanie"].setText(_("{n:.1f} tok/s").format(n=gen) if gen else "—")
-        st["prompt"].setText(_("{n:.1f} tok/s").format(n=prompt) if prompt else "—")
+        # WHY: od 100 tok/s bez części dziesiętnej - "18382.4" nie mieściło się w wąskiej karcie,
+        #      a przy takich liczbach ułamek i tak nic nie mówi
+        def tok_s(n):
+            return _("{n} tok/s").format(n=f"{n:.0f}" if n >= 100 else f"{n:.1f}") if n else "—"
+        st["generowanie"].setText(tok_s(gen))
+        st["prompt"].setText(tok_s(prompt))
         st["tokeny"].setText(f"{d.get('prompt_eval_count', 0)} / {d.get('eval_count', 0)}")
         st["ladowanie"].setText(f"{ladowanie:.1f} s")
         st["calosc"].setText(f"{calosc:.1f} s")
