@@ -16,7 +16,7 @@ wszystko działa lokalnie, w Twoim LAN.
 > dodatków do czatu (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same
 > poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
-![LamaDeck — panel główny](om_pl.png)
+![LamaDeck — panel główny](screenshots/lamadeck-dashboard_pl.png)
 
 ## Wymagania
 
@@ -122,7 +122,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 **Czat**
 
-![Czat ze statystykami szybkości](screenshots/chat_pl.png)
+![Czat ze statystykami szybkości](screenshots/lamadeck-chat_pl.png)
 
 - Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
   WebUI i bez routera
@@ -181,7 +181,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 **Zasobnik systemowy** (opcjonalny, domyślnie wyłączony — włączasz w Ustawieniach)
 
-<img src="screenshots/tray_pl.png" alt="Okienko zasobnika" width="300">
+<img src="screenshots/lamadeck-tray_pl.png" alt="Okienko zasobnika" width="300">
 
 - Ikona przy zegarze z małym panelem: zainstalowane usługi z przełącznikami, CPU / VRAM / RAM,
   modele w pamięci i przyciski otwierające wbudowany czat albo panel zarządzania (a obok mały

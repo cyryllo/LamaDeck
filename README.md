@@ -17,7 +17,7 @@ a built-in chat. No terminal, no Docker, no cloud — everything runs on your LA
 > [roadmap](#roadmap-to-10)), after which the project switches to bug fixes only.
 > [Bug reports and feedback](../../issues) are welcome.
 
-![LamaDeck — Dashboard](om.png)
+![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)
 
 ## Requirements
 
@@ -121,7 +121,7 @@ fonts are bundled, so it looks the same everywhere).
 
 **Chat**
 
-![Chat with speed statistics](screenshots/chat.png)
+![Chat with speed statistics](screenshots/lamadeck-chat.png)
 
 - A simple built-in chat with any model on any host, straight from Ollama — works without Open
   WebUI and without the router
@@ -181,7 +181,7 @@ fonts are bundled, so it looks the same everywhere).
 
 **System tray** (optional, off by default — turn it on in Settings)
 
-<img src="screenshots/tray.png" alt="Tray panel" width="300">
+<img src="screenshots/lamadeck-tray.png" alt="Tray panel" width="300">
 
 - A tray icon with a small panel: the installed services with on/off switches, CPU / VRAM / RAM,
   models in memory, and buttons to open the built-in chat or the control panel (plus a small
