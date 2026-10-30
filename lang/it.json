@@ -473,7 +473,6 @@
   "Ostatnia odpowiedź": "Ultima risposta",
   "Pokazuj rozumowanie modelu": "Mostra il ragionamento del modello",
   "Przetwarzanie pytania": "Elaborazione della domanda",
-  "Rozmowa nie jest zapisywana - znika po zamknięciu programu. Pełny czat z historią daje Open WebUI.": "La conversazione non viene salvata: scompare alla chiusura del programma. Open WebUI offre una chat completa con cronologia.",
   "Rozumowanie modelu": "Ragionamento del modello",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "Chat veloce con un modello direttamente da Ollama, senza Open WebUI e senza browser.",
   "Tokeny": "Token",
@@ -544,5 +543,17 @@
   "to skan bez warstwy tekstu - zrób zrzut strony i wklej go (Ctrl+V) do modelu, który widzi zdjęcia (np. glm-ocr)": "è una scansione senza livello di testo: fai uno screenshot della pagina e incollalo (Ctrl+V) per un modello che vede le immagini (es. glm-ocr)",
   "w pliku nie ma żadnego tekstu": "il file non contiene testo",
   "ok. {n} min": "circa {n} min",
-  "ok. {n} s": "circa {n} s"
+  "ok. {n} s": "circa {n} s",
+  "Rozmowy": "Conversazioni",
+  "Szukaj w rozmowach...": "Cerca nelle conversazioni...",
+  "Usuń rozmowę": "Elimina conversazione",
+  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Salvate automaticamente, solo su questo computer: {sciezka}",
+  "Rozmowa": "Conversazione",
+  "żeby dalej pytać o ten plik, dołącz go ponownie": "per continuare a fare domande su questo file, allegalo di nuovo",
+  "Nie udało się wczytać zapisanych rozmów: {blad}": "Impossibile caricare le conversazioni salvate: {blad}",
+  "Nie udało się zapisać rozmowy: {blad}": "Impossibile salvare la conversazione: {blad}",
+  "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Attendi la fine della risposta o fermala.",
+  "Nie udało się otworzyć rozmowy: {blad}": "Impossibile aprire la conversazione: {blad}",
+  "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Eliminare la conversazione \"{tytul}\"? Non si può annullare.",
+  "Nie udało się usunąć rozmowy: {blad}": "Impossibile eliminare la conversazione: {blad}"
 }

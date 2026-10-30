@@ -473,7 +473,6 @@
   "Ostatnia odpowiedź": "Last answer",
   "Pokazuj rozumowanie modelu": "Show model reasoning",
   "Przetwarzanie pytania": "Prompt processing",
-  "Rozmowa nie jest zapisywana - znika po zamknięciu programu. Pełny czat z historią daje Open WebUI.": "The conversation is not saved - it disappears when the program closes. Open WebUI offers a full chat with history.",
   "Rozumowanie modelu": "Model reasoning",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "A quick chat with a model straight from Ollama - no Open WebUI, no browser.",
   "Tokeny": "Tokens",
@@ -544,5 +543,17 @@
   "to skan bez warstwy tekstu - zrób zrzut strony i wklej go (Ctrl+V) do modelu, który widzi zdjęcia (np. glm-ocr)": "this is a scan without a text layer - take a screenshot of the page and paste it (Ctrl+V) for a model that can see pictures (e.g. glm-ocr)",
   "w pliku nie ma żadnego tekstu": "the file contains no text",
   "ok. {n} min": "about {n} min",
-  "ok. {n} s": "about {n} s"
+  "ok. {n} s": "about {n} s",
+  "Rozmowy": "Conversations",
+  "Szukaj w rozmowach...": "Search conversations...",
+  "Usuń rozmowę": "Delete conversation",
+  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Saved automatically, only on this computer: {sciezka}",
+  "Rozmowa": "Conversation",
+  "żeby dalej pytać o ten plik, dołącz go ponownie": "to keep asking about this file, attach it again",
+  "Nie udało się wczytać zapisanych rozmów: {blad}": "Could not load saved conversations: {blad}",
+  "Nie udało się zapisać rozmowy: {blad}": "Could not save the conversation: {blad}",
+  "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Wait for the answer to finish or stop it.",
+  "Nie udało się otworzyć rozmowy: {blad}": "Could not open the conversation: {blad}",
+  "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Delete the conversation \"{tytul}\"? This can't be undone.",
+  "Nie udało się usunąć rozmowy: {blad}": "Could not delete the conversation: {blad}"
 }

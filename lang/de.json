@@ -473,7 +473,6 @@
   "Ostatnia odpowiedź": "Letzte Antwort",
   "Pokazuj rozumowanie modelu": "Denkprozess des Modells anzeigen",
   "Przetwarzanie pytania": "Verarbeitung der Frage",
-  "Rozmowa nie jest zapisywana - znika po zamknięciu programu. Pełny czat z historią daje Open WebUI.": "Das Gespräch wird nicht gespeichert - es verschwindet beim Schließen des Programms. Einen vollständigen Chat mit Verlauf bietet Open WebUI.",
   "Rozumowanie modelu": "Denkprozess des Modells",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "Schneller Chat mit einem Modell direkt aus Ollama - ohne Open WebUI und ohne Browser.",
   "Tokeny": "Tokens",
@@ -544,5 +543,17 @@
   "to skan bez warstwy tekstu - zrób zrzut strony i wklej go (Ctrl+V) do modelu, który widzi zdjęcia (np. glm-ocr)": "das ist ein Scan ohne Textebene - mach einen Screenshot der Seite und füge ihn (Strg+V) für ein Modell ein, das Bilder sieht (z. B. glm-ocr)",
   "w pliku nie ma żadnego tekstu": "die Datei enthält keinen Text",
   "ok. {n} min": "ca. {n} Min.",
-  "ok. {n} s": "ca. {n} s"
+  "ok. {n} s": "ca. {n} s",
+  "Rozmowy": "Gespräche",
+  "Szukaj w rozmowach...": "Gespräche durchsuchen...",
+  "Usuń rozmowę": "Gespräch löschen",
+  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Automatisch gespeichert, nur auf diesem Computer: {sciezka}",
+  "Rozmowa": "Gespräch",
+  "żeby dalej pytać o ten plik, dołącz go ponownie": "um weiter nach dieser Datei zu fragen, hänge sie erneut an",
+  "Nie udało się wczytać zapisanych rozmów: {blad}": "Gespeicherte Gespräche konnten nicht geladen werden: {blad}",
+  "Nie udało się zapisać rozmowy: {blad}": "Gespräch konnte nicht gespeichert werden: {blad}",
+  "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Warte, bis die Antwort fertig ist, oder stoppe sie.",
+  "Nie udało się otworzyć rozmowy: {blad}": "Gespräch konnte nicht geöffnet werden: {blad}",
+  "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Gespräch \"{tytul}\" löschen? Das lässt sich nicht rückgängig machen.",
+  "Nie udało się usunąć rozmowy: {blad}": "Gespräch konnte nicht gelöscht werden: {blad}"
 }

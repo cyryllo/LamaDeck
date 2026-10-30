@@ -473,7 +473,6 @@
   "Ostatnia odpowiedź": "Última resposta",
   "Pokazuj rozumowanie modelu": "Mostrar o raciocínio do modelo",
   "Przetwarzanie pytania": "Processamento da pergunta",
-  "Rozmowa nie jest zapisywana - znika po zamknięciu programu. Pełny czat z historią daje Open WebUI.": "A conversa não é guardada - desaparece ao fechar o programa. O Open WebUI oferece um chat completo com histórico.",
   "Rozumowanie modelu": "Raciocínio do modelo",
   "Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.": "Chat rápido com um modelo diretamente do Ollama - sem Open WebUI nem navegador.",
   "Tokeny": "Tokens",
@@ -544,5 +543,17 @@
   "to skan bez warstwy tekstu - zrób zrzut strony i wklej go (Ctrl+V) do modelu, który widzi zdjęcia (np. glm-ocr)": "é uma digitalização sem camada de texto - faça uma captura da página e cole-a (Ctrl+V) para um modelo que veja imagens (ex. glm-ocr)",
   "w pliku nie ma żadnego tekstu": "o ficheiro não contém texto",
   "ok. {n} min": "cerca de {n} min",
-  "ok. {n} s": "cerca de {n} s"
+  "ok. {n} s": "cerca de {n} s",
+  "Rozmowy": "Conversas",
+  "Szukaj w rozmowach...": "Pesquisar nas conversas...",
+  "Usuń rozmowę": "Eliminar conversa",
+  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Guardadas automaticamente, só neste computador: {sciezka}",
+  "Rozmowa": "Conversa",
+  "żeby dalej pytać o ten plik, dołącz go ponownie": "para continuar a perguntar sobre este ficheiro, anexe-o de novo",
+  "Nie udało się wczytać zapisanych rozmów: {blad}": "Não foi possível carregar as conversas guardadas: {blad}",
+  "Nie udało się zapisać rozmowy: {blad}": "Não foi possível guardar a conversa: {blad}",
+  "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Aguarde o fim da resposta ou interrompa-a.",
+  "Nie udało się otworzyć rozmowy: {blad}": "Não foi possível abrir a conversa: {blad}",
+  "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Eliminar a conversa \"{tytul}\"? Não é possível anular.",
+  "Nie udało się usunąć rozmowy: {blad}": "Não foi possível eliminar a conversa: {blad}"
 }

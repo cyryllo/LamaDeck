@@ -3526,6 +3526,108 @@ def _tresc_dla_modelu(wiadomosc):
     return "\n\n".join(czesci)
 
 
+# --- Zapisane rozmowy czatu ---
+# WHAT: każda rozmowa to jeden plik JSON w ~/.local/share/OllamaManager/czaty/,
+#       zapisywany po każdej odpowiedzi.
+# WHY:  osobny katalog, NIE ~/.local/share/ollama-manager - tam instaluje się program,
+#       a "./install.sh --uninstall" kasuje go w całości (razem z rozmowami).
+#       Ollama sama niczego nie zapamiętuje - historię zawsze trzyma program.
+_WERSJA_PLIKU_ROZMOWY = 1
+# WHY: klucze potrzebne tylko w trakcie pracy okna - do pliku nie trafiają
+_KLUCZE_ROBOCZE_WIADOMOSCI = {"trwa", "start", "laduje", "szuka"}
+_KLUCZE_ROBOCZE_ZALACZNIKA = {"fragmenty", "wektory", "gotowy", "procent", "eta", "sciezka", "tekst_pelny"}
+
+
+def katalog_rozmow():
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "OllamaManager" / "czaty"
+
+
+def _tytul_rozmowy(wiadomosci):
+    # WHAT: tytuł z pierwszego pytania (pierwsza linia, do 70 znaków) albo nazwy pliku.
+    for w in wiadomosci:
+        if w["rola"] != "user":
+            continue
+        linia = next((l.strip() for l in w.get("tresc", "").splitlines() if l.strip()), "")
+        if linia:
+            return linia if len(linia) <= 70 else linia[:69].rstrip() + "…"
+        if w.get("zalaczniki"):
+            return w["zalaczniki"][0]["nazwa"]
+    return _("Rozmowa")
+
+
+def _wiadomosci_do_zapisu(wiadomosci):
+    # WHAT: kopia rozmowy bez stanu roboczego okna.
+    # WHY:  zdjęcia zostają (base64 po pomniejszeniu - 0,2-1,5 MB), żeby po otwarciu
+    #       model dalej je "widział"; wektory dużych plików NIE (przy 20 MB to ok. 75 MB
+    #       na rozmowę) - po otwarciu taki plik trzeba dołączyć ponownie.
+    wynik = []
+    for w in wiadomosci:
+        if w.get("trwa"):
+            continue  # WHY: odpowiedź jeszcze się pisze - zapisze się po jej końcu
+        kopia = {k: v for k, v in w.items() if not k.startswith("_") and k not in _KLUCZE_ROBOCZE_WIADOMOSCI}
+        if w.get("zalaczniki"):
+            kopia["zalaczniki"] = []
+            for z in w["zalaczniki"]:
+                zz = {k: v for k, v in z.items() if not k.startswith("_") and k not in _KLUCZE_ROBOCZE_ZALACZNIKA}
+                if z["typ"] == "dokument":
+                    zz.pop("tekst", None)
+                    zz["bez_wyszukiwania"] = True
+                kopia["zalaczniki"].append(zz)
+        wynik.append(kopia)
+    return wynik
+
+
+def _tekst_do_szukania(dane):
+    # WHAT: tytuł + treść wszystkich wiadomości, małymi literami - do wyszukiwarki rozmów.
+    czesci = [dane.get("tytul", "")]
+    for w in dane.get("wiadomosci", []):
+        czesci.append(w.get("tresc", ""))
+        czesci += [z.get("nazwa", "") for z in w.get("zalaczniki", [])]
+    return "\n".join(czesci).lower()
+
+
+def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host):
+    # WHAT: zapis rozmowy do pliku; zwraca wpis do listy rozmów (bez treści wiadomości).
+    # WHY:  najpierw plik tymczasowy, potem os.replace - przerwany zapis (np. brak
+    #       miejsca, zamknięcie programu) nie zostawi uszkodzonego pliku rozmowy.
+    katalog = katalog_rozmow()
+    katalog.mkdir(parents=True, exist_ok=True)
+    dane = {"wersja": _WERSJA_PLIKU_ROZMOWY, "tytul": _tytul_rozmowy(wiadomosci), "utworzono": utworzono,
+            "zmieniono": time.time(), "model": model, "host": host,
+            "wiadomosci": _wiadomosci_do_zapisu(wiadomosci)}
+    plik = katalog / f"{id_rozmowy}.json"
+    tymczasowy = plik.with_suffix(".tmp")
+    tymczasowy.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+    os.replace(tymczasowy, plik)
+    return _wpis_listy_rozmow(id_rozmowy, dane)
+
+
+def _wpis_listy_rozmow(id_rozmowy, dane):
+    return {"id": id_rozmowy, "tytul": dane.get("tytul", ""), "zmieniono": dane.get("zmieniono", 0),
+            "model": dane.get("model", ""), "szukaj": _tekst_do_szukania(dane)}
+
+
+def lista_rozmow():
+    # WHAT: wszystkie zapisane rozmowy (najnowsze na górze) - wołane w wątku w tle.
+    katalog = katalog_rozmow()
+    wynik = []
+    for plik in katalog.glob("*.json") if katalog.is_dir() else []:
+        try:
+            wynik.append(_wpis_listy_rozmow(plik.stem, json.loads(plik.read_text(encoding="utf-8"))))
+        except (OSError, ValueError):
+            continue  # WHY: uszkodzony plik nie może zablokować całej listy
+    return sorted(wynik, key=lambda w: w["zmieniono"], reverse=True)
+
+
+def wczytaj_rozmowe(id_rozmowy):
+    dane = json.loads((katalog_rozmow() / f"{id_rozmowy}.json").read_text(encoding="utf-8"))
+    for w in dane.get("wiadomosci", []):
+        for z in w.get("zalaczniki", []):
+            if z.get("typ") == "dokument":
+                z["bez_wyszukiwania"] = True  # WHY: wektorów nie zapisujemy - nie jest "gotowy"
+    return dane
+
+
 def _rozdziel_myslenie(tresc):
     # WHAT: (rozumowanie, odpowiedź) z treści, w której model sam wstawił <think>...</think>.
     # WHY:  nowsza Ollama oddaje rozumowanie w osobnym polu "thinking", ale część
@@ -3710,7 +3812,9 @@ class WidokCzatu(QTextBrowser):
             else:
                 tekst = _("Plik: {nazwa} ({kb} KB)").format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024))
                 if z["typ"] == "dokument":
-                    tekst += " - " + _("wyszukiwanie fragmentów")
+                    # WHY: w otwartej zapisanej rozmowie wektorów już nie ma
+                    tekst += " - " + (_("żeby dalej pytać o ten plik, dołącz go ponownie")
+                                      if z.get("bez_wyszukiwania") else _("wyszukiwanie fragmentów"))
                 c.insertText(tekst, self._znaki(self.kolorWyciszony))
 
     def _styl_kodu(self, ramka):
@@ -4864,6 +4968,9 @@ class MainWindow(QMainWindow):
         self._czat = []                 # WHY: bieżąca rozmowa (ekran "Czat") - przeżywa zmianę języka
         self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
         self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
+        self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
+        self._czat_utworzono = None
+        self._rozmowy = None            # WHY: lista zapisanych rozmów; None = jeszcze nie wczytana
         self._etykiety_zalacznikow = {}  # WHY: id(załącznika) -> etykieta chipa (postęp przygotowania)
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
@@ -7198,6 +7305,32 @@ class MainWindow(QMainWindow):
 
         rzad = QHBoxLayout()
         rzad.setSpacing(18)
+        # --- zapisane rozmowy ---
+        karta, uk = self._karta()
+        karta.setFixedWidth(280)
+        uk.addWidget(_etykieta(_("Rozmowy"), "h2"))
+        self.pole_szukaj_rozmow = QLineEdit()
+        self.pole_szukaj_rozmow.setPlaceholderText(_("Szukaj w rozmowach..."))
+        self.pole_szukaj_rozmow.setClearButtonEnabled(True)
+        self.pole_szukaj_rozmow.textChanged.connect(self._filtruj_rozmowy)
+        uk.addWidget(self.pole_szukaj_rozmow)
+        self.lista_rozmow = QListWidget()
+        self.lista_rozmow.setObjectName("chatList")
+        self.lista_rozmow.setWordWrap(True)
+        self.lista_rozmow.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.lista_rozmow.itemClicked.connect(lambda e: self._otworz_rozmowe(e.data(Qt.ItemDataRole.UserRole)))
+        self.lista_rozmow.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.lista_rozmow.customContextMenuRequested.connect(self._menu_rozmowy)
+        uk.addWidget(self.lista_rozmow, 1)
+        self.btn_usun_rozmowe = self._przycisk(_("Usuń rozmowę"), "kosz", rola="danger", slot=self._usun_rozmowe)
+        uk.addWidget(self.btn_usun_rozmowe)
+        sciezka = str(katalog_rozmow()).replace(str(Path.home()), "~", 1)
+        uwaga = _etykieta(_("Zapisywane automatycznie, tylko na tym komputerze: {sciezka}").format(sciezka=sciezka),
+                          "muted")
+        uwaga.setWordWrap(True)
+        uk.addWidget(uwaga)
+        rzad.addWidget(karta)
+
         # --- rozmowa ---
         karta, uk = self._karta()
         uk.setSpacing(12)
@@ -7284,13 +7417,10 @@ class MainWindow(QMainWindow):
             self._lbl_stat_czatu[klucz] = wartosc
             uk.addWidget(wiersz)
         uk.addStretch(1)
-        uwaga = _etykieta(_("Rozmowa nie jest zapisywana - znika po zamknięciu programu. "
-                            "Pełny czat z historią daje Open WebUI."), "muted")
-        uwaga.setWordWrap(True)
-        uk.addWidget(uwaga)
         rzad.addWidget(karta)
         v.addLayout(rzad, 1)
 
+        self._wypelnij_liste_rozmow()
         self._odswiez_modele_czatu()
         self._pokaz_czat()
         self._pokaz_zalaczniki()
@@ -7646,8 +7776,123 @@ class MainWindow(QMainWindow):
         if self._czat_worker is not None:
             self._czat_worker.anuluj()
         self._czat = []
+        self._czat_id = None  # WHY: nowy plik powstanie przy pierwszej odpowiedzi
         self._pokaz_czat()
+        self._wypelnij_liste_rozmow()
         self.pole_czat.setFocus()
+
+    # --- zapisane rozmowy ------------------------------------------------------
+    def _wypelnij_liste_rozmow(self):
+        # WHAT: lista rozmów po lewej; za pierwszym razem czyta pliki w tle.
+        # WHY:  pliki ze zdjęciami potrafią ważyć kilka MB - czytanie ich w wątku
+        #       okna przy kilkudziesięciu rozmowach przycinałoby ekran.
+        if not hasattr(self, "lista_rozmow"):
+            return
+        if self._rozmowy is None:
+            if not self._w_toku("rozmowy"):
+                worker = FunkcjaWorker(lista_rozmow)
+                self._uruchom_watek("rozmowy", worker, worker.zakonczono, self._po_liscie_rozmow)
+            return
+        self.lista_rozmow.clear()
+        for r in self._rozmowy:
+            data = time.strftime("%d.%m.%Y %H:%M", time.localtime(r["zmieniono"]))
+            # WHY: sama nazwa bez tagu ("gemma4") - pełna "gemma4:26b-a4b-it-q8_0" zawijała się
+            #      na wąskiej liście w dwie linie; pełną widać w otwartej rozmowie
+            model = _skroc_nazwe_modelu_hf(r["model"]).split(":")[0] if r["model"] else ""
+            element = QListWidgetItem(f"{r['tytul']}\n{data}" + (f"  ·  {model}" if model else ""))
+            element.setData(Qt.ItemDataRole.UserRole, r["id"])
+            element.setToolTip(r["tytul"])
+            self.lista_rozmow.addItem(element)
+            if r["id"] == self._czat_id:
+                element.setSelected(True)
+        self._filtruj_rozmowy(self.pole_szukaj_rozmow.text())
+        self.btn_usun_rozmowe.setEnabled(bool(self._rozmowy))
+
+    def _po_liscie_rozmow(self, ok, wynik):
+        self._rozmowy = wynik if ok else []
+        if not ok:
+            self.wpis_log(_("Nie udało się wczytać zapisanych rozmów: {blad}").format(blad=wynik), "BŁĄD")
+        self._wypelnij_liste_rozmow()
+
+    def _filtruj_rozmowy(self, tekst):
+        # WHAT: ukrywa rozmowy, w których tytule i treści nie ma wpisanego tekstu.
+        szukane = tekst.strip().lower()
+        wg_id = {r["id"]: r for r in self._rozmowy or []}
+        for i in range(self.lista_rozmow.count()):
+            element = self.lista_rozmow.item(i)
+            r = wg_id.get(element.data(Qt.ItemDataRole.UserRole))
+            element.setHidden(bool(szukane) and not (r and szukane in r["szukaj"]))
+
+    def _zapisz_biezaca_rozmowe(self):
+        # WHAT: zapis po każdej odpowiedzi (także przerwanej i z błędem).
+        if not self._czat:
+            return
+        if self._czat_id is None:
+            self._czat_id = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(2)
+            self._czat_utworzono = time.time()
+        model, host = self._wybrany_model_czatu()
+        try:
+            wpis = zapisz_rozmowe(self._czat_id, self._czat_utworzono, self._czat,
+                                  model["nazwa"] if model else "", host["adres"] if host else "")
+        except OSError as e:
+            self._uwaga_czatu(_("Nie udało się zapisać rozmowy: {blad}").format(blad=e), "warn")
+            return
+        if self._rozmowy is not None:
+            self._rozmowy = [wpis] + [r for r in self._rozmowy if r["id"] != self._czat_id]
+        self._wypelnij_liste_rozmow()
+
+    def _otworz_rozmowe(self, id_rozmowy):
+        if id_rozmowy == self._czat_id:
+            return
+        if self._czat_worker is not None:
+            # WHY: odpowiedź jeszcze się pisze - podmiana rozmowy w trakcie zgubiłaby ją
+            self._uwaga_czatu(_("Poczekaj na koniec odpowiedzi albo ją zatrzymaj."), "warn")
+            self._wypelnij_liste_rozmow()
+            return
+        try:
+            dane = wczytaj_rozmowe(id_rozmowy)
+        except (OSError, ValueError) as e:
+            self._uwaga_czatu(_("Nie udało się otworzyć rozmowy: {blad}").format(blad=e), "warn")
+            return
+        self._czat = dane.get("wiadomosci", [])
+        self._czat_id = id_rozmowy
+        self._czat_utworzono = dane.get("utworzono") or time.time()
+        self._uwaga_czatu("")
+        # WHY: dalej rozmawiamy tym samym modelem - o ile jest jeszcze na liście
+        indeks = self.combo_czat_model.findData(f"{dane.get('host', '')}|{dane.get('model', '')}")
+        if indeks >= 0:
+            self.combo_czat_model.setCurrentIndex(indeks)
+        self._pokaz_czat(do_dolu=True)
+
+    def _menu_rozmowy(self, punkt):
+        element = self.lista_rozmow.itemAt(punkt)
+        if element is None:
+            return
+        self.lista_rozmow.setCurrentItem(element)
+        menu = QMenu(self)
+        menu.addAction(_("Usuń rozmowę"), self._usun_rozmowe)
+        menu.exec(self.lista_rozmow.viewport().mapToGlobal(punkt))
+
+    def _usun_rozmowe(self):
+        element = self.lista_rozmow.currentItem()
+        if element is None:
+            return
+        id_rozmowy = element.data(Qt.ItemDataRole.UserRole)
+        odp = QMessageBox.question(self, _("Usuń rozmowę"),
+                                   _("Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.").format(
+                                       tytul=element.toolTip()))
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            (katalog_rozmow() / f"{id_rozmowy}.json").unlink(missing_ok=True)
+        except OSError as e:
+            self._uwaga_czatu(_("Nie udało się usunąć rozmowy: {blad}").format(blad=e), "warn")
+            return
+        self._rozmowy = [r for r in self._rozmowy or [] if r["id"] != id_rozmowy]
+        if id_rozmowy == self._czat_id:
+            self.nowa_rozmowa()
+        else:
+            self._wypelnij_liste_rozmow()
 
     def wyslij_czat(self):
         # WHAT: ten sam przycisk wysyła albo przerywa pisanie odpowiedzi.
@@ -7772,6 +8017,7 @@ class MainWindow(QMainWindow):
             else:
                 ostatnia["stat"] = self._statystyki_czatu(wynik)
             self._pokaz_czat()
+            self._zapisz_biezaca_rozmowe()
         self._odswiez_przycisk_czatu()
         self.odswiez_modele()  # WHY: model jest teraz w pamięci - widać to w opisie i na ekranie Modele
 

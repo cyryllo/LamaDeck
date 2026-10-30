@@ -143,9 +143,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku. Model embeddingów wybierasz
   w Ustawieniach (karta „Czat”); gdy żadnego nie ma, przycisk pobiera zalecany, wielojęzyczny
   `nomic-embed-text-v2-moe`
-- Rozmowy nie są jeszcze zapisywane — automatyczne zapisywanie trafi do czatu przed wersją 1.0
-  (patrz [plan](#plan-do-wersji-10)); jeśli historia rozmów potrzebna jest już teraz, daje ją
-  Open WebUI
+- **Rozmowy zapisują się automatycznie** po każdej odpowiedzi, każda jako plik JSON
+  w `~/.local/share/OllamaManager/czaty/` — tylko na Twoim komputerze, bez wpływu aktualizacji
+  i dezinstalacji. Lista po lewej pozwala je otwierać, przeszukiwać (tytuły i treść) i usuwać;
+  zdjęcia też się zapisują, a duże pliki trzeba dołączyć ponownie, żeby dalej w nich szukać
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
 **Open WebUI**
@@ -192,9 +193,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 ## Plan do wersji 1.0
 
-**0.9.0** (obecna) to wersja prawie końcowa. Przed **1.0** zostało:
+**0.9.x** (obecna) to wersja prawie końcowa. Przed **1.0** zostało:
 
-- [ ] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
+- [x] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
   rozmów (otwieranie, usuwanie, wyszukiwanie)
 - [ ] Czat: **okno kontekstu dla rozmowy** i wskaźnik zajętości (np. „4 051 / 65 536 tokenów”),
   który ostrzeże, zanim model zacznie zapominać początek rozmowy

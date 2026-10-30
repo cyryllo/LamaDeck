@@ -142,8 +142,10 @@ fonts are bundled, so it looks the same everywhere).
   is needed, and nothing is stored on disk. The embedding model is chosen in Settings ("Chat"
   card); without one, a button there downloads the recommended multilingual
   `nomic-embed-text-v2-moe`
-- Conversations are not saved yet — automatic saving is coming to the chat before 1.0 (see the
-  [roadmap](#roadmap-to-10)); if you need chat history right now, Open WebUI has it
+- **Conversations are saved automatically** after every answer, one JSON file each in
+  `~/.local/share/OllamaManager/czaty/` — only on your computer, untouched by updates and
+  uninstalling. A list on the left opens, searches (titles and content) and deletes them;
+  pictures are saved too, large files have to be attached again to keep searching them
 - Also opens straight from the tray panel ("Open chat")
 
 **Open WebUI**
@@ -191,9 +193,9 @@ fonts are bundled, so it looks the same everywhere).
 
 ## Roadmap to 1.0
 
-**0.9.0** (current) is the near-final release. What's left before **1.0**:
+**0.9.x** (current) is the near-final release. What's left before **1.0**:
 
-- [ ] Chat: **automatic saving of conversations** to local files, with a list of saved
+- [x] Chat: **automatic saving of conversations** to local files, with a list of saved
   conversations (open, delete, search)
 - [ ] Chat: **context window per conversation** and a usage indicator (e.g. "4,051 / 65,536
   tokens") that warns before the model starts forgetting the beginning
