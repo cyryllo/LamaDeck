@@ -2431,12 +2431,13 @@ class CzatWorker(WatekTla):
     zrodla = pyqtSignal(object)            # [(plik, [(linia_od, linia_do), ...])] - fragmenty z dużych plików
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
-    def __init__(self, adres, model, wiadomosci, dokumenty=None):
+    def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None):
         super().__init__()
         self.adres = adres
         self.model = model
         self.wiadomosci = wiadomosci
         self.dokumenty = dokumenty or []
+        self.myslenie = myslenie  # WHY: "think" do /api/chat; None = nie wysyłać (model nie myśli)
         self._anuluj = False
         self._odpowiedz = None
 
@@ -2448,6 +2449,12 @@ class CzatWorker(WatekTla):
                 self._odpowiedz.close()
             except Exception:
                 pass
+
+    def _zapytanie(self):
+        dane = {"model": self.model, "messages": self.wiadomosci, "stream": True}
+        if self.myslenie is not None:
+            dane["think"] = self.myslenie
+        return dane
 
     def _okno_kontekstu(self):
         # WHAT: okno kontekstu, z jakim model NAPRAWDĘ działa (/api/ps: context_length); None = nie wiadomo.
@@ -2507,7 +2514,7 @@ class CzatWorker(WatekTla):
             # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
             #      pierwszym słowem potrafi trwać ponad minutę.
             with requests.post(f"{self.adres}/api/chat", stream=True, timeout=(10, 600),
-                               json={"model": self.model, "messages": self.wiadomosci, "stream": True}) as odp:
+                               json=self._zapytanie()) as odp:
                 self._odpowiedz = odp
                 if odp.status_code != 200:
                     try:
@@ -7505,20 +7512,42 @@ class MainWindow(QMainWindow):
         self.combo_czat_model = QComboBox()
         self.combo_czat_model.currentIndexChanged.connect(self._zmiana_modelu_czatu)
         uk.addWidget(self.combo_czat_model)
+        # WHAT: jedna drobna linia (rozmiar · parametry · kwantyzacja · host) i pod nią tagi
+        #       możliwości modelu (w pamięci / zdjęcia / myślenie / narzędzia).
         self.lbl_czat_model = _etykieta("", "muted")
-        self.lbl_czat_model.setWordWrap(True)
+        self.lbl_czat_model.setObjectName("modelInfo")
         uk.addWidget(self.lbl_czat_model)
-        wiersz = QHBoxLayout()
-        lbl = QLabel(_("Rozumowanie modelu"))
-        opis = _("pokazuj, jak model \"myśli\" przed odpowiedzią (np. qwen3)")
-        lbl.setToolTip(opis)
-        wiersz.addWidget(lbl, 1)
-        self.sw_czat_rozumowanie = Przelacznik(_("Rozumowanie modelu"))
-        self.sw_czat_rozumowanie.setToolTip(opis)
-        self.sw_czat_rozumowanie.clicked.connect(self._przelacz_rozumowanie)
-        self.sw_czat_rozumowanie.ustaw_cicho(self.widok_czatu.pokaz_myslenie)
-        wiersz.addWidget(self.sw_czat_rozumowanie)
-        uk.addLayout(wiersz)
+        self.ramka_tagow_modelu = QWidget()
+        self.ramka_tagow_modelu.setObjectName("capTags")
+        self.uklad_tagow_modelu = QVBoxLayout(self.ramka_tagow_modelu)
+        self.uklad_tagow_modelu.setContentsMargins(0, 0, 0, 0)
+        self.uklad_tagow_modelu.setSpacing(4)
+        uk.addWidget(self.ramka_tagow_modelu)
+        # WHAT: dwa przełączniki dla modeli, które "myślą" (qwen3, gemma4...): czy w ogóle
+        #       myśleć (think w /api/chat) i czy pokazywać rozumowanie w rozmowie.
+        # WHY:  bez myślenia proste pytanie to ułamek sekundy zamiast kilkunastu (zmierzone
+        #       na gemma4: 4 tokeny / 0,5 s zamiast ok. 260 tokenów / 15 s, ta sama odpowiedź).
+        def przelacznik(tytul, opis, slot, wlaczony):
+            wiersz = QHBoxLayout()
+            lbl = QLabel(tytul)
+            lbl.setToolTip(opis)
+            wiersz.addWidget(lbl, 1)
+            sw = Przelacznik(tytul)
+            sw.setToolTip(opis)
+            sw.clicked.connect(slot)
+            sw.ustaw_cicho(wlaczony)
+            wiersz.addWidget(sw)
+            uk.addLayout(wiersz)
+            return sw, lbl
+
+        self.sw_czat_myslenie, self.lbl_czat_myslenie = przelacznik(
+            _("Myślenie modelu"),
+            _("model rozważa odpowiedź, zanim ją napisze - dokładniej przy trudnych pytaniach, ale dużo "
+              "wolniej; wyłącz dla prostych pytań"),
+            self._przelacz_myslenie, _ustawienia().value("czat/myslenie", True, type=bool))
+        self.sw_czat_rozumowanie, self.lbl_czat_rozumowanie = przelacznik(
+            _("Pokazuj rozumowanie"), _("pokazuj w rozmowie, co model \"myślał\" przed odpowiedzią"),
+            self._przelacz_rozumowanie, self.widok_czatu.pokaz_myslenie)
 
         # WHAT: ile okna kontekstu zajmuje rozmowa - liczba w linii nagłówka, pasek i rada.
         uk.addSpacing(8)
@@ -7551,7 +7580,6 @@ class MainWindow(QMainWindow):
                 ("generowanie", _("Generowanie"), _("tokeny odpowiedzi na sekundę")),
                 ("prompt", _("Przetwarzanie pytania"), _("tokeny pytania i historii na sekundę")),
                 ("tokeny", _("Tokeny"), _("pytanie + historia / odpowiedź")),
-                ("ladowanie", _("Wczytanie modelu"), _("0 s, gdy model był już w pamięci")),
                 ("calosc", _("Czas całkowity"), ""))):
             lbl = _etykieta(nazwa, "muted")
             lbl.setToolTip(opis)
@@ -7886,21 +7914,99 @@ class MainWindow(QMainWindow):
             _ustawienia().setValue("czat/model", self.combo_czat_model.currentData())
         if not model:
             self.lbl_czat_model.setText("")
+            self._pokaz_tagi_modelu([])
         else:
             czesci = [f"{model['rozmiar'] / 1024 ** 3:.1f} GB"]
             if model.get("parametry"):
                 czesci.append(model["parametry"])
             if model.get("kwantyzacja"):
                 czesci.append(model["kwantyzacja"])
-            tekst = " · ".join(czesci) + "\n" + _("na hoście: {host}").format(host=host["nazwa"])
-            tekst += " · " + (_("w pamięci") if host["w_pamieci"] else _("wczyta się przy pierwszym pytaniu"))
-            tekst += "\n" + (_("widzi zdjęcia") if self._widzi_obrazy(model) else _("nie widzi zdjęć"))
-            self.lbl_czat_model.setText(tekst)
+            czesci.append(host["nazwa"])
+            self.lbl_czat_model.setText(" · ".join(czesci))
+            self.lbl_czat_model.setToolTip(_("na hoście: {host}").format(host=host["nazwa"]))
+            mozliwosci = model.get("mozliwosci", [])
+            tagi = [(_("w pamięci"), _("model jest już wczytany - odpowie od razu"), "ok") if host["w_pamieci"]
+                    else (_("na dysku"), _("wczyta się do pamięci przy pierwszym pytaniu"), "")]
+            for klucz, nazwa, opis in (
+                    ("vision", _("zdjęcia"), _("widzi dołączone zdjęcia i zrzuty ekranu")),
+                    ("thinking", _("myślenie"), _("potrafi rozważyć odpowiedź przed jej napisaniem")),
+                    ("tools", _("narzędzia"), _("umie wywoływać narzędzia - przyda się np. w Continue"))):
+                if klucz in mozliwosci:
+                    tagi.append((nazwa, opis, ""))
+            self._pokaz_tagi_modelu(tagi)
+        if hasattr(self, "sw_czat_myslenie"):
+            self._odswiez_przelaczniki_myslenia()
         self._odswiez_przycisk_czatu()
 
     @staticmethod
     def _widzi_obrazy(model):
         return "vision" in model.get("mozliwosci", [])
+
+    def _pokaz_tagi_modelu(self, tagi):
+        # WHAT: tagi [(napis, dymek, stan)] w wierszach - nowy wiersz, gdy kolejny się nie mieści.
+        # WHY:  Qt nie ma układu "przepływowego"; przy dłuższych tłumaczeniach (niemiecki)
+        #       cztery tagi nie mieszczą się w jednej linii wąskiej karty.
+        while self.uklad_tagow_modelu.count():
+            wiersz = self.uklad_tagow_modelu.takeAt(0).layout()
+            while wiersz and wiersz.count():
+                tag = wiersz.takeAt(0).widget()
+                if tag:
+                    tag.setParent(None)
+                    tag.deleteLater()
+        szerokosc = 250  # WHY: szerokość treści prawej karty (290 px minus marginesy)
+        wiersz, zajete = None, 0
+        for napis, opis, stan in tagi:
+            # WHY: od razu w karcie - styl tagu ma selektor z rodzicem (QFrame#card ...), a bez
+            #      niego sizeHint liczyłby szerokość bez odstępów i tag byłby ucinany
+            tag = QLabel(napis, self.ramka_tagow_modelu)
+            tag.setObjectName("capTag")
+            tag.setProperty("state", stan)
+            tag.setToolTip(opis)
+            tag.ensurePolished()
+            w = tag.sizeHint().width()
+            tag.setMinimumWidth(w)
+            if wiersz is None or zajete + w > szerokosc:
+                wiersz = QHBoxLayout()
+                wiersz.setSpacing(4)
+                wiersz.addStretch(1)
+                self.uklad_tagow_modelu.addLayout(wiersz)
+                zajete = 0
+            wiersz.insertWidget(wiersz.count() - 1, tag)
+            zajete += w + 4
+        self.ramka_tagow_modelu.setVisible(bool(tagi))
+
+    def _przelacz_myslenie(self, wlacz):
+        _ustawienia().setValue("czat/myslenie", wlacz)
+        self._odswiez_przelaczniki_myslenia()
+
+    def _odswiez_przelaczniki_myslenia(self):
+        # WHY: przełączniki mają sens tylko dla modeli z możliwością "thinking"; "pokazuj
+        #      rozumowanie" także tylko wtedy, gdy model w ogóle myśli
+        model, _host = self._wybrany_model_czatu()
+        mysli = bool(model) and "thinking" in model.get("mozliwosci", [])
+        # WHY: przy modelu, który nie myśli, oba wyglądają na wyłączone (wyszarzony, ale
+        #      "włączony" przełącznik mylił); zapisany wybór wraca przy modelu, który myśli
+        wlaczone = _ustawienia().value("czat/myslenie", True, type=bool)
+        self.sw_czat_myslenie.ustaw_cicho(mysli and wlaczone)
+        self.sw_czat_rozumowanie.ustaw_cicho(mysli and self.widok_czatu.pokaz_myslenie)
+        for sw, lbl, aktywny in ((self.sw_czat_myslenie, self.lbl_czat_myslenie, mysli),
+                                 (self.sw_czat_rozumowanie, self.lbl_czat_rozumowanie, mysli and wlaczone)):
+            sw.setEnabled(aktywny)
+            lbl.setEnabled(aktywny)
+        if not mysli:
+            self.lbl_czat_myslenie.setToolTip(_("ten model nie myśli przed odpowiedzią"))
+
+    def _parametr_myslenia(self, model):
+        # WHAT: wartość "think" do /api/chat albo None (nie wysyłać wcale).
+        # WHY:  tylko dla modeli z "thinking" - innym Ollama mogłaby odpowiedzieć błędem.
+        #       gpt-oss nie umie myśleć wcale - zna tylko poziomy low/medium/high, więc
+        #       "wyłączone" = "low" (wg dokumentacji Ollamy; NIE sprawdzone na żywo).
+        if "thinking" not in model.get("mozliwosci", []):
+            return None
+        wlaczone = _ustawienia().value("czat/myslenie", True, type=bool)
+        if model["nazwa"].startswith("gpt-oss"):
+            return "medium" if wlaczone else "low"
+        return wlaczone
 
     def _przelacz_rozumowanie(self, wlacz):
         _ustawienia().setValue("czat/rozumowanie", wlacz)
@@ -8075,7 +8181,7 @@ class MainWindow(QMainWindow):
             self._uwaga_czatu(_("Poczekaj chwilę - duży plik jest jeszcze przygotowywany do wyszukiwania."), "warn")
             return
         if any(z["typ"] == "obraz" for z in self._zalaczniki) and not self._widzi_obrazy(model):
-            self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model, który ma w opisie \"widzi zdjęcia\" "
+            self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
                                 "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
                               "warn")
             return
@@ -8110,7 +8216,7 @@ class MainWindow(QMainWindow):
                      for z in w.get("zalaczniki", []) if z["typ"] == "dokument" and z.get("gotowy")]
         if dokumenty:
             self._czat[-1]["szuka"] = True
-        worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty)
+        worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model))
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
@@ -8284,7 +8390,6 @@ class MainWindow(QMainWindow):
             return tokeny / (ns / 1e9) if tokeny and ns else None
         gen = na_sekunde(d.get("eval_count"), d.get("eval_duration"))
         prompt = na_sekunde(d.get("prompt_eval_count"), d.get("prompt_eval_duration"))
-        ladowanie = (d.get("load_duration") or 0) / 1e9
         calosc = (d.get("total_duration") or 0) / 1e9
         st = self._lbl_stat_czatu
         # WHY: od 100 tok/s bez części dziesiętnej - "18382.4" nie mieściło się w wąskiej karcie,
@@ -8294,7 +8399,6 @@ class MainWindow(QMainWindow):
         st["generowanie"].setText(tok_s(gen))
         st["prompt"].setText(tok_s(prompt))
         st["tokeny"].setText(f"{d.get('prompt_eval_count', 0)} / {d.get('eval_count', 0)}")
-        st["ladowanie"].setText(f"{ladowanie:.1f} s")
         st["calosc"].setText(f"{calosc:.1f} s")
         _odmaluj_rodzica(*st.values())
         czesci = []

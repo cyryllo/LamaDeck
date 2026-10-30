@@ -131,7 +131,9 @@ fonts are bundled, so it looks the same everywhere).
 - **Context usage**: how much of the model's context window the conversation takes (e.g.
   "4,051 / 65,536 tokens"), with a warning from 80% — before the model silently starts
   forgetting the beginning
-- Optional view of the model's reasoning (models that "think", e.g. qwen3)
+- **Thinking on/off** for models that reason before answering (qwen3, gemma4…): off, a simple
+  question takes a fraction of a second instead of several seconds; on, the reasoning can be
+  shown in the conversation
 - **Attach pictures, documents and text files**: 📎 button, drag & drop or paste a screenshot
   (Ctrl+V). Pictures go to models that can see them (vision); text files (code, .txt, .md,
   .csv…) are added to the message
@@ -205,7 +207,7 @@ fonts are bundled, so it looks the same everywhere).
   conversations (open, delete, search)
 - [x] Chat: a **context usage indicator** (e.g. "4,051 / 65,536 tokens") that warns before the
   model starts forgetting the beginning
-- [ ] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
+- [x] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
 - [ ] Chat: **regenerate** the last answer and **edit** the last question
 - [ ] Chat: **copy the whole answer** and **export** a conversation to Markdown
 - [ ] `install.sh`: warn when the app is already installed from the `.deb` package

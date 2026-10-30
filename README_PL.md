@@ -131,7 +131,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   przydatne do porównywania modeli i ustawień Ollamy
 - **Zajętość kontekstu**: ile okna kontekstu modelu zajmuje rozmowa (np. „4 051 / 65 536
   tokenów”), z ostrzeżeniem od 80% — zanim model po cichu zacznie zapominać jej początek
-- Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
+- **Myślenie modelu wł./wył.** dla modeli, które rozważają odpowiedź (qwen3, gemma4…): bez
+  myślenia proste pytanie trwa ułamek sekundy zamiast kilkunastu; z myśleniem rozumowanie można
+  pokazać w rozmowie
 - **Załączniki: zdjęcia, dokumenty i pliki tekstowe** — przycisk 📎, przeciągnięcie pliku albo
   wklejenie zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision),
   pliki tekstowe (kod, .txt, .md, .csv…) są dołączane do wiadomości
@@ -204,7 +206,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   rozmów (otwieranie, usuwanie, wyszukiwanie)
 - [x] Czat: **wskaźnik zajętości kontekstu** (np. „4 051 / 65 536 tokenów”), który ostrzeże,
   zanim model zacznie zapominać początek rozmowy
-- [ ] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
+- [x] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
 - [ ] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
 - [ ] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown
 - [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`

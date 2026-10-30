@@ -607,3 +607,11 @@ QListWidget#chatList::item:selected { background: #1d3a4f; color: #e8eaed; }
 QProgressBar#meter[state="warn"]::chunk { background: #f0b453; }
 QFrame#card QLabel#contextHint[state="warn"] { color: #f0b453; }
 QFrame#card QLabel#contextHint[state="error"] { color: #f47c84; }
+/* Ekran Czat - drobna linia o modelu i tagi jego możliwości (w pamięci / zdjęcia / myślenie...) */
+QFrame#card QLabel#modelInfo { font-size: 8.5pt; }
+QFrame#card QWidget#capTags { background: transparent; }
+QFrame#card QLabel#capTag {
+    font-size: 8pt; padding: 1px 7px; border-radius: 8px;
+    background: #2c3138; color: #c9cfd6; border: 1px solid #3a4048;
+}
+QFrame#card QLabel#capTag[state="ok"] { background: #1c2b22; color: #5fd38d; border-color: #2f5a40; }
