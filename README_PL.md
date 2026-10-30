@@ -1,18 +1,22 @@
-# Ollama Manager
+# LamaDeck
 
-Aplikacja desktopowa (PyQt6) pod KDE, która zaczynała jako prosty manager usługi
-[Ollamy](https://ollama.com), a wyrosła w panel sterowania całym lokalnym stackiem AI:
-zarządzanie modelami na wielu hostach naraz, agregator modeli (LiteLLM) wystawiający
-jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, oraz panel czatu
-w przeglądarce (Open WebUI). Bez terminala, bez Dockera, bez chmury — wszystko działa
-lokalnie, w Twoim LAN.
+Panel sterowania lokalnym stosem AI — aplikacja desktopowa (PyQt6) pod KDE. Zaczynała jako
+prosty manager usługi [Ollamy](https://ollama.com), a wyrosła w jedno miejsce dla całego
+stosu: zarządzanie modelami na wielu hostach naraz, agregator modeli (LiteLLM) wystawiający
+jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, panel czatu
+w przeglądarce (Open WebUI) i wbudowany czat. Bez terminala, bez Dockera, bez chmury —
+wszystko działa lokalnie, w Twoim LAN.
+
+> **Do wersji 0.9 LamaDeck nazywał się „Ollama Manager”.** To niezależny projekt, niezwiązany
+> z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
+> przenosi przy pierwszym uruchomieniu.
 
 > **Status: stabilna (v0.9.0) — prawie 1.0.** Używam jej na co dzień na własnym sprzęcie
 > i działa zgodnie z oczekiwaniami. Funkcje są prawie kompletne: przed 1.0 zostało kilka
 > dodatków do czatu (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same
 > poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
-![Ollama Manager — panel główny](om_pl.png)
+![LamaDeck — panel główny](om_pl.png)
 
 ## Wymagania
 
@@ -31,15 +35,15 @@ lokalnie, w Twoim LAN.
 ## Instalacja i uruchomienie
 
 Najpierw sklonuj repozytorium i wejdź do jego katalogu — poniższe skrypty
-instalacyjne trzeba uruchamiać stamtąd (szukają `ollama_manager.py` obok siebie):
+instalacyjne trzeba uruchamiać stamtąd (szukają `lamadeck.py` obok siebie):
 
 ```
-git clone https://github.com/cyryllo/Ollama-manager.git
-cd Ollama-manager
+git clone https://github.com/cyryllo/LamaDeck.git
+cd LamaDeck
 ```
 
 **Jako aplikacja z menu, bez roota (zalecane)** — instaluje zależności przez pip,
-kopiuje apkę do `~/.local/share/ollama-manager` i dodaje wpis w menu (sekcja
+kopiuje apkę do `~/.local/share/lamadeck` i dodaje wpis w menu (sekcja
 Narzędzia). Wykrywa istniejącą instalację i proponuje aktualizację/reinstalację:
 
 ```
@@ -52,14 +56,14 @@ Odinstalowanie: `./install.sh --uninstall` (komunikaty skryptu są po angielsku)
 
 ```
 ./build-deb.sh
-sudo apt install ./ollama-manager_*_all.deb
+sudo apt install ./lamadeck_*_all.deb
 ```
 
 **Ręcznie, do dewelopowania** — bez kopiowania i wpisu w menu:
 
 ```
 pip install PyQt6 requests
-python3 ollama_manager.py
+python3 lamadeck.py
 ```
 
 ## Funkcje
@@ -154,7 +158,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   bez konta — i dołącza jej tekst do pytania (link do PDF też działa; długie strony idą przez
   wyszukiwanie fragmentów). Strony, które wczytują się dopiero w JavaScripcie, program zgłasza
 - **Rozmowy zapisują się automatycznie** po każdej odpowiedzi, każda jako plik JSON
-  w `~/.local/share/OllamaManager/czaty/` — tylko na Twoim komputerze, bez wpływu aktualizacji
+  w `~/.local/share/LamaDeck/czaty/` — tylko na Twoim komputerze, bez wpływu aktualizacji
   i dezinstalacji. Lista po lewej pozwala je otwierać, przeszukiwać (tytuły i treść), nazywać
   po swojemu, eksportować do Markdown (`.md`) i usuwać;
   zdjęcia też się zapisują, a duże pliki trzeba dołączyć ponownie, żeby dalej w nich szukać
@@ -214,7 +218,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
 - [x] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown, do tego **zmiana
   nazwy** rozmów
-- [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
+- [x] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
+- [ ] **Własne repozytorium APT** — dodajesz je raz, potem `sudo apt install lamadeck`,
+  a aktualizacje przychodzą razem z systemem
+- [ ] **AppImage** — jeden plik działający na każdej dystrybucji (Fedora, Arch, openSUSE…)
 
 - [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza
   jej tekst do pytania

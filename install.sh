@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-#  Ollama Manager installer.
+#  LamaDeck installer (formerly Ollama Manager).
 #
 #  WHAT: installs Python dependencies, copies the app to a user directory
 #        and adds a menu entry (Utility category). Detects an existing
@@ -13,28 +13,38 @@
 #        that need apt/root if missing - offered with an explicit, confirmed
 #        prompt each time, never installed silently.
 #
+#        If the app is already installed from the .deb package, it offers to
+#        remove that first, so there aren't two copies and two menu entries.
+#
 #  Run:      ./install.sh
 #  Uninstall: ./install.sh --uninstall
 # =============================================================================
 set -euo pipefail
 
-TARGET_DIR="$HOME/.local/share/ollama-manager"
-DESKTOP_FILE="$HOME/.local/share/applications/ollama-manager.desktop"
-# WHY: standard place for a user's own app icons - KDE finds it by name (Icon=ollama-manager)
-ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/ollama-manager.png"
+TARGET_DIR="$HOME/.local/share/lamadeck"
+DESKTOP_FILE="$HOME/.local/share/applications/lamadeck.desktop"
+# WHY: standard place for a user's own app icons - KDE finds it by name (Icon=lamadeck)
+ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/lamadeck.png"
+# WHY: until 0.9.x the app was called "Ollama Manager" and installed under these names -
+#      removed on install/uninstall, so the menu doesn't show the old app next to the new one.
+#      The app itself moves the user's settings and conversations on its first start.
+LEGACY_DIR="$HOME/.local/share/ollama-manager"
+LEGACY_DESKTOP_FILE="$HOME/.local/share/applications/ollama-manager.desktop"
+LEGACY_ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/ollama-manager.png"
 # WHY: 0.6.6 installed a vector icon here - KDE prefers scalable icons, so a leftover
 #      one would keep showing the old icon. Removed on every install/uninstall.
 OLD_ICON_FILE="$HOME/.local/share/icons/hicolor/scalable/apps/ollama-manager.svg"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-SOURCE_SCRIPT="$SCRIPT_DIR/ollama_manager.py"
+SOURCE_SCRIPT="$SCRIPT_DIR/lamadeck.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
 SOURCE_THEME="$SCRIPT_DIR/theme.qss"
 SOURCE_FONTS_DIR="$SCRIPT_DIR/fonts"
 SOURCE_ICON="$SCRIPT_DIR/logo.png"
-TARGET_SCRIPT="$TARGET_DIR/ollama_manager.py"
+TARGET_SCRIPT="$TARGET_DIR/lamadeck.py"
+LEGACY_SCRIPT="$LEGACY_DIR/ollama_manager.py"
 
 _version_from_file() {
-    # WHAT: extracts the value of the WERSJA constant from the given ollama_manager.py.
+    # WHAT: extracts the value of the WERSJA constant from the given app script.
     sed -n 's/^WERSJA = "\(.*\)"/\1/p' "$1" 2>/dev/null || true
 }
 
@@ -67,20 +77,29 @@ _confirm_apt_install() {
     esac
 }
 
+remove_legacy() {
+    # WHAT: removes an "Ollama Manager" (pre-rename) install - files only, the
+    #       settings and conversations stay (the app moves them on its first start).
+    rm -rf "$LEGACY_DIR"
+    rm -f "$LEGACY_DESKTOP_FILE" "$LEGACY_ICON_FILE"
+}
+
 remove_app() {
-    if [ ! -d "$TARGET_DIR" ] && [ ! -f "$DESKTOP_FILE" ]; then
-        echo "Ollama Manager is not installed - nothing to remove." >&2
+    if [ ! -d "$TARGET_DIR" ] && [ ! -f "$DESKTOP_FILE" ] && [ ! -d "$LEGACY_DIR" ]; then
+        echo "LamaDeck is not installed - nothing to remove." >&2
         exit 1
     fi
-    echo "Removing Ollama Manager..."
+    echo "Removing LamaDeck..."
     rm -rf "$TARGET_DIR"
     rm -f "$DESKTOP_FILE" "$ICON_FILE" "$OLD_ICON_FILE"
+    remove_legacy
     # WHY: the app's own "start after login" option (Settings) writes this file -
     #      left behind, KDE would try to start a removed program at every login.
-    rm -f "$HOME/.config/autostart/ollama-manager.desktop"
+    rm -f "$HOME/.config/autostart/lamadeck.desktop" "$HOME/.config/autostart/ollama-manager.desktop"
     command -v update-desktop-database >/dev/null 2>&1 \
         && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-    echo "Done. Ollama Manager has been removed (pip dependencies are kept - other tools may share them)."
+    echo "Done. LamaDeck has been removed (pip dependencies are kept - other tools may share them)."
+    echo "Your settings and saved conversations are kept in ~/.config/LamaDeck and ~/.local/share/LamaDeck."
 }
 
 # --- Removal flag --------------------------------------------------------------
@@ -90,16 +109,68 @@ if [ "${1:-}" = "--uninstall" ]; then
 fi
 
 if [ ! -f "$SOURCE_SCRIPT" ]; then
-    echo "Can't find ollama_manager.py next to install.sh - run this script from the repo directory." >&2
+    echo "Can't find lamadeck.py next to install.sh - run this script from the repo directory." >&2
     exit 1
 fi
 
 NEW_VERSION="$(_version_from_file "$SOURCE_SCRIPT")"
 
+# --- Detecting the .deb package ----------------------------------------------------
+# WHAT: if the app is already installed from the .deb package, warn and offer to
+#       remove it first (default) or abort; installing anyway needs an explicit "c".
+# WHY:  both installs at once mean two "LamaDeck" entries in the menu (one from
+#       /usr/share/applications, one from ~/.local/share/applications) and two copies
+#       of the app that update separately - confusing, and easy to miss.
+# WHY: checks both package names - "ollama-manager" (until 0.9.x) and "lamadeck"
+DEB_PACKAGE=""
+for candidate in lamadeck ollama-manager; do
+    if command -v dpkg-query >/dev/null 2>&1 \
+        && [ "$(dpkg-query -W -f='${Status}' "$candidate" 2>/dev/null)" = "install ok installed" ]; then
+        DEB_PACKAGE="$candidate"
+        break
+    fi
+    if [ -f "/usr/share/applications/$candidate.desktop" ]; then
+        DEB_PACKAGE="$candidate"
+        break
+    fi
+done
+if [ -n "$DEB_PACKAGE" ]; then
+    DEB_VERSION="$(dpkg-query -W -f='${Version}' "$DEB_PACKAGE" 2>/dev/null || true)"
+    echo "The app is already installed from the .deb package '$DEB_PACKAGE'${DEB_VERSION:+ (version $DEB_VERSION)}."
+    echo "Installing it with install.sh as well would give two entries in the menu and two"
+    echo "copies of the app that update separately."
+    read -r -p "[R]emove the .deb version first (sudo apt remove $DEB_PACKAGE), [c]ontinue anyway, or [a]bort? [R/c/a] " ANSWER || true
+    case "$ANSWER" in
+        [cC]*) echo "Continuing - keep in mind there will be two menu entries." ;;
+        [aA]*) echo "Aborted - nothing was changed."; exit 0 ;;
+        *)
+            sudo apt remove -y "$DEB_PACKAGE" || {
+                echo "Removing the .deb package failed - nothing else was changed." >&2
+                exit 1
+            }
+            ;;
+    esac
+fi
+
 # --- Detecting an existing install ---------------------------------------------
-if [ -f "$TARGET_SCRIPT" ]; then
-    INSTALLED_VERSION="$(_version_from_file "$TARGET_SCRIPT")"
-    case "$(_compare_versions "$INSTALLED_VERSION" "$NEW_VERSION")" in
+# WHY: an "Ollama Manager" install (pre-rename) counts as the installed version too -
+#      the update prompt then compares against it, and the old files are removed below.
+if [ ! -f "$TARGET_SCRIPT" ] && [ -f "$LEGACY_SCRIPT" ]; then
+    echo "Found the previous version of this app, installed as \"Ollama Manager\" - it will be replaced by LamaDeck."
+    INSTALLED_FILE="$LEGACY_SCRIPT"
+    LEGACY_FOUND=1
+else
+    INSTALLED_FILE="$TARGET_SCRIPT"
+fi
+if [ -f "$INSTALLED_FILE" ]; then
+    INSTALLED_VERSION="$(_version_from_file "$INSTALLED_FILE")"
+    COMPARISON="$(_compare_versions "$INSTALLED_VERSION" "$NEW_VERSION")"
+    # WHY: the same version under the old name is still worth replacing (new name, new
+    #      menu entry) - asked like an update (default Yes), not like a reinstall (default No)
+    if [ "${LEGACY_FOUND:-0}" = 1 ] && [ "$COMPARISON" = "same" ]; then
+        COMPARISON="older"
+    fi
+    case "$COMPARISON" in
         older)
             echo "Installed version: $INSTALLED_VERSION. Update available: $NEW_VERSION."
             read -r -p "Update now? [Y/n] " ANSWER || true
@@ -126,7 +197,7 @@ if [ -f "$TARGET_SCRIPT" ]; then
     esac
 fi
 
-echo "Installing Ollama Manager $NEW_VERSION..."
+echo "Installing LamaDeck $NEW_VERSION..."
 
 # 1) Python dependencies - no root (--user)
 install_python_deps() {
@@ -212,7 +283,7 @@ cp "$SOURCE_SCRIPT" "$TARGET_SCRIPT"
 chmod +x "$TARGET_SCRIPT"
 
 # WHY: interface translations (lang/*.json) must live next to the script -
-#      _KATALOG_LANG in the code is resolved relative to ollama_manager.py, not the CWD.
+#      _KATALOG_LANG in the code is resolved relative to lamadeck.py, not the CWD.
 if [ -d "$SOURCE_LANG_DIR" ]; then
     cp -r "$SOURCE_LANG_DIR" "$TARGET_DIR/"
 fi
@@ -231,11 +302,30 @@ fi
 
 # WHY: the app icon goes twice - next to the script (window icon, loaded by the
 #      app itself) and into the icon theme folder (application menu / taskbar).
-rm -f "$OLD_ICON_FILE" "$TARGET_DIR/ollama-manager.svg"
+rm -f "$OLD_ICON_FILE"
 if [ -f "$SOURCE_ICON" ]; then
     cp "$SOURCE_ICON" "$TARGET_DIR/"
     mkdir -p "$(dirname "$ICON_FILE")"
     cp "$SOURCE_ICON" "$ICON_FILE"
+fi
+
+# WHY: the pre-rename "Ollama Manager" files would leave a second, outdated entry in the menu
+remove_legacy
+# WHY: "start after login" from the old name would point to the removed script - rewritten
+#      here under the new name (the app would do it on its first start, but only if it
+#      gets started before the next login)
+LEGACY_AUTOSTART="$HOME/.config/autostart/ollama-manager.desktop"
+if [ -f "$LEGACY_AUTOSTART" ]; then
+    cat > "$HOME/.config/autostart/lamadeck.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=LamaDeck
+Exec="$(command -v python3)" "$TARGET_SCRIPT" --w-zasobniku
+Icon=lamadeck
+X-KDE-autostart-after=panel
+Terminal=false
+EOF
+    rm -f "$LEGACY_AUTOSTART"
 fi
 
 # 3) Application menu entry - Categories=Utility is the "Utilities" section in KDE.
@@ -245,11 +335,13 @@ mkdir -p "$(dirname "$DESKTOP_FILE")"
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Ollama Manager
-Comment=Manage the Ollama service and models
-Comment[pl]=Zarządzanie usługą i modelami Ollama
-Exec=python3 "$TARGET_DIR/ollama_manager.py"
-Icon=ollama-manager
+Name=LamaDeck
+GenericName=Local AI control panel
+GenericName[pl]=Panel lokalnego AI
+Comment=Control panel for your local AI stack: Ollama, LiteLLM, Open WebUI and chat
+Comment[pl]=Panel lokalnego stosu AI: Ollama, LiteLLM, Open WebUI i czat
+Exec=python3 "$TARGET_DIR/lamadeck.py"
+Icon=lamadeck
 Categories=Utility;
 Terminal=false
 StartupNotify=true
@@ -289,6 +381,6 @@ allow_service_log() {
 }
 allow_service_log
 
-echo "Done. Ollama Manager $NEW_VERSION should now be in the application menu (Utilities)."
+echo "Done. LamaDeck $NEW_VERSION should now be in the application menu (Utilities)."
 echo "If it doesn't show up right away, log out and log back in."
 echo "To uninstall: ./install.sh --uninstall"

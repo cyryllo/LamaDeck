@@ -1,10 +1,14 @@
-# Ollama Manager
+# LamaDeck
 
-A desktop app (PyQt6) for KDE that started as a simple [Ollama](https://ollama.com) service
-manager and grew into a control panel for a whole local AI stack: multi-host model management,
-a model aggregator (LiteLLM) that exposes one OpenAI-compatible endpoint for tools like
-Continue/VS Code, and a browser chat UI (Open WebUI). No terminal, no Docker, no cloud —
-everything runs on your LAN.
+A control panel for your local AI stack — a desktop app (PyQt6) for KDE. It started as a
+simple [Ollama](https://ollama.com) service manager and grew into one place for the whole
+stack: multi-host model management, a model aggregator (LiteLLM) that exposes one
+OpenAI-compatible endpoint for tools like Continue/VS Code, a browser chat UI (Open WebUI) and
+a built-in chat. No terminal, no Docker, no cloud — everything runs on your LAN.
+
+> **LamaDeck was called "Ollama Manager" until version 0.9.** It's an independent project, not
+> affiliated with Ollama. Updating from the old name keeps your settings and conversations —
+> the app moves them on its first start.
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
@@ -13,7 +17,7 @@ everything runs on your LAN.
 > [roadmap](#roadmap-to-10)), after which the project switches to bug fixes only.
 > [Bug reports and feedback](../../issues) are welcome.
 
-![Ollama Manager — Dashboard](om.png)
+![LamaDeck — Dashboard](om.png)
 
 ## Requirements
 
@@ -32,15 +36,15 @@ everything runs on your LAN.
 ## Installation and running
 
 First, clone the repository and enter its directory — the install scripts below
-expect to be run from there (they look for `ollama_manager.py` next to themselves):
+expect to be run from there (they look for `lamadeck.py` next to themselves):
 
 ```
-git clone https://github.com/cyryllo/Ollama-manager.git
-cd Ollama-manager
+git clone https://github.com/cyryllo/LamaDeck.git
+cd LamaDeck
 ```
 
 **As a menu app, no root (recommended)** — installs dependencies via pip, copies the app to
-`~/.local/share/ollama-manager` and adds a menu entry (Utilities section). Detects an existing
+`~/.local/share/lamadeck` and adds a menu entry (Utilities section). Detects an existing
 install and offers to update/reinstall accordingly:
 
 ```
@@ -53,14 +57,14 @@ Uninstall with `./install.sh --uninstall`.
 
 ```
 ./build-deb.sh
-sudo apt install ./ollama-manager_*_all.deb
+sudo apt install ./lamadeck_*_all.deb
 ```
 
 **Manually, for development** — no copying, no menu entry:
 
 ```
 pip install PyQt6 requests
-python3 ollama_manager.py
+python3 lamadeck.py
 ```
 
 ## Features
@@ -153,7 +157,7 @@ fonts are bundled, so it looks the same everywhere).
   your computer, no account — and adds its text to the question (a PDF link works too; long
   pages go through excerpt search). Pages that only load with JavaScript are reported as such
 - **Conversations are saved automatically** after every answer, one JSON file each in
-  `~/.local/share/OllamaManager/czaty/` — only on your computer, untouched by updates and
+  `~/.local/share/LamaDeck/czaty/` — only on your computer, untouched by updates and
   uninstalling. A list on the left opens, searches (titles and content), renames, exports to
   Markdown (`.md`) and deletes them;
   pictures are saved too, large files have to be attached again to keep searching them
@@ -214,7 +218,10 @@ fonts are bundled, so it looks the same everywhere).
 - [x] Chat: **regenerate** the last answer and **edit** the last question
 - [x] Chat: **copy the whole answer** and **export** a conversation to Markdown, plus **renaming**
   conversations
-- [ ] `install.sh`: warn when the app is already installed from the `.deb` package
+- [x] `install.sh`: warn when the app is already installed from the `.deb` package
+- [ ] **Own APT repository** — add it once, then `sudo apt install lamadeck` and updates
+  come with the system
+- [ ] **AppImage** — one file that runs on any distribution (Fedora, Arch, openSUSE…)
 
 - [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and
   adds its text to the question

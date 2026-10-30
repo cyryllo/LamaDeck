@@ -294,7 +294,6 @@
   "Obciążenie GPU · {proc}%": "GPU-Last · {proc}%",
   "Odznacz modele, których router ma nie udostępniać pod ich własną nazwą (aliasy działają dalej).": "Entfernen Sie das Häkchen bei Modellen, die der Router nicht unter ihrem eigenen Namen anbieten soll (Aliase funktionieren weiter).",
   "Ogólne": "Allgemein",
-  "Ollama Manager - lokalny stos AI": "Ollama Manager - lokaler KI-Stack",
   "Ollama na tym komputerze - zmienne środowiskowe": "Ollama auf diesem Computer - Umgebungsvariablen",
   "Ollama startuje razem z systemem": "Ollama startet mit dem System",
   "Open WebUI": "Open WebUI",
@@ -585,5 +584,6 @@
   "Zmień nazwę": "Umbenennen",
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Rechtsklick auf ein Gespräch: umbenennen, exportieren, löschen. Automatisch gespeichert, nur auf diesem Computer: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Neu erzeugen - mit dem rechts gewählten Modell",
-  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Frage bearbeiten - sie kommt zurück ins Eingabefeld, sie und die Antwort verschwinden aus dem Gespräch"
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Frage bearbeiten - sie kommt zurück ins Eingabefeld, sie und die Antwort verschwinden aus dem Gespräch",
+  "{nazwa} - lokalny stos AI": "{nazwa} - lokaler KI-Stack"
 }

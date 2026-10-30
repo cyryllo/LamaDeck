@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-#  Build a .deb package for Ollama Manager.
+#  Build a .deb package for LamaDeck (formerly Ollama Manager).
 #
-#  WHAT: packs ollama_manager.py + lang/ + theme.qss + fonts/ into /usr/share, adds a launcher
+#  WHAT: packs lamadeck.py + lang/ + theme.qss + fonts/ into /usr/share, adds a launcher
 #        script in /usr/bin and a .desktop entry in /usr/share/applications,
 #        then assembles it all into a single .deb via dpkg-deb.
 #  WHY:  a plain hand-written DEBIAN/control + dpkg-deb --build instead of
@@ -13,17 +13,17 @@
 #        pip with the system Python.
 #
 #  Run: ./build-deb.sh
-#  Output: ollama-manager_<version>_all.deb in the repo directory.
-#  Installing the result: sudo apt install ./ollama-manager_<version>_all.deb
+#  Output: lamadeck_<version>_all.deb in the repo directory.
+#  Installing the result: sudo apt install ./lamadeck_<version>_all.deb
 # =============================================================================
 set -euo pipefail
 
-PACKAGE_NAME="ollama-manager"
+PACKAGE_NAME="lamadeck"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR"
 
-if [ ! -f ollama_manager.py ]; then
-    echo "Can't find ollama_manager.py next to build-deb.sh - run this script from the repo directory." >&2
+if [ ! -f lamadeck.py ]; then
+    echo "Can't find lamadeck.py next to build-deb.sh - run this script from the repo directory." >&2
     exit 1
 fi
 
@@ -34,9 +34,9 @@ fi
 
 # WHY: package version ALWAYS synced with the WERSJA constant in the code -
 #      a single source of truth, same as for any other version change.
-VERSION="$(sed -n 's/^WERSJA = "\(.*\)"/\1/p' ollama_manager.py)"
+VERSION="$(sed -n 's/^WERSJA = "\(.*\)"/\1/p' lamadeck.py)"
 if [ -z "$VERSION" ]; then
-    echo "Could not extract WERSJA from ollama_manager.py" >&2
+    echo "Could not extract WERSJA from lamadeck.py" >&2
     exit 1
 fi
 
@@ -53,8 +53,8 @@ mkdir -p "$BUILD_DIR/usr/share/applications"
 mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps"
 
 # App + translations + stylesheet (see CLAUDE.md - lang/ and theme.qss MUST
-# travel with the script, both are resolved relative to ollama_manager.py's location)
-cp ollama_manager.py "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+# travel with the script, both are resolved relative to lamadeck.py's location)
+cp lamadeck.py "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp -r lang "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp theme.qss "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 # WHY: bundled Inter + JetBrains Mono (SIL OFL, licenses in fonts/) - loaded by the app
@@ -65,10 +65,10 @@ cp logo.png "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp logo.png "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"
 
 # WHY: a small wrapper instead of calling the full path straight from
-#      .desktop - this also lets `ollama-manager` be run from a terminal.
+#      .desktop - this also lets `lamadeck` be run from a terminal.
 cat > "$BUILD_DIR/usr/bin/$PACKAGE_NAME" <<EOF
 #!/bin/sh
-exec python3 /usr/share/$PACKAGE_NAME/ollama_manager.py "\$@"
+exec python3 /usr/share/$PACKAGE_NAME/lamadeck.py "\$@"
 EOF
 chmod 755 "$BUILD_DIR/usr/bin/$PACKAGE_NAME"
 
@@ -77,9 +77,11 @@ chmod 755 "$BUILD_DIR/usr/bin/$PACKAGE_NAME"
 cat > "$BUILD_DIR/usr/share/applications/$PACKAGE_NAME.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Ollama Manager
-Comment=Manage the Ollama service and models
-Comment[pl]=Zarządzanie usługą i modelami Ollama
+Name=LamaDeck
+GenericName=Local AI control panel
+GenericName[pl]=Panel lokalnego AI
+Comment=Control panel for your local AI stack: Ollama, LiteLLM, Open WebUI and chat
+Comment[pl]=Panel lokalnego stosu AI: Ollama, LiteLLM, Open WebUI i czat
 Exec=$PACKAGE_NAME
 Icon=$PACKAGE_NAME
 Categories=Utility;
@@ -88,6 +90,8 @@ StartupNotify=true
 EOF
 
 # --- Package metadata -----------------------------------------------------------
+# WHY: Replaces/Conflicts ollama-manager - the package's name until 0.9.x; apt removes the
+#      old package when this one is installed, so there's no second app in the menu.
 # WHY: python3-pyqt6/python3-requests as Depends (apt), not pip - these are
 #      the packages that provide the dependencies on Debian/Ubuntu (2026).
 #      'pkexec' as its own package, NOT 'policykit-1' - polkit was split into
@@ -106,14 +110,16 @@ Section: utils
 Priority: optional
 Architecture: all
 Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-requests, pkexec, systemd, curl
+Replaces: ollama-manager
+Conflicts: ollama-manager
 Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
-Homepage: https://github.com/cyryllo/Ollama-manager
-Description: Ollama service and model manager for KDE (PyQt6)
- Desktop app for managing a local Ollama instance: start/stop the systemd
- service, autostart, list/download/delete models, Open WebUI integration,
- LiteLLM model aggregator, and Ollama environment tuning (context length,
- keep-alive, Vulkan/iGPU backend, ...). Requires Ollama itself (the app can
- install it with one click) plus systemd and polkit.
+Homepage: https://github.com/cyryllo/LamaDeck
+Description: control panel for a local AI stack (Ollama, LiteLLM, Open WebUI)
+ Unofficial desktop app (PyQt6, KDE) for a local AI stack: the Ollama service
+ and models on several hosts, a LiteLLM router with one OpenAI-compatible
+ address, Open WebUI, and a built-in chat with speed statistics, attachments
+ and search in large files. Formerly called "Ollama Manager". Requires
+ systemd and polkit; Ollama itself can be installed from the app.
 EOF
 
 # WHY: refresh the menu database after install/removal - the same thing

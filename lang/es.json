@@ -294,7 +294,6 @@
   "Obciążenie GPU · {proc}%": "Carga de la GPU · {proc}%",
   "Odznacz modele, których router ma nie udostępniać pod ich własną nazwą (aliasy działają dalej).": "Desmarca los modelos que el router no debe ofrecer con su propio nombre (los alias siguen funcionando).",
   "Ogólne": "General",
-  "Ollama Manager - lokalny stos AI": "Ollama Manager - pila de IA local",
   "Ollama na tym komputerze - zmienne środowiskowe": "Ollama en este ordenador - variables de entorno",
   "Ollama startuje razem z systemem": "Ollama se inicia con el sistema",
   "Open WebUI": "Open WebUI",
@@ -585,5 +584,6 @@
   "Zmień nazwę": "Cambiar nombre",
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic derecho en una conversación: cambiar nombre, exportar, eliminar. Se guardan automáticamente, solo en este ordenador: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Volver a generar, con el modelo elegido ahora a la derecha",
-  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corregir la pregunta: vuelve al campo de texto y ella y su respuesta salen de la conversación"
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corregir la pregunta: vuelve al campo de texto y ella y su respuesta salen de la conversación",
+  "{nazwa} - lokalny stos AI": "{nazwa} - pila de IA local"
 }

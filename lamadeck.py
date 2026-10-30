@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
-#  Ollama Manager - menedżer Ollamy pod KDE (PyQt6)
+#  LamaDeck (dawniej Ollama Manager) - panel lokalnego stosu AI pod KDE (PyQt6):
+#  Ollama, router LiteLLM, Open WebUI i czat - nieoficjalny, niezwiązany z Ollamą
 #
 #  WHAT: okno do zarządzania Ollamą:
 #        - start / stop usługi systemd (przez pkexec = graficzny polkit KDE),
@@ -12,7 +13,7 @@
 #
 #  Zależności:  PyQt6, requests   ->  pip install PyQt6 requests
 #  Wymaga też:  systemd + polkit (pkexec) - standard na KDE/Debian.
-#  Uruchomienie: python3 ollama_manager.py
+#  Uruchomienie: python3 lamadeck.py
 # =============================================================================
 
 import sys
@@ -71,6 +72,12 @@ from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 # WHAT: wersja aplikacji - widoczna w tytule okna.
 # WHY:  ostatnia cyfra rośnie przy każdym commicie; pierwsze dwie zmieniają się
 #       tylko na wyraźne polecenie (patrz CLAUDE.md, sekcja "Wersjonowanie").
+# WHAT: nazwa programu - wyświetlana (NAZWA_PROGRAMU) i techniczna (ID_PROGRAMU: pliki
+#       .desktop, ikona, pakiet, katalogi). Do 0.9.x program nazywał się "Ollama Manager".
+# WHY:  nazwa bez "Ollama" - nie sugeruje oficjalnej aplikacji Ollamy (decyzja użytkownika
+#       2026-10-30, przed szerszym udostępnieniem od 1.0).
+NAZWA_PROGRAMU = "LamaDeck"
+ID_PROGRAMU = "lamadeck"
 WERSJA = "0.9.8"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
@@ -201,9 +208,59 @@ def _zapisz_jezyk(kod):
 DOMYSLNY_SERWER = {"nazwa": "Lokalny", "adres": OLLAMA_URL}
 
 
+def _katalog_config():
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+
+
+def _katalog_danych():
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+
+
+def _przenies_dane_ollama_manager():
+    # WHAT: jednorazowe przeniesienie danych z czasów nazwy "Ollama Manager" (do 0.9.x):
+    #       ustawienia, zapisane rozmowy, config routera LiteLLM i autostart programu.
+    # WHY:  zmiana nazwy nie może nikomu zabrać hostów, aliasów ani rozmów. Przenosimy
+    #       tylko, gdy nowego miejsca jeszcze nie ma - nigdy nie nadpisujemy nowych danych.
+    #       Błąd przeniesienia nie może zablokować startu programu.
+    try:
+        stary = _katalog_config() / "OllamaManager" / "OllamaManager.conf"
+        nowy = _katalog_config() / NAZWA_PROGRAMU / f"{NAZWA_PROGRAMU}.conf"
+        if stary.exists() and not nowy.exists():
+            nowy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(stary), str(nowy))
+        stare_czaty = _katalog_danych() / "OllamaManager" / "czaty"
+        nowe_czaty = _katalog_danych() / NAZWA_PROGRAMU / "czaty"
+        if stare_czaty.is_dir() and not nowe_czaty.exists():
+            nowe_czaty.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(stare_czaty), str(nowe_czaty))
+        for katalog in (stary.parent, stare_czaty.parent):
+            if katalog.is_dir() and not any(katalog.iterdir()):
+                katalog.rmdir()
+        # WHY: usługa routera (systemd --user) wskazuje plik configu po ścieżce - po
+        #      przeniesieniu poprawiamy ją w pliku usługi, żeby router dalej startował
+        stary_litellm = _katalog_config() / "ollama-manager" / "litellm_config.yaml"
+        nowy_litellm = _litellm_config_sciezka()
+        if stary_litellm.exists() and not nowy_litellm.exists():
+            nowy_litellm.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(stary_litellm), str(nowy_litellm))
+            usluga = _litellm_service_sciezka()
+            if usluga.exists() and str(stary_litellm) in usluga.read_text():
+                usluga.write_text(usluga.read_text().replace(str(stary_litellm), str(nowy_litellm)))
+                subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
+            if not any(stary_litellm.parent.iterdir()):
+                stary_litellm.parent.rmdir()
+        # WHY: autostart po zalogowaniu wskazywał starą nazwę i stary plik programu
+        stary_autostart = Path.home() / ".config" / "autostart" / "ollama-manager.desktop"
+        if stary_autostart.exists():
+            stary_autostart.unlink()
+            ustaw_autostart_programu(True)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def _ustawienia():
     # WHAT: jeden wspólny obiekt QSettings (plik INI w ~/.config).
-    return QSettings("OllamaManager", "OllamaManager")
+    return QSettings(NAZWA_PROGRAMU, NAZWA_PROGRAMU)
 
 
 def _wczytaj_serwery():
@@ -1066,7 +1123,8 @@ def _litellm_dziala():
 
 
 def _litellm_config_sciezka():
-    return Path.home() / ".config" / "ollama-manager" / "litellm_config.yaml"
+    # WHY: obok ustawień programu (~/.config/LamaDeck) - jeden katalog zamiast dwóch
+    return _katalog_config() / NAZWA_PROGRAMU / "litellm_config.yaml"
 
 
 def _wykryj_modele_na_serwerach(serwery):
@@ -3580,7 +3638,7 @@ def pobierz_strone(url):
     try:
         odp = requests.get(url, stream=True, timeout=(10, 30), headers={
             # WHY: część serwisów odrzuca zapytania bez nazwy przeglądarki
-            "User-Agent": f"Mozilla/5.0 (X11; Linux x86_64) OllamaManager/{WERSJA}",
+            "User-Agent": f"Mozilla/5.0 (X11; Linux x86_64) {NAZWA_PROGRAMU}/{WERSJA}",
             "Accept-Language": "pl,en;q=0.8"})
         odp.raise_for_status()
         dane = b""
@@ -3650,9 +3708,9 @@ def _tresc_dla_modelu(wiadomosc):
 
 
 # --- Zapisane rozmowy czatu ---
-# WHAT: każda rozmowa to jeden plik JSON w ~/.local/share/OllamaManager/czaty/,
+# WHAT: każda rozmowa to jeden plik JSON w ~/.local/share/LamaDeck/czaty/,
 #       zapisywany po każdej odpowiedzi.
-# WHY:  osobny katalog, NIE ~/.local/share/ollama-manager - tam instaluje się program,
+# WHY:  osobny katalog, NIE ~/.local/share/lamadeck - tam instaluje się program,
 #       a "./install.sh --uninstall" kasuje go w całości (razem z rozmowami).
 #       Ollama sama niczego nie zapamiętuje - historię zawsze trzyma program.
 _WERSJA_PLIKU_ROZMOWY = 1
@@ -3662,7 +3720,7 @@ _KLUCZE_ROBOCZE_ZALACZNIKA = {"fragmenty", "wektory", "gotowy", "procent", "eta"
 
 
 def katalog_rozmow():
-    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "OllamaManager" / "czaty"
+    return _katalog_danych() / NAZWA_PROGRAMU / "czaty"
 
 
 def _tytul_rozmowy(wiadomosci):
@@ -4727,7 +4785,7 @@ class KartaModelu(QFrame):
 # =============================================================================
 #  Zasobnik systemowy (makieta Tray.dc.html) - ikona przy zegarze KDE
 # =============================================================================
-_PLIK_AUTOSTARTU = Path.home() / ".config" / "autostart" / "ollama-manager.desktop"
+_PLIK_AUTOSTARTU = Path.home() / ".config" / "autostart" / f"{ID_PROGRAMU}.desktop"
 
 
 def zasobnik_wlaczony():
@@ -4753,16 +4811,16 @@ def ustaw_autostart_programu(wlacz):
     _PLIK_AUTOSTARTU.write_text(
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=Ollama Manager\n"
+        f"Name={NAZWA_PROGRAMU}\n"
         f'Exec="{sys.executable}" "{Path(__file__).resolve()}" --w-zasobniku\n'
-        "Icon=ollama-manager\n"
+        f"Icon={ID_PROGRAMU}\n"
         "X-KDE-autostart-after=panel\n"
         "Terminal=false\n"
     )
 
 
 # WHAT: tytuł okienka zasobnika - po nim skrypt KWin znajduje okno do przesunięcia.
-_TYTUL_OKNA_ZASOBNIKA = "Ollama Manager - zasobnik"
+_TYTUL_OKNA_ZASOBNIKA = f"{NAZWA_PROGRAMU} - zasobnik"
 
 # WHAT: skrypt KWin stawiający okienko w rogu nad zasobnikiem (przy panelu).
 # WHY:  na Waylandzie program nie może sam ustawić położenia okna ani poznać
@@ -4796,7 +4854,7 @@ def _kwin_przesun_okienko_zasobnika():
     #       i ustawia okienko przy każdym kolejnym pojawieniu się. Stary skrypt
     #       o tej samej nazwie (np. z poprzedniego uruchomienia programu)
     #       najpierw wyładowujemy, żeby nie działały dwie kopie naraz.
-    plik = Path(tempfile.gettempdir()) / f"ollama-manager-zasobnik-{getpass.getuser()}.js"
+    plik = Path(tempfile.gettempdir()) / f"{ID_PROGRAMU}-zasobnik-{getpass.getuser()}.js"
     try:
         plik.write_text(_SKRYPT_KWIN_ZASOBNIK)
     except OSError:
@@ -4804,8 +4862,8 @@ def _kwin_przesun_okienko_zasobnika():
     kwin = QDBusInterface("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting")
     if not kwin.isValid():
         return  # WHY: inny menedżer okien niż KWin - okienko zostaje tam, gdzie je postawił
-    kwin.call("unloadScript", "ollama-manager-zasobnik")
-    kwin.call("loadScript", str(plik), "ollama-manager-zasobnik")
+    kwin.call("unloadScript", f"{ID_PROGRAMU}-zasobnik")
+    kwin.call("loadScript", str(plik), f"{ID_PROGRAMU}-zasobnik")
     kwin.call("start")
 
 
@@ -4815,7 +4873,7 @@ def powiadomienie_systemowe(tytul, tekst, zasobnik=None):
     #       wyłączony, a bez ikony w zasobniku Qt nie pokaże żadnego dymka.
     #       DBus działa zawsze, bez dodatkowych programów (notify-send).
     #       "desktop-entry" łączy powiadomienie z wpisem programu w menu, więc KDE
-    #       pokazuje je pod nazwą i ikoną Ollama Managera (i pozwala je wyciszyć
+    #       pokazuje je pod nazwą i ikoną programu (i pozwala je wyciszyć
     #       w Ustawieniach systemu → Powiadomienia).
     dbus = QDBusInterface("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                           "org.freedesktop.Notifications")
@@ -4826,9 +4884,9 @@ def powiadomienie_systemowe(tytul, tekst, zasobnik=None):
         bez_id.convert(QMetaType(QMetaType.Type.UInt.value))
         bez_akcji = QDBusArgument()
         bez_akcji.add([], QMetaType.Type.QStringList.value)
-        ikona_pliku = str(_PLIK_IKONY) if _PLIK_IKONY.exists() else "ollama-manager"
-        odp = dbus.call("Notify", "Ollama Manager", bez_id, ikona_pliku, tytul, tekst, bez_akcji,
-                        {"desktop-entry": QVariant("ollama-manager")}, 10000)
+        ikona_pliku = str(_PLIK_IKONY) if _PLIK_IKONY.exists() else ID_PROGRAMU
+        odp = dbus.call("Notify", NAZWA_PROGRAMU, bez_id, ikona_pliku, tytul, tekst, bez_akcji,
+                        {"desktop-entry": QVariant(ID_PROGRAMU)}, 10000)
         if odp.type() != QDBusMessage.MessageType.ErrorMessage:
             return
     # WHY: awaryjnie (pulpit bez usługi powiadomień) - dymek ikony, jeśli jest w zasobniku
@@ -5222,7 +5280,7 @@ class MainWindow(QMainWindow):
         self._jezyk_aktywny = _wczytaj_jezyk_zapisany()
         _wczytaj_jezyk(self._jezyk_aktywny)
 
-        self.setWindowTitle(_("Ollama Manager - lokalny stos AI"))
+        self.setWindowTitle(_("{nazwa} - lokalny stos AI").format(nazwa=NAZWA_PROGRAMU))
         # WHY: makiety mają 1280x840 razem z paskiem tytułu - tyle potrzeba,
         #      żeby każdy ekran mieścił się bez ściskania kart.
         # WHY: 1600x900 zamiast 1280x800 z makiet - prośba użytkownika ("program za
@@ -5327,7 +5385,7 @@ class MainWindow(QMainWindow):
         marka.addWidget(logo)
         napisy = QVBoxLayout()
         napisy.setSpacing(0)
-        nazwa = QLabel("Ollama Manager")
+        nazwa = QLabel(NAZWA_PROGRAMU)
         nazwa.setObjectName("brandName")
         napisy.addWidget(nazwa)
         wersja = QLabel(f"v{WERSJA}")
@@ -5384,10 +5442,10 @@ class MainWindow(QMainWindow):
         v.addWidget(self.ramka_separatora)
         v.addWidget(self.lista_programu)
 
-        link = QPushButton("github.com/cyryllo/Ollama-manager")
+        link = QPushButton("github.com/cyryllo/LamaDeck")
         link.setObjectName("sidebarLink")
         link.setCursor(Qt.CursorShape.PointingHandCursor)
-        link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/cyryllo/Ollama-manager")))
+        link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/cyryllo/LamaDeck")))
         v.addWidget(link)
         return panel
 
@@ -9054,7 +9112,7 @@ class MainWindow(QMainWindow):
         self._wypelnij_dziennik()
 
     def zapisz_dziennik(self):
-        domyslny = str(Path.home() / f"ollama-manager-dziennik-{time.strftime('%Y-%m-%d')}.txt")
+        domyslny = str(Path.home() / f"{ID_PROGRAMU}-dziennik-{time.strftime('%Y-%m-%d')}.txt")
         plik, _filtr = QFileDialog.getSaveFileName(self, _("Zapisz dziennik"), domyslny, _("Plik tekstowy (*.txt)"))
         if not plik:
             return
@@ -9542,7 +9600,7 @@ class MainWindow(QMainWindow):
             dzialajace = sum(1 for z, d in ((stan["zainstalowana"], stan["active"]),
                                             (stan["litellm"], stan["litellm_dziala"]),
                                             (stan["webui"], stan["webui_dziala"])) if z and d)
-            self.zasobnik.setToolTip("Ollama Manager - " + _("działa: {n}").format(n=dzialajace))
+            self.zasobnik.setToolTip(f"{NAZWA_PROGRAMU} - " + _("działa: {n}").format(n=dzialajace))
         if self._zasobnik_otwarty():
             self.okno_zasobnika.odswiez()
 
@@ -9584,7 +9642,7 @@ class MainWindow(QMainWindow):
                 # WHY: raz - żeby nikt nie myślał, że program się zamknął, a on dalej działa
                 _ustawienia().setValue("zasobnik/powiadomiono", True)
                 self.zasobnik.showMessage(
-                    "Ollama Manager",
+                    NAZWA_PROGRAMU,
                     _("Program działa dalej w zasobniku. Zamkniesz go przez \"Zakończ\" w menu ikony."),
                     _ikona_programu(), 8000)
             return
@@ -9625,7 +9683,7 @@ class MainWindow(QMainWindow):
         self._jezyk_aktywny = kod
         _wczytaj_jezyk(kod)
         _zapisz_jezyk(kod)
-        self.setWindowTitle(_("Ollama Manager - lokalny stos AI"))
+        self.setWindowTitle(_("{nazwa} - lokalny stos AI").format(nazwa=NAZWA_PROGRAMU))
         self._buduj_ui()
         # WHY: okienko i menu zasobnika też mają napisy - budujemy je od nowa
         if self.okno_zasobnika is not None:
@@ -9675,18 +9733,19 @@ def _wczytaj_motyw(app):
 
 
 def main():
+    _przenies_dane_ollama_manager()  # WHY: przed pierwszym użyciem QSettings
     app = QApplication(sys.argv)
-    app.setApplicationName("Ollama Manager")
+    app.setApplicationName(NAZWA_PROGRAMU)
     app.setWindowIcon(_ikona_programu())
     # WHY: KDE (Wayland) łączy okno z wpisem .desktop po tej nazwie - pasek zadań
     #      pokaże wtedy ikonę z menu, a nie ogólną ikonę Pythona.
-    app.setDesktopFileName("ollama-manager")
+    app.setDesktopFileName(ID_PROGRAMU)
     w_zasobniku = "--w-zasobniku" in sys.argv
 
     # WHAT: tylko jedna kopia programu naraz.
     # WHY:  z zasobnikiem program działa w tle (np. z autostartu) - drugie
     #       uruchomienie z menu pokazuje istniejące okno, zamiast drugiej ikony.
-    nazwa_gniazda = f"ollama-manager-{getpass.getuser()}"
+    nazwa_gniazda = f"{ID_PROGRAMU}-{getpass.getuser()}"
     gniazdo = QLocalSocket()
     gniazdo.connectToServer(nazwa_gniazda)
     if gniazdo.waitForConnected(300):

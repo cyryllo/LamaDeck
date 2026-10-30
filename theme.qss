@@ -1,5 +1,5 @@
 /*
- * Ollama Manager - motyw Breeze Dark zgodny z makietami (docs/mockups).
+ * LamaDeck - motyw Breeze Dark zgodny z makietami (docs/mockups).
  *
  * CO: arkusz stylów Qt dla całego okna.
  * DLACZEGO: jeden plik z kolorami zamiast kolorów rozsianych po kodzie,
@@ -7,10 +7,10 @@
  *
  * Kopia wzoru z Wyglad/docs/mockups/theme.qss, rozszerzona o elementy
  * potrzebne w aplikacji (pasek boczny, ekran "Hosty Ollama", zwykłe widżety
- * starszych zakładek). Leży obok ollama_manager.py - install.sh i
+ * starszych zakładek). Leży obok lamadeck.py - install.sh i
  * build-deb.sh kopiują go razem ze skryptem.
  *
- * Użycie w Pythonie: _wczytaj_motyw(app) w ollama_manager.py
+ * Użycie w Pythonie: _wczytaj_motyw(app) w lamadeck.py
  * Elementy wybieramy przez objectName, np. frame.setObjectName("card"),
  * albo przez właściwości, np. label.setProperty("state", "ok").
  */
@@ -331,7 +331,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 
 /* =====================================================================
  * Elementy rysowane w kodzie - kolory przez qproperty (Paleta, Przelacznik,
- * Pierscien, Wykres, SchematRoutera w ollama_manager.py)
+ * Pierscien, Wykres, SchematRoutera w lamadeck.py)
  * ===================================================================== */
 Paleta {
     qproperty-tekst: #e8eaed;
