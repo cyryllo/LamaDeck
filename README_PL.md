@@ -129,6 +129,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - **Statystyki szybkości** każdej odpowiedzi, mierzone przez samą Ollamę: generowanie
   i przetwarzanie pytania w tokenach/s, liczba tokenów, czas wczytania modelu, czas całkowity —
   przydatne do porównywania modeli i ustawień Ollamy
+- **Zajętość kontekstu**: ile okna kontekstu modelu zajmuje rozmowa (np. „4 051 / 65 536
+  tokenów”), z ostrzeżeniem od 80% — zanim model po cichu zacznie zapominać jej początek
 - Opcjonalny podgląd rozumowania modelu (modele, które „myślą”, np. qwen3)
 - **Załączniki: zdjęcia, dokumenty i pliki tekstowe** — przycisk 📎, przeciągnięcie pliku albo
   wklejenie zrzutu ekranu (Ctrl+V). Zdjęcia trafiają do modeli, które widzą obrazy (vision),
@@ -200,8 +202,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 - [x] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
   rozmów (otwieranie, usuwanie, wyszukiwanie)
-- [ ] Czat: **okno kontekstu dla rozmowy** i wskaźnik zajętości (np. „4 051 / 65 536 tokenów”),
-  który ostrzeże, zanim model zacznie zapominać początek rozmowy
+- [x] Czat: **wskaźnik zajętości kontekstu** (np. „4 051 / 65 536 tokenów”), który ostrzeże,
+  zanim model zacznie zapominać początek rozmowy
 - [ ] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
 - [ ] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
 - [ ] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown

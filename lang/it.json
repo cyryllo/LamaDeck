@@ -562,5 +562,9 @@
   "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "la pagina è quasi vuota: probabilmente il contenuto si carica solo nel browser (JavaScript); copia il testo e incollalo nella domanda",
   "Strona: {nazwa} ({kb} KB)": "Pagina: {nazwa} ({kb} KB)",
   "Pobieram: {linki}...": "Scarico: {linki}...",
-  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Invia\" invierà la domanda senza questa pagina."
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Invia\" invierà la domanda senza questa pagina.",
+  "Kontekst rozmowy": "Contesto della conversazione",
+  "{uzyte} / {okno} tokenów ({proc}%)": "{uzyte} / {okno} token ({proc}%)",
+  "Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "La finestra di contesto è quasi piena: il modello inizia a dimenticare l'inizio della conversazione. Inizia una nuova conversazione o aumenta OLLAMA_CONTEXT_LENGTH in Impostazioni.",
+  "Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Ti stai avvicinando al limite della finestra di contesto: presto il modello inizierà a dimenticare l'inizio della conversazione. Inizia una nuova conversazione o aumenta OLLAMA_CONTEXT_LENGTH in Impostazioni."
 }

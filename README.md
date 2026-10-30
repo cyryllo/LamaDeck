@@ -128,6 +128,9 @@ fonts are bundled, so it looks the same everywhere).
 - **Speed stats** for every answer, measured by Ollama itself: generation and prompt processing in
   tokens/s, token counts, model loading time, total time — handy for comparing models and
   Ollama settings
+- **Context usage**: how much of the model's context window the conversation takes (e.g.
+  "4,051 / 65,536 tokens"), with a warning from 80% — before the model silently starts
+  forgetting the beginning
 - Optional view of the model's reasoning (models that "think", e.g. qwen3)
 - **Attach pictures, documents and text files**: 📎 button, drag & drop or paste a screenshot
   (Ctrl+V). Pictures go to models that can see them (vision); text files (code, .txt, .md,
@@ -200,8 +203,8 @@ fonts are bundled, so it looks the same everywhere).
 
 - [x] Chat: **automatic saving of conversations** to local files, with a list of saved
   conversations (open, delete, search)
-- [ ] Chat: **context window per conversation** and a usage indicator (e.g. "4,051 / 65,536
-  tokens") that warns before the model starts forgetting the beginning
+- [x] Chat: a **context usage indicator** (e.g. "4,051 / 65,536 tokens") that warns before the
+  model starts forgetting the beginning
 - [ ] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
 - [ ] Chat: **regenerate** the last answer and **edit** the last question
 - [ ] Chat: **copy the whole answer** and **export** a conversation to Markdown

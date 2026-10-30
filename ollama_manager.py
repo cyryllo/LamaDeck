@@ -2449,6 +2449,21 @@ class CzatWorker(WatekTla):
             except Exception:
                 pass
 
+    def _okno_kontekstu(self):
+        # WHAT: okno kontekstu, z jakim model NAPRAWDĘ działa (/api/ps: context_length); None = nie wiadomo.
+        # WHY:  to nie zawsze maksimum modelu (gemma4: 262 144) - Ollama uruchamia go z oknem
+        #       z OLLAMA_CONTEXT_LENGTH albo domyślnym; po przekroczeniu po cichu obcina
+        #       najstarszą część rozmowy, więc liczy się właśnie ta liczba.
+        try:
+            odp = requests.get(f"{self.adres}/api/ps", timeout=3)
+            odp.raise_for_status()
+            for m in odp.json().get("models", []):
+                if self.model in (m.get("name"), m.get("model")):
+                    return m.get("context_length")
+        except (requests.RequestException, ValueError):
+            pass
+        return None
+
     def _model_w_pamieci(self):
         # WHAT: czy model jest już wczytany na tym hoście (/api/ps); None = nie wiadomo.
         # WHY:  Ollama nie wysyła żadnego znaku "wczytuję model" ani postępu wczytywania -
@@ -2515,6 +2530,8 @@ class CzatWorker(WatekTla):
                         statystyki = dane
             if self._anuluj:
                 statystyki = {"anulowano": True}
+            elif statystyki:
+                statystyki["okno_kontekstu"] = self._okno_kontekstu()
             self.zakonczono.emit(True, statystyki)
         except Exception as e:
             if self._anuluj:
@@ -7493,6 +7510,22 @@ class MainWindow(QMainWindow):
             self._przelacz_rozumowanie)
         self.sw_czat_rozumowanie.ustaw_cicho(self.widok_czatu.pokaz_myslenie)
 
+        # WHAT: ile okna kontekstu zajmuje rozmowa - pasek i podpowiedź przy zapełnieniu.
+        uk.addWidget(_etykieta(_("Kontekst rozmowy"), "h2"))
+        self.lbl_kontekst = _etykieta("—", "mono")
+        uk.addWidget(self.lbl_kontekst)
+        self.pasek_kontekstu = QProgressBar()
+        self.pasek_kontekstu.setObjectName("meter")
+        self.pasek_kontekstu.setTextVisible(False)
+        self.pasek_kontekstu.setRange(0, 1000)
+        uk.addWidget(self.pasek_kontekstu)
+        self.lbl_kontekst_rada = _etykieta("", "muted")
+        self.lbl_kontekst_rada.setObjectName("contextHint")
+        self.lbl_kontekst_rada.setWordWrap(True)
+        self.lbl_kontekst_rada.setContentsMargins(0, 0, 0, 6)
+        self.lbl_kontekst_rada.hide()
+        uk.addWidget(self.lbl_kontekst_rada)
+
         uk.addWidget(_etykieta(_("Ostatnia odpowiedź"), "h2"))
         self._lbl_stat_czatu = {}
         for klucz, nazwa, opis in (
@@ -7525,6 +7558,7 @@ class MainWindow(QMainWindow):
         self._wypelnij_liste_rozmow()
         self._odswiez_modele_czatu()
         self._pokaz_czat()
+        self._pokaz_kontekst()
         self._pokaz_zalaczniki()
         self._odswiez_przycisk_czatu()
         return strona
@@ -7886,6 +7920,7 @@ class MainWindow(QMainWindow):
         self._czat = []
         self._czat_id = None  # WHY: nowy plik powstanie przy pierwszej odpowiedzi
         self._pokaz_czat()
+        self._pokaz_kontekst()
         self._wypelnij_liste_rozmow()
         self.pole_czat.setFocus()
 
@@ -7971,6 +8006,7 @@ class MainWindow(QMainWindow):
         if indeks >= 0:
             self.combo_czat_model.setCurrentIndex(indeks)
         self._pokaz_czat(do_dolu=True)
+        self._pokaz_kontekst()
 
     def _menu_rozmowy(self, punkt):
         element = self.lista_rozmow.itemAt(punkt)
@@ -8180,10 +8216,53 @@ class MainWindow(QMainWindow):
                 ostatnia["przerwano"] = not ostatnia["tresc"].strip()
             else:
                 ostatnia["stat"] = self._statystyki_czatu(wynik)
+                # WHY: prompt_eval_count to CAŁA historia (sprawdzone: także gdy Ollama ma ją
+                #      w pamięci podręcznej - ta część jest osobno w prompt_eval_cached_count)
+                ostatnia["kontekst"] = [(wynik.get("prompt_eval_count") or 0) + (wynik.get("eval_count") or 0),
+                                        wynik.get("okno_kontekstu")]
             self._pokaz_czat()
+            self._pokaz_kontekst()
             self._zapisz_biezaca_rozmowe()
         self._odswiez_przycisk_czatu()
         self.odswiez_modele()  # WHY: model jest teraz w pamięci - widać to w opisie i na ekranie Modele
+
+    def _pokaz_kontekst(self):
+        # WHAT: "4 051 / 65 536 tokenów (6%)" z ostatniej odpowiedzi; od 80% ostrzeżenie,
+        #       od 95% - model zaczyna zapominać początek rozmowy.
+        if not hasattr(self, "lbl_kontekst"):
+            return
+        uzyte, okno = next((w["kontekst"] for w in reversed(self._czat) if w.get("kontekst")), (None, None))
+        stan, rada = "", ""
+
+        def liczba(n):
+            return f"{n:,}".replace(",", "\u202f")  # WHY: wąska spacja co 3 cyfry - 65 536
+
+        if uzyte is None:
+            self.lbl_kontekst.setText("—")
+            self.pasek_kontekstu.setValue(0)
+        elif not okno:
+            # WHY: host nie podał okna (np. starsza Ollama) - pokazujemy samą zajętość
+            self.lbl_kontekst.setText(_("{n} tokenów").format(n=liczba(uzyte)))
+            self.pasek_kontekstu.setValue(0)
+        else:
+            udzial = uzyte / okno
+            self.lbl_kontekst.setText(_("{uzyte} / {okno} tokenów ({proc}%)").format(
+                uzyte=liczba(uzyte), okno=liczba(okno), proc=min(100, round(100 * udzial))))
+            self.pasek_kontekstu.setValue(min(1000, round(1000 * udzial)))
+            if udzial >= 0.95:
+                stan = "error"
+                rada = _("Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. "
+                         "Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
+            elif udzial >= 0.8:
+                stan = "warn"
+                rada = _("Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek "
+                         "rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.")
+        self.pasek_kontekstu.setProperty("state", stan)
+        _odswiez_styl(self.pasek_kontekstu)
+        self.lbl_kontekst_rada.setText(rada)
+        self.lbl_kontekst_rada.setProperty("state", stan)
+        _odswiez_styl(self.lbl_kontekst_rada)
+        self.lbl_kontekst_rada.setVisible(bool(rada))
 
     def _statystyki_czatu(self, d):
         # WHAT: tokeny/s i czasy z ostatniej linii strumienia Ollamy (czasy w nanosekundach).

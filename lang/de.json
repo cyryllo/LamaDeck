@@ -562,5 +562,9 @@
   "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "die Seite ist fast leer - der Inhalt wird wohl erst im Browser geladen (JavaScript); kopiere den Text und füge ihn in die Frage ein",
   "Strona: {nazwa} ({kb} KB)": "Seite: {nazwa} ({kb} KB)",
   "Pobieram: {linki}...": "Lade: {linki}...",
-  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Senden\" schickt die Frage ohne diese Seite."
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Senden\" schickt die Frage ohne diese Seite.",
+  "Kontekst rozmowy": "Gesprächskontext",
+  "{uzyte} / {okno} tokenów ({proc}%)": "{uzyte} / {okno} Tokens ({proc}%)",
+  "Okno kontekstu jest prawie pełne - model zaczyna zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Das Kontextfenster ist fast voll - das Modell beginnt, den Anfang des Gesprächs zu vergessen. Starte ein neues Gespräch oder erhöhe OLLAMA_CONTEXT_LENGTH in den Einstellungen.",
+  "Zbliżasz się do limitu okna kontekstu - wkrótce model zacznie zapominać początek rozmowy. Zacznij nową rozmowę albo zwiększ OLLAMA_CONTEXT_LENGTH w Ustawieniach.": "Du näherst dich der Grenze des Kontextfensters - bald vergisst das Modell den Anfang des Gesprächs. Starte ein neues Gespräch oder erhöhe OLLAMA_CONTEXT_LENGTH in den Einstellungen."
 }

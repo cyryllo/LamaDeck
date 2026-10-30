@@ -603,3 +603,7 @@ QListWidget#chatList { background: transparent; border: none; }
 QListWidget#chatList::item { padding: 8px 10px; margin-bottom: 2px; border-radius: 8px; color: #c9cfd6; }
 QListWidget#chatList::item:hover { background: #2a2f36; }
 QListWidget#chatList::item:selected { background: #1d3a4f; color: #e8eaed; }
+/* Ekran Czat - pasek zajętości okna kontekstu (QProgressBar#meter) i podpowiedź pod nim */
+QProgressBar#meter[state="warn"]::chunk { background: #f0b453; }
+QFrame#card QLabel#contextHint[state="warn"] { color: #f0b453; }
+QFrame#card QLabel#contextHint[state="error"] { color: #f47c84; }
