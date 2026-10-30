@@ -142,6 +142,9 @@ fonts are bundled, so it looks the same everywhere).
   is needed, and nothing is stored on disk. The embedding model is chosen in Settings ("Chat"
   card); without one, a button there downloads the recommended multilingual
   `nomic-embed-text-v2-moe`
+- **Links in a question**: paste a link and the app downloads the page itself — straight from
+  your computer, no account — and adds its text to the question (a PDF link works too; long
+  pages go through excerpt search). Pages that only load with JavaScript are reported as such
 - **Conversations are saved automatically** after every answer, one JSON file each in
   `~/.local/share/OllamaManager/czaty/` — only on your computer, untouched by updates and
   uninstalling. A list on the left opens, searches (titles and content) and deletes them;
@@ -204,7 +207,15 @@ fonts are bundled, so it looks the same everywhere).
 - [ ] Chat: **copy the whole answer** and **export** a conversation to Markdown
 - [ ] `install.sh`: warn when the app is already installed from the `.deb` package
 
-**After 1.0: bug fixes only.** The app covers what it set out to do; anything bigger
+- [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and
+  adds its text to the question
+
+**1.1 — web search in the chat.** A switch next to the message: the model writes a few search
+queries, the app searches, reads the pages and answers with sources — like Open WebUI does,
+and with any model. Results from Ollama's own web search (free ollama.com account) or your own
+SearXNG server; off by default, with a clear note that queries go to the internet.
+
+**After that: bug fixes only.** The app covers what it set out to do; anything bigger
 (user accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.
 
 ## Notes

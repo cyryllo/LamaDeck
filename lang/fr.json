@@ -555,5 +555,12 @@
   "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Attendez la fin de la réponse ou arrêtez-la.",
   "Nie udało się otworzyć rozmowy: {blad}": "Impossible d'ouvrir la conversation : {blad}",
   "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Supprimer la conversation « {tytul} » ? C'est irréversible.",
-  "Nie udało się usunąć rozmowy: {blad}": "Impossible de supprimer la conversation : {blad}"
+  "Nie udało się usunąć rozmowy: {blad}": "Impossible de supprimer la conversation : {blad}",
+  "strona jest za duża (ponad 10 MB)": "la page est trop volumineuse (plus de 10 Mo)",
+  "nie udało się pobrać strony ({blad})": "impossible de télécharger la page ({blad})",
+  "pod tym linkiem nie ma strony ani tekstu ({typ})": "ce lien ne mène ni à une page ni à du texte ({typ})",
+  "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "la page est presque vide - son contenu ne se charge sans doute que dans un navigateur (JavaScript) ; copiez le texte et collez-le dans la question",
+  "Strona: {nazwa} ({kb} KB)": "Page : {nazwa} ({kb} Ko)",
+  "Pobieram: {linki}...": "Téléchargement : {linki}...",
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "« Envoyer » enverra la question sans cette page."
 }

@@ -555,5 +555,12 @@
   "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Wait for the answer to finish or stop it.",
   "Nie udało się otworzyć rozmowy: {blad}": "Could not open the conversation: {blad}",
   "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Delete the conversation \"{tytul}\"? This can't be undone.",
-  "Nie udało się usunąć rozmowy: {blad}": "Could not delete the conversation: {blad}"
+  "Nie udało się usunąć rozmowy: {blad}": "Could not delete the conversation: {blad}",
+  "strona jest za duża (ponad 10 MB)": "the page is too big (over 10 MB)",
+  "nie udało się pobrać strony ({blad})": "could not download the page ({blad})",
+  "pod tym linkiem nie ma strony ani tekstu ({typ})": "this link is neither a page nor text ({typ})",
+  "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "the page is almost empty - its content probably loads only in a browser (JavaScript); copy the text and paste it into the question",
+  "Strona: {nazwa} ({kb} KB)": "Page: {nazwa} ({kb} KB)",
+  "Pobieram: {linki}...": "Downloading: {linki}...",
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Send\" will send the question without this page."
 }

@@ -143,6 +143,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku. Model embeddingów wybierasz
   w Ustawieniach (karta „Czat”); gdy żadnego nie ma, przycisk pobiera zalecany, wielojęzyczny
   `nomic-embed-text-v2-moe`
+- **Linki w pytaniu**: wklejasz link, a program sam pobiera stronę — wprost z Twojego komputera,
+  bez konta — i dołącza jej tekst do pytania (link do PDF też działa; długie strony idą przez
+  wyszukiwanie fragmentów). Strony, które wczytują się dopiero w JavaScripcie, program zgłasza
 - **Rozmowy zapisują się automatycznie** po każdej odpowiedzi, każda jako plik JSON
   w `~/.local/share/OllamaManager/czaty/` — tylko na Twoim komputerze, bez wpływu aktualizacji
   i dezinstalacji. Lista po lewej pozwala je otwierać, przeszukiwać (tytuły i treść) i usuwać;
@@ -204,7 +207,15 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [ ] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown
 - [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
 
-**Po 1.0: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe
+- [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza
+  jej tekst do pytania
+
+**1.1 — wyszukiwanie w internecie w czacie.** Przełącznik przy wiadomości: model pisze kilka
+zapytań, program wyszukuje, czyta strony i odpowiada ze źródłami — tak jak Open WebUI,
+z każdym modelem. Wyniki z wyszukiwarki Ollamy (darmowe konto na ollama.com) albo z własnego
+serwera SearXNG; domyślnie wyłączone, z jasną informacją, że zapytania wychodzą do internetu.
+
+**Potem: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe
 (konta użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.
 
 ## Uwagi

@@ -555,5 +555,12 @@
   "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Espera a que termine la respuesta o detenla.",
   "Nie udało się otworzyć rozmowy: {blad}": "No se pudo abrir la conversación: {blad}",
   "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "¿Eliminar la conversación \"{tytul}\"? No se puede deshacer.",
-  "Nie udało się usunąć rozmowy: {blad}": "No se pudo eliminar la conversación: {blad}"
+  "Nie udało się usunąć rozmowy: {blad}": "No se pudo eliminar la conversación: {blad}",
+  "strona jest za duża (ponad 10 MB)": "la página es demasiado grande (más de 10 MB)",
+  "nie udało się pobrać strony ({blad})": "no se pudo descargar la página ({blad})",
+  "pod tym linkiem nie ma strony ani tekstu ({typ})": "este enlace no es una página ni un texto ({typ})",
+  "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "la página está casi vacía: probablemente su contenido se carga solo en el navegador (JavaScript); copia el texto y pégalo en la pregunta",
+  "Strona: {nazwa} ({kb} KB)": "Página: {nazwa} ({kb} KB)",
+  "Pobieram: {linki}...": "Descargando: {linki}...",
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Enviar\" enviará la pregunta sin esta página."
 }

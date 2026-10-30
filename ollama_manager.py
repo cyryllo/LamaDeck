@@ -3358,21 +3358,25 @@ def _tekst_odf(archiwum):
 
 
 class _TekstHtml(HTMLParser):
-    """Tekst z XHTML rozdziału EPUB - nowa linia przy blokach, bez skryptów i stylów."""
-    _BLOKI = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "blockquote"}
+    """Tekst z HTML (rozdział EPUB, strona WWW) - nowa linia przy blokach, bez skryptów i stylów."""
+    _BLOKI = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "blockquote",
+              "article", "main", "pre", "td", "th", "dt", "dd"}
+    # WHY: <title> to w EPUB często nazwa pliku ("ch001.xhtml")
+    _POMIJANE = {"script", "style", "title"}
 
-    def __init__(self):
+    def __init__(self, dodatkowo_pomijane=()):
         super().__init__()
         self.czesci, self._pomin = [], 0
+        self.pomijane = self._POMIJANE | set(dodatkowo_pomijane)
 
     def handle_starttag(self, tag, attrs):
-        if tag in ("script", "style", "title"):  # WHY: <title> to często nazwa pliku ("ch001.xhtml")
+        if tag in self.pomijane:
             self._pomin += 1
         elif tag in self._BLOKI:
             self.czesci.append("\n")
 
     def handle_endtag(self, tag):
-        if tag in ("script", "style", "title") and self._pomin:
+        if tag in self.pomijane and self._pomin:
             self._pomin -= 1
 
     def handle_data(self, data):
@@ -3515,6 +3519,100 @@ def wyszukaj_fragmenty(dokument, wektor_pytania, ile=_FRAGMENTOW_NA_PYTANIE):
     return sorted(wyniki)
 
 
+# --- Strony WWW podane linkiem w pytaniu ---
+# WHAT: link w pytaniu -> program sam pobiera stronę i dołącza jej tekst jak plik.
+# WHY:  wprost z tego komputera, bez konta i bez wyszukiwarki (to dopiero wersja 1.1).
+#       Strona idzie dalej tą samą drogą co plik tekstowy: do 100 KB w całości, większa
+#       przez wyszukiwanie fragmentów.
+_LINK_WZORZEC = re.compile(r"https?://[^\s<>\"'`]+", re.IGNORECASE)
+_MAKS_LINKOW = 3                        # WHY: więcej stron naraz to minuty czekania i pełny kontekst
+_MAKS_STRONA = 10 * 1024 * 1024         # WHY: tyle najwyżej czytamy z serwera (np. duży PDF pod linkiem)
+# WHY: menu, stopki, formularze i ramki boczne to na większości stron szum, nie treść
+_POMIJANE_NA_STRONIE = {"nav", "header", "footer", "aside", "form", "noscript", "svg", "button", "select",
+                        "iframe", "template"}
+
+
+def linki_w_tekscie(tekst):
+    # WHAT: adresy http(s) z tekstu, bez kropki/przecinka/nawiasu z końca zdania, bez powtórzeń.
+    linki = []
+    for link in _LINK_WZORZEC.findall(tekst):
+        link = link.rstrip(".,;:!?)]}»”")
+        if link not in linki:
+            linki.append(link)
+    return linki[:_MAKS_LINKOW]
+
+
+def _nazwa_strony(url):
+    # WHAT: krótka nazwa do chipa: host + początek ścieżki ("pl.wikipedia.org/wiki/Lama").
+    adres = urlparse(url)
+    nazwa = adres.netloc + adres.path.rstrip("/")
+    return nazwa if len(nazwa) <= 60 else nazwa[:59] + "…"
+
+
+def pobierz_strone(url):
+    # WHAT: strona pod adresem -> załącznik z jej tekstem; ValueError z czytelnym powodem.
+    # WHY:  wołane w wątku w tle (FunkcjaWorker) - strona potrafi odpowiadać kilka sekund.
+    nazwa = _nazwa_strony(url)
+    try:
+        odp = requests.get(url, stream=True, timeout=(10, 30), headers={
+            # WHY: część serwisów odrzuca zapytania bez nazwy przeglądarki
+            "User-Agent": f"Mozilla/5.0 (X11; Linux x86_64) OllamaManager/{WERSJA}",
+            "Accept-Language": "pl,en;q=0.8"})
+        odp.raise_for_status()
+        dane = b""
+        for kawalek in odp.iter_content(65536):
+            dane += kawalek
+            if len(dane) > _MAKS_STRONA:
+                raise ValueError(_("strona jest za duża (ponad 10 MB)"))
+    except requests.RequestException as e:
+        raise ValueError(f"{nazwa}: " + _("nie udało się pobrać strony ({blad})").format(blad=e)) from None
+    except ValueError as e:
+        raise ValueError(f"{nazwa}: {e}") from None
+    typ = odp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    if typ == "application/pdf" or url.lower().endswith(".pdf"):
+        # WHY: PDF pod linkiem czyta ten sam QtPdf co dołączony plik
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as plik:
+            plik.write(dane)
+            plik.flush()
+            try:
+                tekst = _tekst_pdf(plik.name)
+            except ValueError as e:
+                raise ValueError(f"{nazwa}: {e}") from None
+    elif typ in ("text/html", "application/xhtml+xml", ""):
+        # WHY: kodowanie z nagłówka, a bez niego z <meta charset> w samej stronie; domyślnie UTF-8
+        #      (zgadywanie requests czyta treść jeszcze raz, a ta jest już pobrana kawałkami)
+        kodowanie = odp.encoding if "charset" in odp.headers.get("Content-Type", "").lower() else None
+        if not kodowanie:
+            meta = re.search(rb"""<meta[^>]+charset=["']?([\w-]+)""", dane[:4096], re.IGNORECASE)
+            kodowanie = meta.group(1).decode("ascii") if meta else "utf-8"
+        try:
+            html_tekst = dane.decode(kodowanie, errors="replace")
+        except LookupError:  # WHY: nieznana nazwa kodowania w stronie
+            html_tekst = dane.decode("utf-8", errors="replace")
+        parser = _TekstHtml(_POMIJANE_NA_STRONIE)
+        parser.feed(html_tekst)
+        # WHY: tytuł strony na początku - model wie, co czyta (w <title>, który parser pomija)
+        tytul = re.search(r"<title[^>]*>(.*?)</title>", html_tekst, re.IGNORECASE | re.DOTALL)
+        tekst = (html.unescape(tytul.group(1)).strip() + "\n\n" if tytul else "") + "".join(parser.czesci)
+    elif typ.startswith("text/") or typ in ("application/json", "application/xml"):
+        tekst = dane.decode(odp.encoding or "utf-8", errors="replace")
+    else:
+        raise ValueError(f"{nazwa}: " + _("pod tym linkiem nie ma strony ani tekstu ({typ})").format(typ=typ))
+    # WHY: strony mają mnóstwo pustych linii i wcięć z kodu HTML - tylko zjadają kontekst
+    tekst = re.sub(r"[ \t]+", " ", tekst)
+    tekst = re.sub(r"\n\s*\n+", "\n\n", tekst).strip()
+    if len(tekst) < 50:
+        # WHY: strona budowana JavaScriptem (aplikacja w przeglądarce) przychodzi pusta. Próg
+        #      niski, bo zmierzone: takie strony dają 0-180 znaków (stopka, "Browser not
+        #      supported"), a prawdziwa krótka strona (example.com) - 156; lepiej czasem
+        #      dołączyć samą stopkę (model powie, że nic tam nie ma), niż odrzucić treść
+        raise ValueError(f"{nazwa}: " + _("strona jest prawie pusta - pewnie treść wczytuje się dopiero "
+                                          "w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie"))
+    z = zalacznik_z_tekstu(nazwa, tekst)
+    z["url"] = url
+    return z
+
+
 def _tresc_dla_modelu(wiadomosc):
     # WHAT: treść wiadomości użytkownika razem z dołączonymi plikami tekstowymi.
     # WHY:  model nie "otwiera" plików - dostaje ich treść w wiadomości, z nazwą,
@@ -3522,7 +3620,8 @@ def _tresc_dla_modelu(wiadomosc):
     czesci = [wiadomosc["tresc"]] if wiadomosc["tresc"] else []
     for plik in wiadomosc.get("zalaczniki", []):
         if plik["typ"] == "tekst":
-            czesci.append(f"Plik: {plik['nazwa']}\n```\n{plik['tekst']}\n```")
+            naglowek = f"Strona: {plik['url']}" if plik.get("url") else f"Plik: {plik['nazwa']}"
+            czesci.append(f"{naglowek}\n```\n{plik['tekst']}\n```")
     return "\n\n".join(czesci)
 
 
@@ -3810,7 +3909,8 @@ class WidokCzatu(QTextBrowser):
                 f.setHeight(wys * skala)
                 c.insertImage(f)
             else:
-                tekst = _("Plik: {nazwa} ({kb} KB)").format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024))
+                wzor = _("Strona: {nazwa} ({kb} KB)") if z.get("url") else _("Plik: {nazwa} ({kb} KB)")
+                tekst = wzor.format(nazwa=z["nazwa"], kb=max(1, z["rozmiar"] // 1024))
                 if z["typ"] == "dokument":
                     # WHY: w otwartej zapisanej rozmowie wektorów już nie ma
                     tekst += " - " + (_("żeby dalej pytać o ten plik, dołącz go ponownie")
@@ -4968,6 +5068,8 @@ class MainWindow(QMainWindow):
         self._czat = []                 # WHY: bieżąca rozmowa (ekran "Czat") - przeżywa zmianę języka
         self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
         self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
+        self._linki_nieudane = set()    # WHY: linki z pytania, których strony nie dało się pobrać
+        self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
         self._czat_utworzono = None
         self._rozmowy = None            # WHY: lista zapisanych rozmów; None = jeszcze nie wczytana
@@ -7563,6 +7665,7 @@ class MainWindow(QMainWindow):
             return  # WHY: usunięty w trakcie przygotowania
         if not ok:
             self._zalaczniki.remove(z)
+            self._wyslij_po_stronach = False
             self._uwaga_czatu(_("{nazwa}: nie udało się przygotować do wyszukiwania - {blad}").format(
                 nazwa=z["nazwa"], blad=wynik), "warn")
         else:
@@ -7577,6 +7680,11 @@ class MainWindow(QMainWindow):
                                     "więc przy każdym pytaniu model czatu ustąpi miejsca modelowi embeddingów i "
                                     "wczyta się od nowa. Ustaw 2 w \"Ustawieniach\", jeśli starczy pamięci."), "warn")
         self._pokaz_zalaczniki()
+        # WHY: pytanie z linkiem do dużej strony czekało na jej przygotowanie - teraz idzie samo
+        if (ok and self._wyslij_po_stronach
+                and not any(zz["typ"] == "dokument" and not zz.get("gotowy") for zz in self._zalaczniki)):
+            self._wyslij_po_stronach = False
+            self.wyslij_czat()
 
     def _opis_zalacznika(self, z):
         if z["typ"] == "obraz":
@@ -7903,6 +8011,16 @@ class MainWindow(QMainWindow):
         model, host = self._wybrany_model_czatu()
         if not (tekst or self._zalaczniki) or not model:
             return
+        if self._w_toku("strony"):
+            return  # WHY: strony jeszcze się pobierają - pytanie pójdzie samo, gdy skończą
+        # WHAT: linki w pytaniu -> najpierw pobranie stron jako załączników, potem wysyłka.
+        # WHY:  pominięte linki już dołączone i te, których nie udało się pobrać (inaczej
+        #       ponowne "Wyślij" próbowałoby je w kółko)
+        dolaczone = {z.get("url") for z in self._zalaczniki}
+        nowe = [l for l in linki_w_tekscie(tekst) if l not in dolaczone and l not in self._linki_nieudane]
+        if nowe:
+            self._pobierz_strony(nowe)
+            return
         if any(z["typ"] == "do_odczytu" for z in self._zalaczniki):
             self._uwaga_czatu(_("Poczekaj chwilę - odczytuję tekst z dołączonego dokumentu."), "warn")
             return
@@ -7930,6 +8048,7 @@ class MainWindow(QMainWindow):
             elif w["rola"] == "assistant" and not w.get("przerwano"):
                 historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
         self._zalaczniki = []
+        self._linki_nieudane = set()
         self._pokaz_zalaczniki()
         self._uwaga_czatu("")
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
@@ -7959,6 +8078,51 @@ class MainWindow(QMainWindow):
         self._czat_zegar.start()
         worker.start()
         self._odswiez_przycisk_czatu()
+
+    def _pobierz_strony(self, linki):
+        self._uwaga_czatu(_("Pobieram: {linki}...").format(linki=", ".join(_nazwa_strony(l) for l in linki)), "info")
+        self._wyslij_po_stronach = True
+        self.btn_czat_wyslij.setEnabled(False)
+
+        def _pobierz():
+            # WHY: każda strona osobno - błąd jednej nie przekreśla pozostałych
+            wyniki = []
+            for link in linki:
+                try:
+                    wyniki.append((link, pobierz_strone(link), None))
+                except ValueError as e:
+                    wyniki.append((link, None, str(e)))
+            return wyniki
+
+        worker = FunkcjaWorker(_pobierz)
+        self._uruchom_watek("strony", worker, worker.zakonczono, self._strony_pobrane)
+
+    def _strony_pobrane(self, ok, wyniki):
+        self.btn_czat_wyslij.setEnabled(True)
+        if not ok:
+            wyniki = []
+        bledy = []
+        for link, z, blad in wyniki:
+            if z is None:
+                self._linki_nieudane.add(link)
+                bledy.append(blad)
+                continue
+            if z["typ"] == "dokument" and not self._przygotuj_dokument(z):
+                self._linki_nieudane.add(link)
+                bledy.append(self.lbl_czat_uwaga.text())
+                continue
+            self._zalaczniki.append(z)
+        self._pokaz_zalaczniki()
+        if bledy:
+            # WHY: przy błędzie pytania nie wysyłamy samo - użytkownik decyduje, czy bez strony
+            self._wyslij_po_stronach = False
+            self._uwaga_czatu("\n".join(bledy) + "\n" + _("\"Wyślij\" wyśle pytanie bez tej strony."), "warn")
+            return
+        self._uwaga_czatu("")
+        if not any(z["typ"] == "dokument" and not z.get("gotowy") for z in self._zalaczniki):
+            self._wyslij_po_stronach = False
+            self.wyslij_czat()
+        # WHY: duża strona przygotowuje się do wyszukiwania - wyśle ją _dokument_gotowy
 
     def _czat_zrodla(self, zrodla):
         if self.sender() is self._czat_worker and self._czat:

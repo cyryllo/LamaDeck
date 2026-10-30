@@ -555,5 +555,12 @@
   "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Warte, bis die Antwort fertig ist, oder stoppe sie.",
   "Nie udało się otworzyć rozmowy: {blad}": "Gespräch konnte nicht geöffnet werden: {blad}",
   "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Gespräch \"{tytul}\" löschen? Das lässt sich nicht rückgängig machen.",
-  "Nie udało się usunąć rozmowy: {blad}": "Gespräch konnte nicht gelöscht werden: {blad}"
+  "Nie udało się usunąć rozmowy: {blad}": "Gespräch konnte nicht gelöscht werden: {blad}",
+  "strona jest za duża (ponad 10 MB)": "die Seite ist zu groß (über 10 MB)",
+  "nie udało się pobrać strony ({blad})": "Seite konnte nicht geladen werden ({blad})",
+  "pod tym linkiem nie ma strony ani tekstu ({typ})": "unter diesem Link gibt es weder eine Seite noch Text ({typ})",
+  "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "die Seite ist fast leer - der Inhalt wird wohl erst im Browser geladen (JavaScript); kopiere den Text und füge ihn in die Frage ein",
+  "Strona: {nazwa} ({kb} KB)": "Seite: {nazwa} ({kb} KB)",
+  "Pobieram: {linki}...": "Lade: {linki}...",
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Senden\" schickt die Frage ohne diese Seite."
 }

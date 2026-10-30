@@ -555,5 +555,12 @@
   "Poczekaj na koniec odpowiedzi albo ją zatrzymaj.": "Attendi la fine della risposta o fermala.",
   "Nie udało się otworzyć rozmowy: {blad}": "Impossibile aprire la conversazione: {blad}",
   "Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.": "Eliminare la conversazione \"{tytul}\"? Non si può annullare.",
-  "Nie udało się usunąć rozmowy: {blad}": "Impossibile eliminare la conversazione: {blad}"
+  "Nie udało się usunąć rozmowy: {blad}": "Impossibile eliminare la conversazione: {blad}",
+  "strona jest za duża (ponad 10 MB)": "la pagina è troppo grande (oltre 10 MB)",
+  "nie udało się pobrać strony ({blad})": "impossibile scaricare la pagina ({blad})",
+  "pod tym linkiem nie ma strony ani tekstu ({typ})": "questo link non è né una pagina né un testo ({typ})",
+  "strona jest prawie pusta - pewnie treść wczytuje się dopiero w przeglądarce (JavaScript); skopiuj tekst i wklej go w pytanie": "la pagina è quasi vuota: probabilmente il contenuto si carica solo nel browser (JavaScript); copia il testo e incollalo nella domanda",
+  "Strona: {nazwa} ({kb} KB)": "Pagina: {nazwa} ({kb} KB)",
+  "Pobieram: {linki}...": "Scarico: {linki}...",
+  "\"Wyślij\" wyśle pytanie bez tej strony.": "\"Invia\" invierà la domanda senza questa pagina."
 }
