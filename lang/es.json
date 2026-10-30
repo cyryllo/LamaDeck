@@ -573,5 +573,17 @@
   "potrafi rozważyć odpowiedź przed jej napisaniem": "puede meditar la respuesta antes de escribirla",
   "narzędzia": "herramientas",
   "umie wywoływać narzędzia - przyda się np. w Continue": "puede usar herramientas: útil p. ej. en Continue",
-  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} no ve imágenes. Elige un modelo con la etiqueta \"imágenes\" (p. ej. gemma3, qwen2.5vl, llava)."
+  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} no ve imágenes. Elige un modelo con la etiqueta \"imágenes\" (p. ej. gemma3, qwen2.5vl, llava).",
+  "Eksportuj": "Exportar",
+  "Eksportuj do Markdown...": "Exportar a Markdown...",
+  "Kopiuj odpowiedź": "Copiar respuesta",
+  "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nombre de la conversación (vacío = título de la primera pregunta):",
+  "Nie udało się zapisać pliku: {blad}": "No se pudo guardar el archivo: {blad}",
+  "Nie udało się zmienić nazwy: {blad}": "No se pudo cambiar el nombre: {blad}",
+  "Plik": "Archivo",
+  "Rozmowa zapisana do pliku: {plik}": "Conversación guardada en el archivo: {plik}",
+  "Strona": "Página",
+  "Zapisz rozmowę jako plik Markdown (.md)": "Guardar la conversación como archivo Markdown (.md)",
+  "Zdjęcie": "Imagen",
+  "Zmień nazwę": "Cambiar nombre"
 }

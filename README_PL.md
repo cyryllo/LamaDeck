@@ -123,7 +123,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
   WebUI i bez routera
 - Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele) i linkiem
-  **„Kopiuj kod”** nad każdym blokiem kodu; można ją przerwać
+  **„Kopiuj kod”** nad każdym blokiem kodu i **„Kopiuj odpowiedź”** przy każdej odpowiedzi;
+  można ją przerwać
 - Gdy model wczytuje się do pamięci (pierwsze pytanie potrafi chwilę potrwać), dymek odpowiedzi
   mówi o tym i odlicza sekundy
 - **Statystyki szybkości** każdej odpowiedzi, mierzone przez samą Ollamę: generowanie
@@ -152,7 +153,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   wyszukiwanie fragmentów). Strony, które wczytują się dopiero w JavaScripcie, program zgłasza
 - **Rozmowy zapisują się automatycznie** po każdej odpowiedzi, każda jako plik JSON
   w `~/.local/share/OllamaManager/czaty/` — tylko na Twoim komputerze, bez wpływu aktualizacji
-  i dezinstalacji. Lista po lewej pozwala je otwierać, przeszukiwać (tytuły i treść) i usuwać;
+  i dezinstalacji. Lista po lewej pozwala je otwierać, przeszukiwać (tytuły i treść), nazywać
+  po swojemu, eksportować do Markdown (`.md`) i usuwać;
   zdjęcia też się zapisują, a duże pliki trzeba dołączyć ponownie, żeby dalej w nich szukać
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
@@ -208,7 +210,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   zanim model zacznie zapominać początek rozmowy
 - [x] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
 - [ ] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
-- [ ] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown
+- [x] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown, do tego **zmiana
+  nazwy** rozmów
 - [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
 
 - [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza

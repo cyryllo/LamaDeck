@@ -573,5 +573,17 @@
   "potrafi rozważyć odpowiedź przed jej napisaniem": "kann die Antwort überlegen, bevor es sie schreibt",
   "narzędzia": "Werkzeuge",
   "umie wywoływać narzędzia - przyda się np. w Continue": "kann Werkzeuge aufrufen - nützlich z. B. in Continue",
-  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} sieht keine Bilder. Wähle ein Modell mit dem Tag \"Bilder\" (z. B. gemma3, qwen2.5vl, llava)."
+  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} sieht keine Bilder. Wähle ein Modell mit dem Tag \"Bilder\" (z. B. gemma3, qwen2.5vl, llava).",
+  "Eksportuj": "Exportieren",
+  "Eksportuj do Markdown...": "Als Markdown exportieren...",
+  "Kopiuj odpowiedź": "Antwort kopieren",
+  "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Name des Gesprächs (leer = Titel aus der ersten Frage):",
+  "Nie udało się zapisać pliku: {blad}": "Datei konnte nicht gespeichert werden: {blad}",
+  "Nie udało się zmienić nazwy: {blad}": "Umbenennen fehlgeschlagen: {blad}",
+  "Plik": "Datei",
+  "Rozmowa zapisana do pliku: {plik}": "Gespräch in Datei gespeichert: {plik}",
+  "Strona": "Seite",
+  "Zapisz rozmowę jako plik Markdown (.md)": "Gespräch als Markdown-Datei (.md) speichern",
+  "Zdjęcie": "Bild",
+  "Zmień nazwę": "Umbenennen"
 }

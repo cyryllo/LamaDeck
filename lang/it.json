@@ -573,5 +573,17 @@
   "potrafi rozważyć odpowiedź przed jej napisaniem": "può riflettere sulla risposta prima di scriverla",
   "narzędzia": "strumenti",
   "umie wywoływać narzędzia - przyda się np. w Continue": "può usare strumenti: utile ad es. in Continue",
-  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} non vede le immagini. Scegli un modello con l'etichetta \"immagini\" (es. gemma3, qwen2.5vl, llava)."
+  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} non vede le immagini. Scegli un modello con l'etichetta \"immagini\" (es. gemma3, qwen2.5vl, llava).",
+  "Eksportuj": "Esporta",
+  "Eksportuj do Markdown...": "Esporta in Markdown...",
+  "Kopiuj odpowiedź": "Copia risposta",
+  "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nome della conversazione (vuoto = titolo dalla prima domanda):",
+  "Nie udało się zapisać pliku: {blad}": "Impossibile salvare il file: {blad}",
+  "Nie udało się zmienić nazwy: {blad}": "Impossibile rinominare: {blad}",
+  "Plik": "File",
+  "Rozmowa zapisana do pliku: {plik}": "Conversazione salvata nel file: {plik}",
+  "Strona": "Pagina",
+  "Zapisz rozmowę jako plik Markdown (.md)": "Salva la conversazione come file Markdown (.md)",
+  "Zdjęcie": "Immagine",
+  "Zmień nazwę": "Rinomina"
 }

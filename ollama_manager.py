@@ -62,7 +62,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
-    QSystemTrayIcon, QTextBrowser, QToolTip,
+    QSystemTrayIcon, QTextBrowser, QToolTip, QInputDialog,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
@@ -3709,24 +3709,68 @@ def _tekst_do_szukania(dane):
     return "\n".join(czesci).lower()
 
 
-def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host):
-    # WHAT: zapis rozmowy do pliku; zwraca wpis do listy rozmów (bez treści wiadomości).
-    # WHY:  najpierw plik tymczasowy, potem os.replace - przerwany zapis (np. brak
-    #       miejsca, zamknięcie programu) nie zostawi uszkodzonego pliku rozmowy.
+def _zapisz_plik_rozmowy(id_rozmowy, dane):
+    # WHY: najpierw plik tymczasowy, potem os.replace - przerwany zapis (np. brak
+    #      miejsca, zamknięcie programu) nie zostawi uszkodzonego pliku rozmowy.
     katalog = katalog_rozmow()
     katalog.mkdir(parents=True, exist_ok=True)
-    dane = {"wersja": _WERSJA_PLIKU_ROZMOWY, "tytul": _tytul_rozmowy(wiadomosci), "utworzono": utworzono,
-            "zmieniono": time.time(), "model": model, "host": host,
-            "wiadomosci": _wiadomosci_do_zapisu(wiadomosci)}
     plik = katalog / f"{id_rozmowy}.json"
     tymczasowy = plik.with_suffix(".tmp")
     tymczasowy.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
     os.replace(tymczasowy, plik)
+
+
+def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host, tytul_wlasny=None):
+    # WHAT: zapis rozmowy do pliku; zwraca wpis do listy rozmów (bez treści wiadomości).
+    # WHY:  tytuł nadany przez użytkownika (tytul_wlasny) wygrywa z tym z pierwszego pytania
+    #       i nie nadpisuje się przy kolejnych odpowiedziach.
+    dane = {"wersja": _WERSJA_PLIKU_ROZMOWY, "tytul": tytul_wlasny or _tytul_rozmowy(wiadomosci),
+            "tytul_wlasny": bool(tytul_wlasny), "utworzono": utworzono,
+            "zmieniono": time.time(), "model": model, "host": host,
+            "wiadomosci": _wiadomosci_do_zapisu(wiadomosci)}
+    _zapisz_plik_rozmowy(id_rozmowy, dane)
     return _wpis_listy_rozmow(id_rozmowy, dane)
+
+
+def zmien_nazwe_rozmowy(id_rozmowy, tytul):
+    # WHAT: nowy tytuł zapisanej rozmowy (też nie otwartej); pusty = znów z pierwszego pytania.
+    dane = wczytaj_rozmowe(id_rozmowy)
+    dane["tytul"] = tytul or _tytul_rozmowy(dane.get("wiadomosci", []))
+    dane["tytul_wlasny"] = bool(tytul)
+    _zapisz_plik_rozmowy(id_rozmowy, dane)
+    return _wpis_listy_rozmow(id_rozmowy, dane)
+
+
+def rozmowa_do_markdown(dane):
+    # WHAT: rozmowa jako Markdown - tytuł, data i model, potem pytania i odpowiedzi.
+    # WHY:  odpowiedzi modeli już są w Markdownie, więc trafiają bez zmian; rozumowanie
+    #       pomijamy (to notatki robocze modelu), zdjęcia i pliki - tylko z nazwy.
+    linie = [f"# {dane.get('tytul', '')}", ""]
+    opis = [time.strftime("%d.%m.%Y %H:%M", time.localtime(dane.get("utworzono") or dane.get("zmieniono") or 0))]
+    if dane.get("model"):
+        opis.append(dane["model"])
+    linie += [f"*{' · '.join(opis)}*", ""]
+    for w in dane.get("wiadomosci", []):
+        if w["rola"] == "user":
+            linie += [f"## {_('Ty')}", "", w.get("tresc", "")]
+            for z in w.get("zalaczniki", []):
+                if z.get("url"):
+                    linie.append(f"- {_('Strona')}: {z['url']}")
+                else:
+                    linie.append(f"- {_('Zdjęcie') if z['typ'] == 'obraz' else _('Plik')}: {z['nazwa']}")
+        elif w["rola"] == "assistant":
+            linie += [f"## {w.get('kto', '')}", "", _rozdziel_myslenie(w.get("tresc", ""))[1]]
+            if w.get("stat"):
+                linie += ["", f"*{w['stat']}*"]
+        else:
+            linie += [f"## {_('Błąd')}", "", w.get("tresc", "")]
+        linie.append("")
+    return "\n".join(linie)
 
 
 def _wpis_listy_rozmow(id_rozmowy, dane):
     return {"id": id_rozmowy, "tytul": dane.get("tytul", ""), "zmieniono": dane.get("zmieniono", 0),
+            "tytul_wlasny": dane.get("tytul_wlasny", False),
             "model": dane.get("model", ""), "szukaj": _tekst_do_szukania(dane)}
 
 
@@ -3871,6 +3915,18 @@ class WidokCzatu(QTextBrowser):
         c.insertText(kto, self._znaki(kolor, gruby=True))
         if w.get("stat"):
             c.insertText("   " + w["stat"], self._znaki(self.kolorWyciszony))
+        if w["rola"] == "assistant" and not w.get("trwa"):
+            # WHAT: "Kopiuj odpowiedź" - cała odpowiedź w Markdownie, bez rozumowania
+            odpowiedz = _rozdziel_myslenie(w.get("tresc", ""))[1].strip()
+            if odpowiedz:
+                numer = f"o{len(self._kody)}"
+                self._kody[numer] = odpowiedz
+                link = self._znaki(self.kolorLinku)
+                link.setAnchor(True)
+                link.setAnchorHref(f"kopiuj:{numer}")
+                link.setFontPointSize(max(1.0, self.font().pointSizeF() - 1))
+                c.insertText("   ", self._znaki(self.kolorWyciszony))
+                c.insertText(_("Kopiuj odpowiedź"), link)
         # --- dymek ---
         ramka_f = QTextFrameFormat()
         ramka_f.setBackground(self.tloTy if w["rola"] == "user" else self.tloModelu)
@@ -5096,6 +5152,7 @@ class MainWindow(QMainWindow):
         self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
         self._czat_utworzono = None
+        self._czat_tytul = None         # WHY: tytuł nadany przez użytkownika; None = z pierwszego pytania
         self._rozmowy = None            # WHY: lista zapisanych rozmów; None = jeszcze nie wczytana
         self._etykiety_zalacznikow = {}  # WHY: id(załącznika) -> etykieta chipa (postęp przygotowania)
         self.hosty_online_modeli = []
@@ -7448,8 +7505,17 @@ class MainWindow(QMainWindow):
         self.lista_rozmow.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lista_rozmow.customContextMenuRequested.connect(self._menu_rozmowy)
         uk.addWidget(self.lista_rozmow, 1)
+        przyciski = QHBoxLayout()
+        przyciski.setSpacing(8)
+        self.btn_nazwa_rozmowy = self._przycisk(_("Zmień nazwę"), slot=self._zmien_nazwe_rozmowy)
+        przyciski.addWidget(self.btn_nazwa_rozmowy, 1)
+        self.btn_eksport_rozmowy = self._przycisk(_("Eksportuj"), "pobierz", slot=self._eksportuj_rozmowe)
+        self.btn_eksport_rozmowy.setToolTip(_("Zapisz rozmowę jako plik Markdown (.md)"))
+        przyciski.addWidget(self.btn_eksport_rozmowy, 1)
+        uk.addLayout(przyciski)
         self.btn_usun_rozmowe = self._przycisk(_("Usuń rozmowę"), "kosz", rola="danger", slot=self._usun_rozmowe)
         uk.addWidget(self.btn_usun_rozmowe)
+        self.lista_rozmow.itemDoubleClicked.connect(lambda _e: self._zmien_nazwe_rozmowy())
         sciezka = str(katalog_rozmow()).replace(str(Path.home()), "~", 1)
         uwaga = _etykieta(_("Zapisywane automatycznie, tylko na tym komputerze: {sciezka}").format(sciezka=sciezka),
                           "muted")
@@ -8036,6 +8102,7 @@ class MainWindow(QMainWindow):
             self._czat_worker.anuluj()
         self._czat = []
         self._czat_id = None  # WHY: nowy plik powstanie przy pierwszej odpowiedzi
+        self._czat_tytul = None
         self._pokaz_czat()
         self._pokaz_kontekst()
         self._wypelnij_liste_rozmow()
@@ -8066,7 +8133,8 @@ class MainWindow(QMainWindow):
             if r["id"] == self._czat_id:
                 element.setSelected(True)
         self._filtruj_rozmowy(self.pole_szukaj_rozmow.text())
-        self.btn_usun_rozmowe.setEnabled(bool(self._rozmowy))
+        for btn in (self.btn_usun_rozmowe, self.btn_nazwa_rozmowy, self.btn_eksport_rozmowy):
+            btn.setEnabled(bool(self._rozmowy))
 
     def _po_liscie_rozmow(self, ok, wynik):
         self._rozmowy = wynik if ok else []
@@ -8093,7 +8161,7 @@ class MainWindow(QMainWindow):
         model, host = self._wybrany_model_czatu()
         try:
             wpis = zapisz_rozmowe(self._czat_id, self._czat_utworzono, self._czat,
-                                  model["nazwa"] if model else "", host["adres"] if host else "")
+                                  model["nazwa"] if model else "", host["adres"] if host else "", self._czat_tytul)
         except OSError as e:
             self._uwaga_czatu(_("Nie udało się zapisać rozmowy: {blad}").format(blad=e), "warn")
             return
@@ -8117,6 +8185,7 @@ class MainWindow(QMainWindow):
         self._czat = dane.get("wiadomosci", [])
         self._czat_id = id_rozmowy
         self._czat_utworzono = dane.get("utworzono") or time.time()
+        self._czat_tytul = dane.get("tytul") if dane.get("tytul_wlasny") else None
         self._uwaga_czatu("")
         # WHY: dalej rozmawiamy tym samym modelem - o ile jest jeszcze na liście
         indeks = self.combo_czat_model.findData(f"{dane.get('host', '')}|{dane.get('model', '')}")
@@ -8125,12 +8194,67 @@ class MainWindow(QMainWindow):
         self._pokaz_czat(do_dolu=True)
         self._pokaz_kontekst()
 
+    def _zaznaczona_rozmowa(self):
+        element = self.lista_rozmow.currentItem()
+        if element is None or not element.isSelected():
+            return None
+        return element.data(Qt.ItemDataRole.UserRole)
+
+    def _zmien_nazwe_rozmowy(self):
+        id_rozmowy = self._zaznaczona_rozmowa()
+        if id_rozmowy is None:
+            return
+        wpis = next((r for r in self._rozmowy or [] if r["id"] == id_rozmowy), None)
+        tytul, ok = QInputDialog.getText(
+            self, _("Zmień nazwę"), _("Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):"),
+            text=wpis["tytul"] if wpis else "")
+        if not ok:
+            return
+        try:
+            nowy = zmien_nazwe_rozmowy(id_rozmowy, tytul.strip())
+        except (OSError, ValueError) as e:
+            self._uwaga_czatu(_("Nie udało się zmienić nazwy: {blad}").format(blad=e), "warn")
+            return
+        # WHY: kolejność listy bez zmian - zmiana nazwy to nie nowa wiadomość
+        nowy["zmieniono"] = wpis["zmieniono"] if wpis else nowy["zmieniono"]
+        self._rozmowy = [nowy if r["id"] == id_rozmowy else r for r in self._rozmowy or []]
+        if id_rozmowy == self._czat_id:
+            self._czat_tytul = tytul.strip() or None
+        self._wypelnij_liste_rozmow()
+
+    def _eksportuj_rozmowe(self):
+        id_rozmowy = self._zaznaczona_rozmowa()
+        if id_rozmowy is None:
+            return
+        try:
+            dane = wczytaj_rozmowe(id_rozmowy)
+        except (OSError, ValueError) as e:
+            self._uwaga_czatu(_("Nie udało się otworzyć rozmowy: {blad}").format(blad=e), "warn")
+            return
+        # WHY: nazwa pliku z tytułu, bez znaków, których system plików nie lubi
+        nazwa = re.sub(r"[\\/:*?\"<>|\n]+", " ", dane.get("tytul", "")).strip()[:60] or _("Rozmowa")
+        plik, _f = QFileDialog.getSaveFileName(self, _("Eksportuj do Markdown..."),
+                                               str(Path.home() / f"{nazwa}.md"), "Markdown (*.md)")
+        if not plik:
+            return
+        if not plik.endswith(".md"):
+            plik += ".md"
+        try:
+            Path(plik).write_text(rozmowa_do_markdown(dane), encoding="utf-8")
+        except OSError as e:
+            self._uwaga_czatu(_("Nie udało się zapisać pliku: {blad}").format(blad=e), "warn")
+            return
+        self.wpis_log(_("Rozmowa zapisana do pliku: {plik}").format(plik=plik))
+
     def _menu_rozmowy(self, punkt):
         element = self.lista_rozmow.itemAt(punkt)
         if element is None:
             return
         self.lista_rozmow.setCurrentItem(element)
         menu = QMenu(self)
+        menu.addAction(_("Zmień nazwę"), self._zmien_nazwe_rozmowy)
+        menu.addAction(_("Eksportuj do Markdown..."), self._eksportuj_rozmowe)
+        menu.addSeparator()
         menu.addAction(_("Usuń rozmowę"), self._usun_rozmowe)
         menu.exec(self.lista_rozmow.viewport().mapToGlobal(punkt))
 

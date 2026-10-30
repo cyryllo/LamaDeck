@@ -573,5 +573,17 @@
   "potrafi rozważyć odpowiedź przed jej napisaniem": "peut réfléchir à la réponse avant de l'écrire",
   "narzędzia": "outils",
   "umie wywoływać narzędzia - przyda się np. w Continue": "peut appeler des outils - utile p. ex. dans Continue",
-  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} ne voit pas les images. Choisissez un modèle avec l'étiquette « images » (p. ex. gemma3, qwen2.5vl, llava)."
+  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} ne voit pas les images. Choisissez un modèle avec l'étiquette « images » (p. ex. gemma3, qwen2.5vl, llava).",
+  "Eksportuj": "Exporter",
+  "Eksportuj do Markdown...": "Exporter en Markdown...",
+  "Kopiuj odpowiedź": "Copier la réponse",
+  "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nom de la conversation (vide = titre tiré de la première question) :",
+  "Nie udało się zapisać pliku: {blad}": "Impossible d'enregistrer le fichier : {blad}",
+  "Nie udało się zmienić nazwy: {blad}": "Impossible de renommer : {blad}",
+  "Plik": "Fichier",
+  "Rozmowa zapisana do pliku: {plik}": "Conversation enregistrée dans le fichier : {plik}",
+  "Strona": "Page",
+  "Zapisz rozmowę jako plik Markdown (.md)": "Enregistrer la conversation en fichier Markdown (.md)",
+  "Zdjęcie": "Image",
+  "Zmień nazwę": "Renommer"
 }

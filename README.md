@@ -122,7 +122,8 @@ fonts are bundled, so it looks the same everywhere).
 - A simple built-in chat with any model on any host, straight from Ollama — works without Open
   WebUI and without the router
 - Answers stream in as they're written, with formatting (code blocks, lists, tables) and a
-  **Copy code** link above every code block; stop at any time
+  **Copy code** link above every code block and **Copy answer** next to every answer; stop at
+  any time
 - While a model is being loaded into memory (the first question can take a while), the answer
   bubble says so and counts the seconds
 - **Speed stats** for every answer, measured by Ollama itself: generation and prompt processing in
@@ -152,7 +153,8 @@ fonts are bundled, so it looks the same everywhere).
   pages go through excerpt search). Pages that only load with JavaScript are reported as such
 - **Conversations are saved automatically** after every answer, one JSON file each in
   `~/.local/share/OllamaManager/czaty/` — only on your computer, untouched by updates and
-  uninstalling. A list on the left opens, searches (titles and content) and deletes them;
+  uninstalling. A list on the left opens, searches (titles and content), renames, exports to
+  Markdown (`.md`) and deletes them;
   pictures are saved too, large files have to be attached again to keep searching them
 - Also opens straight from the tray panel ("Open chat")
 
@@ -209,7 +211,8 @@ fonts are bundled, so it looks the same everywhere).
   model starts forgetting the beginning
 - [x] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
 - [ ] Chat: **regenerate** the last answer and **edit** the last question
-- [ ] Chat: **copy the whole answer** and **export** a conversation to Markdown
+- [x] Chat: **copy the whole answer** and **export** a conversation to Markdown, plus **renaming**
+  conversations
 - [ ] `install.sh`: warn when the app is already installed from the `.deb` package
 
 - [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and

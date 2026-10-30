@@ -573,5 +573,17 @@
   "potrafi rozważyć odpowiedź przed jej napisaniem": "can think the answer over before writing it",
   "narzędzia": "tools",
   "umie wywoływać narzędzia - przyda się np. w Continue": "can call tools - useful e.g. in Continue",
-  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} can't see pictures. Pick a model with the \"pictures\" tag (e.g. gemma3, qwen2.5vl, llava)."
+  "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} can't see pictures. Pick a model with the \"pictures\" tag (e.g. gemma3, qwen2.5vl, llava).",
+  "Eksportuj": "Export",
+  "Eksportuj do Markdown...": "Export to Markdown...",
+  "Kopiuj odpowiedź": "Copy answer",
+  "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Conversation name (empty = title from the first question):",
+  "Nie udało się zapisać pliku: {blad}": "Could not save the file: {blad}",
+  "Nie udało się zmienić nazwy: {blad}": "Could not rename: {blad}",
+  "Plik": "File",
+  "Rozmowa zapisana do pliku: {plik}": "Conversation saved to file: {plik}",
+  "Strona": "Page",
+  "Zapisz rozmowę jako plik Markdown (.md)": "Save the conversation as a Markdown file (.md)",
+  "Zdjęcie": "Picture",
+  "Zmień nazwę": "Rename"
 }
