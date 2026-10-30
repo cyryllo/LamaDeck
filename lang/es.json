@@ -539,7 +539,6 @@
   "Rozmowy": "Conversaciones",
   "Szukaj w rozmowach...": "Buscar en las conversaciones...",
   "Usuń rozmowę": "Eliminar conversación",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Se guardan automáticamente, solo en este ordenador: {sciezka}",
   "Rozmowa": "Conversación",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "para seguir preguntando por este archivo, adjúntalo de nuevo",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "No se pudieron cargar las conversaciones guardadas: {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "herramientas",
   "umie wywoływać narzędzia - przyda się np. w Continue": "puede usar herramientas: útil p. ej. en Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} no ve imágenes. Elige un modelo con la etiqueta \"imágenes\" (p. ej. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Exportar",
   "Eksportuj do Markdown...": "Exportar a Markdown...",
   "Kopiuj odpowiedź": "Copiar respuesta",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nombre de la conversación (vacío = título de la primera pregunta):",
@@ -583,7 +581,9 @@
   "Plik": "Archivo",
   "Rozmowa zapisana do pliku: {plik}": "Conversación guardada en el archivo: {plik}",
   "Strona": "Página",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Guardar la conversación como archivo Markdown (.md)",
   "Zdjęcie": "Imagen",
-  "Zmień nazwę": "Cambiar nombre"
+  "Zmień nazwę": "Cambiar nombre",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic derecho en una conversación: cambiar nombre, exportar, eliminar. Se guardan automáticamente, solo en este ordenador: {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Volver a generar, con el modelo elegido ahora a la derecha",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corregir la pregunta: vuelve al campo de texto y ella y su respuesta salen de la conversación"
 }

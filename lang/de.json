@@ -539,7 +539,6 @@
   "Rozmowy": "Gespräche",
   "Szukaj w rozmowach...": "Gespräche durchsuchen...",
   "Usuń rozmowę": "Gespräch löschen",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Automatisch gespeichert, nur auf diesem Computer: {sciezka}",
   "Rozmowa": "Gespräch",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "um weiter nach dieser Datei zu fragen, hänge sie erneut an",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "Gespeicherte Gespräche konnten nicht geladen werden: {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "Werkzeuge",
   "umie wywoływać narzędzia - przyda się np. w Continue": "kann Werkzeuge aufrufen - nützlich z. B. in Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} sieht keine Bilder. Wähle ein Modell mit dem Tag \"Bilder\" (z. B. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Exportieren",
   "Eksportuj do Markdown...": "Als Markdown exportieren...",
   "Kopiuj odpowiedź": "Antwort kopieren",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Name des Gesprächs (leer = Titel aus der ersten Frage):",
@@ -583,7 +581,9 @@
   "Plik": "Datei",
   "Rozmowa zapisana do pliku: {plik}": "Gespräch in Datei gespeichert: {plik}",
   "Strona": "Seite",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Gespräch als Markdown-Datei (.md) speichern",
   "Zdjęcie": "Bild",
-  "Zmień nazwę": "Umbenennen"
+  "Zmień nazwę": "Umbenennen",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Rechtsklick auf ein Gespräch: umbenennen, exportieren, löschen. Automatisch gespeichert, nur auf diesem Computer: {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Neu erzeugen - mit dem rechts gewählten Modell",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Frage bearbeiten - sie kommt zurück ins Eingabefeld, sie und die Antwort verschwinden aus dem Gespräch"
 }

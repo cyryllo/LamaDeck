@@ -539,7 +539,6 @@
   "Rozmowy": "Conversazioni",
   "Szukaj w rozmowach...": "Cerca nelle conversazioni...",
   "Usuń rozmowę": "Elimina conversazione",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Salvate automaticamente, solo su questo computer: {sciezka}",
   "Rozmowa": "Conversazione",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "per continuare a fare domande su questo file, allegalo di nuovo",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "Impossibile caricare le conversazioni salvate: {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "strumenti",
   "umie wywoływać narzędzia - przyda się np. w Continue": "può usare strumenti: utile ad es. in Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} non vede le immagini. Scegli un modello con l'etichetta \"immagini\" (es. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Esporta",
   "Eksportuj do Markdown...": "Esporta in Markdown...",
   "Kopiuj odpowiedź": "Copia risposta",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nome della conversazione (vuoto = titolo dalla prima domanda):",
@@ -583,7 +581,9 @@
   "Plik": "File",
   "Rozmowa zapisana do pliku: {plik}": "Conversazione salvata nel file: {plik}",
   "Strona": "Pagina",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Salva la conversazione come file Markdown (.md)",
   "Zdjęcie": "Immagine",
-  "Zmień nazwę": "Rinomina"
+  "Zmień nazwę": "Rinomina",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic destro su una conversazione: rinomina, esporta, elimina. Salvate automaticamente, solo su questo computer: {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Rigenera, con il modello scelto ora a destra",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Correggi la domanda: torna nel campo di testo e lei e la risposta escono dalla conversazione"
 }

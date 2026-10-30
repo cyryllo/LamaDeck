@@ -123,8 +123,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
   WebUI i bez routera
 - Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele) i linkiem
-  **„Kopiuj kod”** nad każdym blokiem kodu i **„Kopiuj odpowiedź”** przy każdej odpowiedzi;
-  można ją przerwać
+  **„Kopiuj kod”** nad każdym blokiem kodu; można ją przerwać
+- Małe ikony w nagłówkach wiadomości: **kopiuj** odpowiedź, **wygeneruj ponownie** ostatnią
+  odpowiedź (modelem wybranym w tej chwili — wygodne do porównywania modeli) i **popraw**
+  ostatnie pytanie
 - Gdy model wczytuje się do pamięci (pierwsze pytanie potrafi chwilę potrwać), dymek odpowiedzi
   mówi o tym i odlicza sekundy
 - **Statystyki szybkości** każdej odpowiedzi, mierzone przez samą Ollamę: generowanie
@@ -209,7 +211,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] Czat: **wskaźnik zajętości kontekstu** (np. „4 051 / 65 536 tokenów”), który ostrzeże,
   zanim model zacznie zapominać początek rozmowy
 - [x] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
-- [ ] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
+- [x] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
 - [x] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown, do tego **zmiana
   nazwy** rozmów
 - [ ] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`

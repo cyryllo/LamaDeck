@@ -52,7 +52,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
     QImage, QBitmap, QRegion, QCursor, QTextCursor, QTextFrameFormat, QTextBlockFormat, QTextCharFormat,
-    QTextDocument, QTextImageFormat, QKeySequence,
+    QTextDocument, QTextImageFormat, QKeySequence, QShortcut,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -3809,6 +3809,8 @@ def _rozdziel_myslenie(tresc):
 
 
 class WidokCzatu(QTextBrowser):
+    akcja = pyqtSignal(str)  # "ponow" / "popraw" - ikony przy ostatniej wiadomości
+
     """Rozmowa na ekranie "Czat": nagłówek (kto mówi) i dymek z treścią.
 
     WHY: QTextBrowser, a nie etykiety w dymkach - etykieta z Markdownem rozpychała
@@ -3837,6 +3839,7 @@ class WidokCzatu(QTextBrowser):
         self.pokaz_myslenie = False
         self._start_ostatniej = 0
         self._kody = {}  # WHY: treść bloków kodu pod linkami "Kopiuj kod" (kopiuj:<numer>)
+        self._dymki = {}  # WHY: opis ikony pod jej adresem - QTextBrowser sam dymków nie pokazuje
         self.ensurePolished()
 
     def _przewin(self, wartosc, na_dole, do_dolu=False):
@@ -3855,6 +3858,7 @@ class WidokCzatu(QTextBrowser):
         wartosc, na_dole = self._pozycja()
         self.document().clear()  # WHY: czyści też miniatury zdjęć - wstawiane są od nowa
         self._kody = {}
+        self._dymki = {}
         if not wiadomosci:
             c = QTextCursor(self.document())
             format_bloku = QTextBlockFormat()
@@ -3863,10 +3867,14 @@ class WidokCzatu(QTextBrowser):
             c.setBlockFormat(format_bloku)
             c.insertText(pusty_tekst, self._znaki(self.kolorWyciszony))
             return
-        for wiadomosc in wiadomosci[:-1]:
-            self._wstaw(wiadomosc)
+        # WHY: ikony "popraw"/"ponów" tylko przy ostatniej parze pytanie-odpowiedź, gdy
+        #      odpowiedź jest gotowa
+        ostatnia_para = (len(wiadomosci) >= 2 and wiadomosci[-2]["rola"] == "user"
+                         and wiadomosci[-1]["rola"] != "user" and not wiadomosci[-1].get("trwa"))
+        for i, wiadomosc in enumerate(wiadomosci[:-1]):
+            self._wstaw(wiadomosc, ostatnia_para and i == len(wiadomosci) - 2)
         self._start_ostatniej = self._koniec()
-        self._wstaw(wiadomosci[-1])
+        self._wstaw(wiadomosci[-1], ostatnia_para)
         self._przewin(wartosc, na_dole, do_dolu)
 
     def odswiez_ostatnia(self, wiadomosc):
@@ -3885,7 +3893,9 @@ class WidokCzatu(QTextBrowser):
         self._przewin(wartosc, na_dole)
 
     def _klik_linku(self, url):
-        if url.scheme() == "kopiuj":
+        if url.scheme() == "akcja":
+            self.akcja.emit(url.path())
+        elif url.scheme() == "kopiuj":
             QApplication.clipboard().setText(self._kody.get(url.path(), ""))
             QToolTip.showText(QCursor.pos(), _("Skopiowano do schowka"), self)
         else:
@@ -3902,7 +3912,36 @@ class WidokCzatu(QTextBrowser):
         f.setFontItalic(kursywa)
         return f
 
-    def _wstaw(self, w):
+    def _ikona(self, c, nazwa, adres, dymek):
+        # WHAT: mała ikona-link w nagłówku wiadomości (kolor przygaszonego tekstu z theme.qss).
+        zasob = QUrl(f"ikona:{nazwa}")
+        if self.document().resource(QTextDocument.ResourceType.ImageResource, zasob) is None:
+            # WHY: rysowana w podwójnej rozdzielczości - ostra także przy skalowaniu ekranu
+            obraz = ikona(nazwa, self.kolorWyciszony, rozmiar=32, grubosc=2).pixmap(32, 32).toImage()
+            self.document().addResource(QTextDocument.ResourceType.ImageResource, zasob, obraz)
+        f = QTextImageFormat()
+        f.setName(zasob.toString())
+        f.setWidth(15)
+        f.setHeight(15)
+        f.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignMiddle)
+        f.setAnchor(True)
+        f.setAnchorHref(adres)
+        c.insertText("   ", self._znaki(self.kolorWyciszony))
+        c.insertImage(f)
+        self._dymki[adres] = dymek
+
+    def viewportEvent(self, zdarzenie):
+        # WHAT: dymek z opisem po najechaniu na ikonę.
+        if zdarzenie.type() == QEvent.Type.ToolTip:
+            dymek = self._dymki.get(self.anchorAt(zdarzenie.pos()))
+            if dymek:
+                QToolTip.showText(zdarzenie.globalPos(), dymek, self.viewport())
+            else:
+                QToolTip.hideText()
+            return True
+        return super().viewportEvent(zdarzenie)
+
+    def _wstaw(self, w, akcje=False):
         c = QTextCursor(self.document())
         c.movePosition(QTextCursor.MoveOperation.End)
         if self._koniec() > 0:
@@ -3916,17 +3955,17 @@ class WidokCzatu(QTextBrowser):
         if w.get("stat"):
             c.insertText("   " + w["stat"], self._znaki(self.kolorWyciszony))
         if w["rola"] == "assistant" and not w.get("trwa"):
-            # WHAT: "Kopiuj odpowiedź" - cała odpowiedź w Markdownie, bez rozumowania
+            # WHAT: ikona "kopiuj" - cała odpowiedź w Markdownie, bez rozumowania
             odpowiedz = _rozdziel_myslenie(w.get("tresc", ""))[1].strip()
             if odpowiedz:
                 numer = f"o{len(self._kody)}"
                 self._kody[numer] = odpowiedz
-                link = self._znaki(self.kolorLinku)
-                link.setAnchor(True)
-                link.setAnchorHref(f"kopiuj:{numer}")
-                link.setFontPointSize(max(1.0, self.font().pointSizeF() - 1))
-                c.insertText("   ", self._znaki(self.kolorWyciszony))
-                c.insertText(_("Kopiuj odpowiedź"), link)
+                self._ikona(c, "kopiuj", f"kopiuj:{numer}", _("Kopiuj odpowiedź"))
+        if akcje and w["rola"] != "user":
+            self._ikona(c, "odswiez", "akcja:ponow", _("Wygeneruj ponownie - modelem wybranym teraz po prawej"))
+        if akcje and w["rola"] == "user":
+            self._ikona(c, "edytuj", "akcja:popraw", _("Popraw pytanie - wróci do pola, a ono i odpowiedź "
+                                                       "znikną z rozmowy"))
         # --- dymek ---
         ramka_f = QTextFrameFormat()
         ramka_f.setBackground(self.tloTy if w["rola"] == "user" else self.tloModelu)
@@ -4092,6 +4131,7 @@ _IKONY_SVG = {
     "kosz": '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     "otworz": '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    "edytuj": '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     "spinacz": '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -7505,20 +7545,17 @@ class MainWindow(QMainWindow):
         self.lista_rozmow.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lista_rozmow.customContextMenuRequested.connect(self._menu_rozmowy)
         uk.addWidget(self.lista_rozmow, 1)
-        przyciski = QHBoxLayout()
-        przyciski.setSpacing(8)
-        self.btn_nazwa_rozmowy = self._przycisk(_("Zmień nazwę"), slot=self._zmien_nazwe_rozmowy)
-        przyciski.addWidget(self.btn_nazwa_rozmowy, 1)
-        self.btn_eksport_rozmowy = self._przycisk(_("Eksportuj"), "pobierz", slot=self._eksportuj_rozmowe)
-        self.btn_eksport_rozmowy.setToolTip(_("Zapisz rozmowę jako plik Markdown (.md)"))
-        przyciski.addWidget(self.btn_eksport_rozmowy, 1)
-        uk.addLayout(przyciski)
-        self.btn_usun_rozmowe = self._przycisk(_("Usuń rozmowę"), "kosz", rola="danger", slot=self._usun_rozmowe)
-        uk.addWidget(self.btn_usun_rozmowe)
+        # WHY: bez przycisków pod listą (prośba użytkownika) - zmiana nazwy, eksport i usuwanie
+        #      są w menu pod prawym przyciskiem; do tego dwuklik/F2 = nazwa, Delete = usuń
         self.lista_rozmow.itemDoubleClicked.connect(lambda _e: self._zmien_nazwe_rozmowy())
+        for klawisz, slot in ((Qt.Key.Key_F2, self._zmien_nazwe_rozmowy), (Qt.Key.Key_Delete, self._usun_rozmowe)):
+            skrot = QShortcut(QKeySequence(klawisz), self.lista_rozmow)
+            skrot.setContext(Qt.ShortcutContext.WidgetShortcut)
+            skrot.activated.connect(slot)
         sciezka = str(katalog_rozmow()).replace(str(Path.home()), "~", 1)
-        uwaga = _etykieta(_("Zapisywane automatycznie, tylko na tym komputerze: {sciezka}").format(sciezka=sciezka),
-                          "muted")
+        uwaga = _etykieta(_("Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, "
+                            "tylko na tym komputerze: {sciezka}").format(sciezka=sciezka), "muted")
+        uwaga.setObjectName("smallNote")  # WHY: mała czcionka - to tylko podpowiedź (prośba użytkownika)
         uwaga.setWordWrap(True)
         uk.addWidget(uwaga)
         rzad.addWidget(karta)
@@ -7528,6 +7565,7 @@ class MainWindow(QMainWindow):
         uk.setSpacing(12)
         self.widok_czatu = WidokCzatu()
         self.widok_czatu.pokaz_myslenie = _ustawienia().value("czat/rozumowanie", False, type=bool)
+        self.widok_czatu.akcja.connect(self._akcja_czatu)
         uk.addWidget(self.widok_czatu, 1)
         # --- załączniki: uwaga + "chipy" z nazwami nad polem ---
         self.lbl_czat_uwaga = _etykieta("", "muted")
@@ -8133,8 +8171,6 @@ class MainWindow(QMainWindow):
             if r["id"] == self._czat_id:
                 element.setSelected(True)
         self._filtruj_rozmowy(self.pole_szukaj_rozmow.text())
-        for btn in (self.btn_usun_rozmowe, self.btn_nazwa_rozmowy, self.btn_eksport_rozmowy):
-            btn.setEnabled(bool(self._rozmowy))
 
     def _po_liscie_rozmow(self, ok, wynik):
         self._rozmowy = wynik if ok else []
@@ -8309,8 +8345,17 @@ class MainWindow(QMainWindow):
                                 "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
                               "warn")
             return
-        wiadomosc = {"rola": "user", "tresc": tekst, "zalaczniki": list(self._zalaczniki)}
-        self._czat.append(wiadomosc)
+        self._czat.append({"rola": "user", "tresc": tekst, "zalaczniki": list(self._zalaczniki)})
+        self._zalaczniki = []
+        self._linki_nieudane = set()
+        self._pokaz_zalaczniki()
+        self._uwaga_czatu("")
+        self.pole_czat.clear()
+        self._zadaj_pytanie(model, host)
+
+    def _zadaj_pytanie(self, model, host):
+        # WHAT: wysyła modelowi rozmowę kończącą się pytaniem użytkownika i pisze odpowiedź.
+        # WHY:  osobno od wyslij_czat - tę samą drogę wybiera "Wygeneruj ponownie".
         # WHY: historia dla modelu - bez błędów i bez rozumowania (model go nie potrzebuje,
         #      a zjadałoby kontekst); zdjęcia zostają przy swoich pytaniach, żeby model
         #      pamiętał je w dalszej rozmowie ("a co jest w lewym rogu?")
@@ -8324,14 +8369,9 @@ class MainWindow(QMainWindow):
                 historia.append(wpis)
             elif w["rola"] == "assistant" and not w.get("przerwano"):
                 historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
-        self._zalaczniki = []
-        self._linki_nieudane = set()
-        self._pokaz_zalaczniki()
-        self._uwaga_czatu("")
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
                            "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
                            "gb": model["rozmiar"] / 1024 ** 3})
-        self.pole_czat.clear()
         self._pokaz_czat(do_dolu=True)
         # WHY: duże pliki z CAŁEJ rozmowy - można dopytywać o dokument dołączony wcześniej
         dokumenty = [{"nazwa": z["nazwa"], "fragmenty": z["fragmenty"], "wektory": z["wektory"],
@@ -8355,6 +8395,41 @@ class MainWindow(QMainWindow):
         self._czat_zegar.start()
         worker.start()
         self._odswiez_przycisk_czatu()
+
+    def _akcja_czatu(self, akcja):
+        # WHAT: ikony w rozmowie - "ponow" (ostatnia odpowiedź od nowa, wybranym teraz modelem)
+        #       i "popraw" (ostatnie pytanie wraca do pola, ono i odpowiedź znikają z rozmowy).
+        # WHY:  nieudana odpowiedź nie zostaje w historii - model by się nią sugerował, zjada
+        #       kontekst i trafia do zapisu i eksportu.
+        if self._czat_worker is not None or len(self._czat) < 2 or self._czat[-2]["rola"] != "user":
+            return
+        if akcja == "ponow":
+            model, host = self._wybrany_model_czatu()
+            if not model:
+                return
+            pytanie = self._czat[-2]
+            if any(z["typ"] == "obraz" for z in pytanie.get("zalaczniki", [])) and not self._widzi_obrazy(model):
+                self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
+                                    "(np. gemma3, qwen2.5vl, llava).").format(
+                                        model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
+                return
+            self._czat.pop()
+            self._uwaga_czatu("")
+            self._zadaj_pytanie(model, host)
+        elif akcja == "popraw":
+            self._czat.pop()
+            pytanie = self._czat.pop()
+            # WHY: załączniki wracają razem z tekstem (duże pliki bez wektorów - z zapisanej
+            #      rozmowy - trzeba dołączyć ponownie, więc ich nie przywracamy)
+            self._zalaczniki = [z for z in pytanie.get("zalaczniki", []) if not z.get("bez_wyszukiwania")]
+            self.pole_czat.setPlainText(pytanie.get("tresc", ""))
+            self.pole_czat.setFocus()
+            self.pole_czat.moveCursor(QTextCursor.MoveOperation.End)
+            self._pokaz_zalaczniki()
+            self._pokaz_czat()
+            self._pokaz_kontekst()
+            if self._czat:
+                self._zapisz_biezaca_rozmowe()
 
     def _pobierz_strony(self, linki):
         self._uwaga_czatu(_("Pobieram: {linki}...").format(linki=", ".join(_nazwa_strony(l) for l in linki)), "info")

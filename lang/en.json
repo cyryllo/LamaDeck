@@ -539,7 +539,6 @@
   "Rozmowy": "Conversations",
   "Szukaj w rozmowach...": "Search conversations...",
   "Usuń rozmowę": "Delete conversation",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Saved automatically, only on this computer: {sciezka}",
   "Rozmowa": "Conversation",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "to keep asking about this file, attach it again",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "Could not load saved conversations: {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "tools",
   "umie wywoływać narzędzia - przyda się np. w Continue": "can call tools - useful e.g. in Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} can't see pictures. Pick a model with the \"pictures\" tag (e.g. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Export",
   "Eksportuj do Markdown...": "Export to Markdown...",
   "Kopiuj odpowiedź": "Copy answer",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Conversation name (empty = title from the first question):",
@@ -583,7 +581,9 @@
   "Plik": "File",
   "Rozmowa zapisana do pliku: {plik}": "Conversation saved to file: {plik}",
   "Strona": "Page",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Save the conversation as a Markdown file (.md)",
   "Zdjęcie": "Picture",
-  "Zmień nazwę": "Rename"
+  "Zmień nazwę": "Rename",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Right-click a conversation to rename, export or delete it. Saved automatically, only on this computer: {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Regenerate - with the model now selected on the right",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Edit the question - it goes back to the input, and it and its answer leave the conversation"
 }

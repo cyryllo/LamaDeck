@@ -539,7 +539,6 @@
   "Rozmowy": "Conversas",
   "Szukaj w rozmowach...": "Pesquisar nas conversas...",
   "Usuń rozmowę": "Eliminar conversa",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Guardadas automaticamente, só neste computador: {sciezka}",
   "Rozmowa": "Conversa",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "para continuar a perguntar sobre este ficheiro, anexe-o de novo",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "Não foi possível carregar as conversas guardadas: {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "ferramentas",
   "umie wywoływać narzędzia - przyda się np. w Continue": "consegue usar ferramentas - útil p. ex. no Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} não vê imagens. Escolha um modelo com a etiqueta \"imagens\" (ex. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Exportar",
   "Eksportuj do Markdown...": "Exportar para Markdown...",
   "Kopiuj odpowiedź": "Copiar resposta",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nome da conversa (vazio = título da primeira pergunta):",
@@ -583,7 +581,9 @@
   "Plik": "Ficheiro",
   "Rozmowa zapisana do pliku: {plik}": "Conversa guardada no ficheiro: {plik}",
   "Strona": "Página",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Guardar a conversa como ficheiro Markdown (.md)",
   "Zdjęcie": "Imagem",
-  "Zmień nazwę": "Mudar o nome"
+  "Zmień nazwę": "Mudar o nome",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clique direito numa conversa: mudar o nome, exportar, eliminar. Guardadas automaticamente, só neste computador: {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Gerar de novo - com o modelo agora escolhido à direita",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corrigir a pergunta - volta ao campo de texto, e ela e a resposta saem da conversa"
 }

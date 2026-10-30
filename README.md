@@ -122,8 +122,9 @@ fonts are bundled, so it looks the same everywhere).
 - A simple built-in chat with any model on any host, straight from Ollama — works without Open
   WebUI and without the router
 - Answers stream in as they're written, with formatting (code blocks, lists, tables) and a
-  **Copy code** link above every code block and **Copy answer** next to every answer; stop at
-  any time
+  **Copy code** link above every code block; stop at any time
+- Small icons in the message headers: **copy** an answer, **regenerate** the last answer (with
+  the model selected right now — handy for comparing models) and **edit** the last question
 - While a model is being loaded into memory (the first question can take a while), the answer
   bubble says so and counts the seconds
 - **Speed stats** for every answer, measured by Ollama itself: generation and prompt processing in
@@ -210,7 +211,7 @@ fonts are bundled, so it looks the same everywhere).
 - [x] Chat: a **context usage indicator** (e.g. "4,051 / 65,536 tokens") that warns before the
   model starts forgetting the beginning
 - [x] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
-- [ ] Chat: **regenerate** the last answer and **edit** the last question
+- [x] Chat: **regenerate** the last answer and **edit** the last question
 - [x] Chat: **copy the whole answer** and **export** a conversation to Markdown, plus **renaming**
   conversations
 - [ ] `install.sh`: warn when the app is already installed from the `.deb` package

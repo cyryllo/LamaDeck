@@ -539,7 +539,6 @@
   "Rozmowy": "Conversations",
   "Szukaj w rozmowach...": "Rechercher dans les conversations...",
   "Usuń rozmowę": "Supprimer la conversation",
-  "Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Enregistrées automatiquement, uniquement sur cet ordinateur : {sciezka}",
   "Rozmowa": "Conversation",
   "żeby dalej pytać o ten plik, dołącz go ponownie": "pour continuer à poser des questions sur ce fichier, joignez-le à nouveau",
   "Nie udało się wczytać zapisanych rozmów: {blad}": "Impossible de charger les conversations enregistrées : {blad}",
@@ -574,7 +573,6 @@
   "narzędzia": "outils",
   "umie wywoływać narzędzia - przyda się np. w Continue": "peut appeler des outils - utile p. ex. dans Continue",
   "{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" (np. gemma3, qwen2.5vl, llava).": "{model} ne voit pas les images. Choisissez un modèle avec l'étiquette « images » (p. ex. gemma3, qwen2.5vl, llava).",
-  "Eksportuj": "Exporter",
   "Eksportuj do Markdown...": "Exporter en Markdown...",
   "Kopiuj odpowiedź": "Copier la réponse",
   "Nazwa rozmowy (puste pole = tytuł z pierwszego pytania):": "Nom de la conversation (vide = titre tiré de la première question) :",
@@ -583,7 +581,9 @@
   "Plik": "Fichier",
   "Rozmowa zapisana do pliku: {plik}": "Conversation enregistrée dans le fichier : {plik}",
   "Strona": "Page",
-  "Zapisz rozmowę jako plik Markdown (.md)": "Enregistrer la conversation en fichier Markdown (.md)",
   "Zdjęcie": "Image",
-  "Zmień nazwę": "Renommer"
+  "Zmień nazwę": "Renommer",
+  "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic droit sur une conversation : renommer, exporter, supprimer. Enregistrées automatiquement, uniquement sur cet ordinateur : {sciezka}",
+  "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Régénérer - avec le modèle choisi maintenant à droite",
+  "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Modifier la question - elle revient dans le champ, et elle et sa réponse quittent la conversation"
 }
