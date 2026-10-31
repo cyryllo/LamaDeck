@@ -136,8 +136,9 @@
   <section id="instalacja">
     <div class="wrap">
       <h2>Instalacja</h2>
-      <p class="section-lead">Dla Debiana 13, Ubuntu 24.04 i nowszych, na KDE Plasma (inne
-        pulpity też działają). Samą Ollamę można zainstalować z poziomu programu.</p>
+      <p class="section-lead">Robiony pod KDE Plasma (inne pulpity też działają): repozytorium dla
+        Debiana i Ubuntu, AppImage dla każdej innej dystrybucji. Samą Ollamę można zainstalować
+        z poziomu programu.</p>
       <div class="steps">
         <div class="step recommended">
           <span class="tag">Zalecane</span>
@@ -159,6 +160,15 @@ sudo apt install lamadeck</code></pre>
 <pre><code>sudo apt install ./lamadeck_*_all.deb</code></pre>
         </div>
         <div class="step">
+          <h3>Każda dystrybucja: AppImage</h3>
+          <p>Jeden plik ze wszystkim w środku, dla Fedory, Archa, openSUSE i innych. Pobierz
+            <code>LamaDeck-…-x86_64.AppImage</code> ze
+            <a href="https://github.com/cyryllo/LamaDeck/releases">strony wydań</a> i uruchom.
+            Przy pierwszym starcie proponuje dodanie do menu aplikacji.</p>
+<pre><code>chmod +x LamaDeck-*-x86_64.AppImage
+./LamaDeck-*-x86_64.AppImage</code></pre>
+        </div>
+        <div class="step">
           <h3>Bez uprawnień administratora</h3>
           <p>Kopiuje program do katalogu domowego i dodaje go do menu. Aktualizacja to ponowne
             uruchomienie tego samego skryptu.</p>
@@ -167,8 +177,8 @@ cd LamaDeck
 ./install.sh</code></pre>
         </div>
       </div>
-      <p class="note">W 0.9.x dojdzie AppImage, jeden plik dla Fedory, Archa, openSUSE i innych
-        dystrybucji. Do wersji 0.9 LamaDeck nazywał się „Ollama Manager”; instalacja zastępuje
+      <p class="note">AppImage wymaga glibc 2.34 lub nowszej (Ubuntu 22.04, Debian 12, Fedora 35
+        i nowsze). Do wersji 0.9 LamaDeck nazywał się „Ollama Manager”; instalacja zastępuje
         stary pakiet i zachowuje ustawienia oraz rozmowy.</p>
     </div>
   </section>
@@ -183,8 +193,8 @@ cd LamaDeck
             <li><span class="done">Gotowe:</span> zapisywanie rozmów, zajętość kontekstu,
               wyłączanie myślenia, ponowne generowanie i poprawianie, eksport do Markdown, linki
               w pytaniu</li>
-            <li><span class="done">Gotowe:</span> własne repozytorium APT</li>
-            <li>AppImage dla innych dystrybucji</li>
+            <li><span class="done">Gotowe:</span> własne repozytorium APT i AppImage dla innych
+              dystrybucji</li>
           </ul>
         </div>
         <div class="milestone">

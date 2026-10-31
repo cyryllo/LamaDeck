@@ -42,3 +42,25 @@ Description: control panel for a local AI stack (Ollama, LiteLLM, Open WebUI)
  and search in large files. Formerly called "Ollama Manager". Requires
  systemd and polkit; Ollama itself can be installed from the app.
 
+Package: lamadeck
+Version: 0.9.12
+Architecture: all
+Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
+Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-requests, pkexec, systemd, curl
+Conflicts: ollama-manager
+Replaces: ollama-manager
+Filename: pool/main/lamadeck_0.9.12_all.deb
+Size: 764740
+MD5sum: 01f485f2ca58765d6791201e7c421a0c
+SHA1: fd2cb099c907fc5fa7334ff36da7666d9378be2b
+SHA256: 55606e4d311cfae5a26800c5af9da40d4c4ea8d1d02c1957814536d7a135e866
+Section: utils
+Priority: optional
+Homepage: https://github.com/cyryllo/LamaDeck
+Description: control panel for a local AI stack (Ollama, LiteLLM, Open WebUI)
+ Unofficial desktop app (PyQt6, KDE) for a local AI stack: the Ollama service
+ and models on several hosts, a LiteLLM router with one OpenAI-compatible
+ address, Open WebUI, and a built-in chat with speed statistics, attachments
+ and search in large files. Formerly called "Ollama Manager". Requires
+ systemd and polkit; Ollama itself can be installed from the app.
+
