@@ -4,7 +4,8 @@ A control panel for your local AI stack — a desktop app (PyQt6) for KDE. It st
 simple [Ollama](https://ollama.com) service manager and grew into one place for the whole
 stack: multi-host model management, a model aggregator (LiteLLM) that exposes one
 OpenAI-compatible endpoint for tools like Continue/VS Code, a browser chat UI (Open WebUI) and
-a built-in chat. No terminal, no Docker, no cloud — everything runs on your LAN.
+a built-in chat that can search the web and cite its sources. No terminal, no Docker, no cloud —
+everything runs on your LAN.
 
 > **LamaDeck was called "Ollama Manager" until version 0.9.** It's an independent project, not
 > affiliated with Ollama. Updating from the old name keeps your settings and conversations —
@@ -12,11 +13,9 @@ a built-in chat. No terminal, no Docker, no cloud — everything runs on your LA
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
-> **Status: stable (v0.9.0) — almost 1.0.** Daily driver on my own setup, working as expected.
-> The 0.9.x line brings the last chat additions and packaging (APT repository, AppImage);
-> **1.0** adds web search in the chat (see the [roadmap](#roadmap-to-10)), after which the
-> project switches to bug fixes only.
-> [Bug reports and feedback](../../issues) are welcome.
+> **Status: 1.0 — feature-complete.** Daily driver on my own setup. From here on the project
+> gets bug fixes only (see [Roadmap](#roadmap)). [Bug reports and feedback](../../issues) are
+> welcome. Project page: https://cyryllo.github.io/LamaDeck/
 
 ![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)
 
@@ -115,8 +114,11 @@ fonts are bundled, so it looks the same everywhere).
 - All Ollama hosts (this computer and any on the LAN, e.g. BC-250): online/offline, Ollama
   version, response time, VRAM and RAM used by models (with the totals for this computer) and the
   models on each host — on disk or loaded into memory
-- Add a host by just typing its address (`http://` and port 11434 are added for you), remove it
-  with one click; the list is shared by the router and the Models screen
+- On computers with an **APU**, the RAM figure includes the part of a model kept in system memory
+  shared with the GPU (GTT) — shown as "Ollama X GB + APU Y GB"
+- Add a host by just typing its address (`http://` and port 11434 are added for you), remove a
+  LAN host with one click (this computer always stays); the list is shared by the router and the
+  Models screen
 - For this computer: restart the Ollama service and jump to its log
 - A host that doesn't respond gets a hint on what to check (`OLLAMA_HOST=0.0.0.0`)
 
@@ -141,6 +143,9 @@ fonts are bundled, so it looks the same everywhere).
 - **"Only MoE models"** checkbox — shows only mixture-of-experts models (and only their MoE
   variants), which run much faster on APUs and computers without a strong graphics card.
   Detected by description, name, Hugging Face tags and Ollama variant tags (e.g. `30b-a3b`)
+- **"Community models"** checkbox — also shows models other authors published on ollama.com
+  (`ollama.com/author/model`, e.g. `jobautomation/OpenEuroLLM-Polish`); off by default, because
+  Ollama doesn't review them. Pasting an ollama.com link opens the model's variants directly
 - Download progress with size and speed, and a "Cancel" button (resumes later where it stopped);
   a desktop notification when a long download (or an install/update) finishes in the background
 - Tiles for the models on **all hosts**, filterable by kind (chat, code, embedding, vision): size,
@@ -156,7 +161,7 @@ fonts are bundled, so it looks the same everywhere).
 - A simple built-in chat with any model on any host, straight from Ollama — works without Open
   WebUI and without the router
 - Answers stream in as they're written, with formatting (code blocks, lists, tables) and a
-  **Copy code** link above every code block; stop at any time
+  **copy** icon above every code block; stop at any time
 - Small icons in the message headers: **copy** an answer, **regenerate** the last answer (with
   the model selected right now — handy for comparing models) and **edit** the last question
 - While a model is being loaded into memory (the first question can take a while), the answer
@@ -183,6 +188,13 @@ fonts are bundled, so it looks the same everywhere).
   is needed, and nothing is stored on disk. The embedding model is chosen in Settings ("Chat"
   card); without one, a button there downloads the recommended multilingual
   `nomic-embed-text-v2-moe`
+- **Web search with sources**: the globe button next to the paperclip (shown once a results
+  source is chosen in Settings) turns it on. The model writes 1–3 search queries, the app searches,
+  reads up to 5 pages, picks the passages that match the question (with the embedding model) and
+  the answer cites them as [1], [2]… with clickable sources below. Works with any model, no tool
+  calling needed. Results come from **SearXNG** — installed with one click on this computer, no
+  account — or your own SearXNG server, or Ollama's web search (free ollama.com account). Off by
+  default: queries go to the internet only when you switch it on
 - **Links in a question**: paste a link and the app downloads the page itself — straight from
   your computer, no account — and adds its text to the question (a PDF link works too; long
   pages go through excerpt search). Pages that only load with JavaScript are reported as such
@@ -225,9 +237,11 @@ fonts are bundled, so it looks the same everywhere).
   instantly, remembered between runs
 - Autostart of all three services in one place: Ollama with the system, the router and Open WebUI
   after login
-- Versions and on-demand update checks for Ollama, LiteLLM and Open WebUI
+- Versions and on-demand update checks for Ollama, LiteLLM, Open WebUI and SearXNG
 - Chat: the embedding model used to search large files (or a one-click download of the
-  recommended one)
+  recommended one) and the **web search** source: off, SearXNG on this computer (install, start,
+  stop, autostart, update, remove — for the user, no root), SearXNG at another address, or
+  Ollama's web search with an API key; "Test search" runs one query
 - Services that aren't installed are hidden here, in the sidebar and in the tray panel
 - Ollama environment variables, each with a short description: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (default 4096 is too small for agentic work), `OLLAMA_MAX_LOADED_MODELS`,
@@ -236,32 +250,20 @@ fonts are bundled, so it looks the same everywhere).
   `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD`, plus free-form extra variables — one "Save"
   applies everything with a single service restart
 
-## Roadmap to 1.0
+## Roadmap
 
-**0.9.x** (current) — the last additions and packaging, tested before 1.0:
+**1.0** is the complete version. Everything planned is done:
 
-- [x] Chat: **automatic saving of conversations** to local files, with a list of saved
-  conversations (open, delete, search)
-- [x] Chat: a **context usage indicator** (e.g. "4,051 / 65,536 tokens") that warns before the
-  model starts forgetting the beginning
-- [x] Chat: a **"no thinking"** switch for reasoning models (e.g. qwen3) — faster answers
-- [x] Chat: **regenerate** the last answer and **edit** the last question
-- [x] Chat: **copy the whole answer** and **export** a conversation to Markdown, plus **renaming**
-  conversations
-- [x] `install.sh`: warn when the app is already installed from the `.deb` package
-- [x] **Own APT repository** — add it once, then `sudo apt install lamadeck` and updates
-  come with the system
-- [x] **AppImage** — one file that runs on any distribution (Fedora, Arch, openSUSE…)
-- [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and
-  adds its text to the question
+- [x] Multi-host model management, LiteLLM router, Open WebUI with one click, log with plain
+  explanations, tray panel, seven languages
+- [x] Built-in chat: attachments and documents, large files searched by excerpts, links in a
+  question, saved conversations, context usage, thinking on/off, regenerate and edit, copy and
+  Markdown export
+- [x] **Web search in the chat** with sources (SearXNG or Ollama's web search)
+- [x] Packages: own APT repository, `.deb`, AppImage
 
-**1.0 — web search in the chat.** A switch next to the message: the model writes a few search
-queries, the app searches, reads the pages and answers with sources — like Open WebUI does,
-and with any model. Results from Ollama's own web search (free ollama.com account) or your own
-SearXNG server; off by default, with a clear note that queries go to the internet.
-
-**After that: bug fixes only.** The app covers what it set out to do; anything bigger
-(user accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.
+**From now on: bug fixes only.** The app covers what it set out to do; anything bigger (user
+accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.
 
 ## Notes
 

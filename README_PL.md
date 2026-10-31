@@ -4,17 +4,17 @@ Panel sterowania lokalnym stosem AI — aplikacja desktopowa (PyQt6) pod KDE. Za
 prosty manager usługi [Ollamy](https://ollama.com), a wyrosła w jedno miejsce dla całego
 stosu: zarządzanie modelami na wielu hostach naraz, agregator modeli (LiteLLM) wystawiający
 jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, panel czatu
-w przeglądarce (Open WebUI) i wbudowany czat. Bez terminala, bez Dockera, bez chmury —
+w przeglądarce (Open WebUI) i wbudowany czat, który umie szukać w internecie i podawać źródła.
+Bez terminala, bez Dockera, bez chmury —
 wszystko działa lokalnie, w Twoim LAN.
 
 > **Do wersji 0.9 LamaDeck nazywał się „Ollama Manager”.** To niezależny projekt, niezwiązany
 > z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
 > przenosi przy pierwszym uruchomieniu.
 
-> **Status: stabilna (v0.9.0) — prawie 1.0.** Używam jej na co dzień na własnym sprzęcie
-> i działa zgodnie z oczekiwaniami. Linia 0.9.x to ostatnie dodatki do czatu
-> i pakiety (repozytorium APT, AppImage); **1.0** dokłada wyszukiwanie w internecie w czacie
-> (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
+> **Status: 1.0 — wersja kompletna.** Używam jej na co dzień na własnym sprzęcie. Od teraz
+> projekt dostaje już tylko poprawki błędów (patrz [Plan](#plan)). [Zgłoszenia błędów i
+> uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
 ![LamaDeck — panel główny](screenshots/lamadeck-dashboard_pl.png)
 
@@ -112,8 +112,11 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Wszystkie hosty Ollamy (ten komputer i dowolne w LAN, np. BC-250): online/offline, wersja
   Ollamy, czas odpowiedzi, VRAM i RAM zajęte przez modele (dla tego komputera także całkowita
   pamięć) i modele na każdym hoście — na dysku albo w pamięci
-- Dodawanie hosta przez sam adres (`http://` i port 11434 program dopisze sam), usuwanie jednym
-  kliknięciem; lista jest wspólna dla routera i ekranu Modele
+- Na komputerach z **APU** RAM obejmuje też część modelu w pamięci systemowej współdzielonej
+  z kartą graficzną (GTT) — widać to jako „Ollama X GB + APU Y GB”
+- Dodawanie hosta przez sam adres (`http://` i port 11434 program dopisze sam), usuwanie hosta
+  z LAN jednym kliknięciem (ten komputer zostaje zawsze); lista jest wspólna dla routera i ekranu
+  Modele
 - Dla tego komputera: ponowne uruchomienie usługi Ollama i przejście do jej dziennika
 - Gdy host nie odpowiada, program podpowiada, co sprawdzić (`OLLAMA_HOST=0.0.0.0`)
 
@@ -138,6 +141,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Pole **„Tylko modele MoE”** — pokazuje tylko modele typu mixture of experts (i tylko ich warianty
   MoE), które działają dużo szybciej na APU i komputerach bez mocnej karty graficznej. Rozpoznawane
   po opisie, nazwie, tagach Hugging Face i tagach wariantów Ollamy (np. `30b-a3b`)
+- Pole **„Modele społeczności”** — pokazuje też modele, które na ollama.com opublikowali inni
+  autorzy (`ollama.com/autor/model`, np. `jobautomation/OpenEuroLLM-Polish`); domyślnie wyłączone,
+  bo Ollama ich nie sprawdza. Wklejony link do ollama.com otwiera od razu warianty modelu
 - Postęp pobierania z rozmiarem i prędkością oraz przycisk „Anuluj” (wznowi się później tam, gdzie
   przerwało); powiadomienie na pulpicie, gdy długie pobieranie (albo instalacja/aktualizacja)
   skończy się w tle
@@ -154,7 +160,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Prosty wbudowany czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open
   WebUI i bez routera
 - Odpowiedź pojawia się na bieżąco, z formatowaniem (bloki kodu, listy, tabele) i linkiem
-  **„Kopiuj kod”** nad każdym blokiem kodu; można ją przerwać
+  ikoną **kopiowania** nad każdym blokiem kodu; można ją przerwać
 - Małe ikony w nagłówkach wiadomości: **kopiuj** odpowiedź, **wygeneruj ponownie** ostatnią
   odpowiedź (modelem wybranym w tej chwili — wygodne do porównywania modeli) i **popraw**
   ostatnie pytanie
@@ -181,6 +187,13 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   poza Ollamą nie jest potrzebne, nic nie jest zapisywane na dysku. Model embeddingów wybierasz
   w Ustawieniach (karta „Czat”); gdy żadnego nie ma, przycisk pobiera zalecany, wielojęzyczny
   `nomic-embed-text-v2-moe`
+- **Wyszukiwanie w internecie ze źródłami**: włączasz je przyciskiem z globusem obok spinacza
+  (widać go, gdy w Ustawieniach wybrano źródło wyników). Model pisze 1–3 zapytania, program
+  wyszukuje, czyta do 5 stron, wybiera fragmenty pasujące do pytania (modelem embeddingów),
+  a odpowiedź podaje je jako [1], [2]… z klikalnymi źródłami pod spodem. Działa z każdym modelem,
+  bez wywoływania narzędzi. Wyniki z **SearXNG** — instalowanego jednym kliknięciem na tym
+  komputerze, bez konta — z własnego serwera SearXNG albo z wyszukiwarki Ollamy (darmowe konto na
+  ollama.com). Domyślnie wyłączone: zapytania wychodzą do internetu tylko, gdy je włączysz
 - **Linki w pytaniu**: wklejasz link, a program sam pobiera stronę — wprost z Twojego komputera,
   bez konta — i dołącza jej tekst do pytania (link do PDF też działa; długie strony idą przez
   wyszukiwanie fragmentów). Strony, które wczytują się dopiero w JavaScripcie, program zgłasza
@@ -222,9 +235,12 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   zmiana od razu, zapamiętana między uruchomieniami
 - Autostart wszystkich trzech usług w jednym miejscu: Ollama razem z systemem, router i Open WebUI
   po zalogowaniu
-- Wersje i sprawdzanie aktualizacji Ollamy, LiteLLM i Open WebUI na żądanie
+- Wersje i sprawdzanie aktualizacji Ollamy, LiteLLM, Open WebUI i SearXNG na żądanie
 - Czat: model embeddingów do wyszukiwania w dużych plikach (albo pobranie zalecanego jednym
-  przyciskiem)
+  przyciskiem) i źródło **wyszukiwania w internecie**: wyłączone, SearXNG na tym komputerze
+  (instalacja, start, stop, autostart, aktualizacja, usuwanie — dla użytkownika, bez roota),
+  SearXNG pod innym adresem albo wyszukiwarka Ollamy z kluczem API; „Sprawdź wyszukiwanie” wysyła
+  jedno próbne zapytanie
 - Usługi, których nie ma na komputerze, są tu ukryte — tak samo w pasku bocznym i w zasobniku
 - Zmienne środowiskowe Ollamy, każda z krótkim opisem: `OLLAMA_KEEP_ALIVE`,
   `OLLAMA_CONTEXT_LENGTH` (domyślne 4096 to za mało do pracy agentowej), `OLLAMA_MAX_LOADED_MODELS`,
@@ -233,32 +249,20 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   `GGML_VK_VISIBLE_DEVICES`, `OLLAMA_GPU_OVERHEAD` i dowolne własne zmienne — jedno „Zapisz”
   stosuje wszystko jednym restartem usługi
 
-## Plan do wersji 1.0
+## Plan
 
-**0.9.x** (obecna) — ostatnie dodatki i pakiety, testowane przed 1.0:
+**1.0** to wersja kompletna. Wszystko, co było zaplanowane, jest zrobione:
 
-- [x] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
-  rozmów (otwieranie, usuwanie, wyszukiwanie)
-- [x] Czat: **wskaźnik zajętości kontekstu** (np. „4 051 / 65 536 tokenów”), który ostrzeże,
-  zanim model zacznie zapominać początek rozmowy
-- [x] Czat: przełącznik **„bez myślenia”** dla modeli rozumujących (np. qwen3) — szybsze odpowiedzi
-- [x] Czat: **wygeneruj ponownie** ostatnią odpowiedź i **popraw** ostatnie pytanie
-- [x] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown, do tego **zmiana
-  nazwy** rozmów
-- [x] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
-- [x] **Własne repozytorium APT** — dodajesz je raz, potem `sudo apt install lamadeck`,
-  a aktualizacje przychodzą razem z systemem
-- [x] **AppImage** — jeden plik działający na każdej dystrybucji (Fedora, Arch, openSUSE…)
-- [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza
-  jej tekst do pytania
+- [x] Zarządzanie modelami na wielu hostach, router LiteLLM, Open WebUI jednym kliknięciem,
+  dziennik z prostymi wyjaśnieniami, okienko w zasobniku, siedem języków
+- [x] Wbudowany czat: załączniki i dokumenty, duże pliki przeszukiwane fragmentami, linki
+  w pytaniu, zapisywane rozmowy, zajętość kontekstu, myślenie wł./wył., ponowne generowanie
+  i poprawianie, kopiowanie i eksport do Markdown
+- [x] **Wyszukiwanie w internecie w czacie** ze źródłami (SearXNG albo wyszukiwarka Ollamy)
+- [x] Pakiety: własne repozytorium APT, `.deb`, AppImage
 
-**1.0 — wyszukiwanie w internecie w czacie.** Przełącznik przy wiadomości: model pisze kilka
-zapytań, program wyszukuje, czyta strony i odpowiada ze źródłami — tak jak Open WebUI,
-z każdym modelem. Wyniki z wyszukiwarki Ollamy (darmowe konto na ollama.com) albo z własnego
-serwera SearXNG; domyślnie wyłączone, z jasną informacją, że zapytania wychodzą do internetu.
-
-**Potem: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe
-(konta użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.
+**Od teraz: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe (konta
+użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.
 
 ## Uwagi
 
