@@ -6976,6 +6976,9 @@ class MainWindow(QMainWindow):
         podpowiedz = "" if lokalny else _("Dostępne tylko dla tego komputera - zdalną usługą steruje się na tamtym komputerze.")
         self.btn_host_restart.setToolTip(podpowiedz)
         self.btn_host_dziennik.setToolTip(podpowiedz)
+        # WHY: ten komputer zostaje zawsze - jego usługą Ollama program steruje (start/stop,
+        #      ustawienia, dziennik), a router i czat liczą na lokalny host; kosz tylko przy zdalnych
+        self.btn_host_usun.setVisible(not lokalny)
         self.btn_host_usun.setEnabled(len(self.serwery) > 1)
 
         gib = 1024 ** 3
@@ -7135,8 +7138,8 @@ class MainWindow(QMainWindow):
 
     def usun_host(self):
         serwer = next((s for s in self.serwery if s["adres"] == self._host_wybrany), None)
-        if not serwer:
-            return
+        if not serwer or _adres_lokalny(serwer["adres"]):
+            return  # WHY: lokalnego hosta nie usuwamy (przycisk jest wtedy schowany)
         # WHY: router i ekran Modele zawsze potrzebują przynajmniej jednego hosta.
         if len(self.serwery) <= 1:
             QMessageBox.warning(self, _("Nie można usunąć"), _("Musi zostać co najmniej jeden serwer."))
