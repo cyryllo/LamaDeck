@@ -4136,9 +4136,11 @@ class WidokCzatu(QTextBrowser):
         czcionka = QFont("JetBrains Mono")
         czcionka.setPointSizeF(max(1.0, self.font().pointSizeF() - 0.5))
         # WHY: bez ligatur - JetBrains Mono rysowała "<!--" jako strzałki, a "->" / ">="
-        #      jako jeden znak; w kodzie do skopiowania ma być widać dokładnie te znaki
-        czcionka.setFeature(QFont.Tag("liga"), 0)
-        czcionka.setFeature(QFont.Tag("calt"), 0)
+        #      jako jeden znak; w kodzie do skopiowania ma być widać dokładnie te znaki.
+        #      PreferNoShaping, a nie setFeature("liga"/"calt") - to drugie jest dopiero od
+        #      Qt 6.7, a Ubuntu 24.04 ma starsze (czat z kodem kończył się błędem). Dla pisma
+        #      łacińskiego wynik ten sam: sprawdzone numery glifów na Qt 6.4 i 6.11.
+        czcionka.setStyleStrategy(QFont.StyleStrategy.PreferNoShaping)
         f_kodu = QTextCharFormat()
         f_kodu.setFont(czcionka, QTextCharFormat.FontPropertiesInheritanceBehavior.FontPropertiesSpecifiedOnly)
         grupy = []  # (pozycja pierwszego bloku, linie) - kolejne bloki kodu = jeden fragment kodu
