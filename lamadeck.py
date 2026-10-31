@@ -10010,9 +10010,10 @@ class MainWindow(QMainWindow):
             "pobierz", slot=self._pobierz_model_rag)
         h.addWidget(self.btn_pobierz_rag, 0, Qt.AlignmentFlag.AlignTop)
         uk.addWidget(self.ramka_rag_brak)
+        # WHY: wyszukiwanie w internecie to też ustawienie czatu - jedna karta (prośba użytkownika)
+        self._sekcja_wyszukiwania(uk)
         v.addWidget(karta)
         self._odswiez_modele_rag()
-        v.addWidget(self._karta_wyszukiwania())
 
         # --- Zmienne środowiskowe Ollamy ---
         karta, uk = self._karta()
@@ -10208,14 +10209,14 @@ class MainWindow(QMainWindow):
         self.pole_wlasne_zmienne.setPlainText("\n".join(wlasne))
 
     # --- Wyszukiwanie w internecie (źródło wyników + SearXNG) ----------------
-    def _karta_wyszukiwania(self):
-        # WHAT: karta w Ustawieniach - skąd czat bierze wyniki wyszukiwania i obsługa
-        #       SearXNG na tym komputerze (instalacja, start/stop, autostart, usuwanie).
-        # WHY:  wszystko o wyszukiwaniu w jednym miejscu; pola trzech źródeł są w osobnych
-        #       ramkach, widać tylko ramkę wybranego (_pokaz_zrodlo_wyszukiwania).
-        karta, uk = self._karta()
-        uk.setSpacing(0)
-        uk.addWidget(_etykieta(_("Wyszukiwanie w internecie"), "h2"))
+    def _sekcja_wyszukiwania(self, uk):
+        # WHAT: część karty "Czat" w Ustawieniach - skąd czat bierze wyniki wyszukiwania
+        #       i obsługa SearXNG na tym komputerze (instalacja, start/stop, autostart, usuwanie).
+        # WHY:  pola trzech źródeł są w osobnych ramkach, widać tylko ramkę wybranego
+        #       (_pokaz_zrodlo_wyszukiwania).
+        naglowek = _etykieta(_("Wyszukiwanie w internecie"), "h3")
+        naglowek.setContentsMargins(0, 18, 0, 0)
+        uk.addWidget(naglowek)
         wstep = _etykieta(_("Skąd czat bierze wyniki, gdy poprosisz go o wyszukanie czegoś w internecie. "
                             "Zapytania wychodzą wtedy z tego komputera do internetu - dlatego domyślnie "
                             "jest wyłączone."), "muted")
@@ -10323,7 +10324,6 @@ class MainWindow(QMainWindow):
         h.addWidget(self.btn_test_wyszukiwania, 0, Qt.AlignmentFlag.AlignTop)
         uk.addWidget(self.ramka_test_wyszukiwania)
         self._pokaz_zrodlo_wyszukiwania()
-        return karta
 
     def _pokaz_zrodlo_wyszukiwania(self):
         zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
