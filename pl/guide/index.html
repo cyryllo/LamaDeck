@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LamaDeck - instrukcja</title>
+<link rel="icon" href="../../img/logo.png">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap-wide">
+    <a class="brand" href="../../pl/"><img src="../../img/logo.png" alt="" width="36" height="36">LamaDeck</a>
+    <nav aria-label="Page">
+      <a href="../../pl/">Strona główna</a>
+      <a href="../../pl/#instalacja">Instalacja</a>
+      <a href="https://github.com/cyryllo/LamaDeck">GitHub</a>
+      <a class="lang" href="../../guide/" lang="en">English</a>
+    </nav>
+  </div>
+</header>
+<main class="guide">
+  <div class="wrap">
+    <h1>LamaDeck — instrukcja</h1>
+    <nav class="toc" aria-label="Spis treści"><h2>Spis treści</h2><ol><li><a href="#instalacja-i-pierwsze-uruchomienie">Instalacja i pierwsze uruchomienie</a></li><li><a href="#panel-główny">Panel główny</a></li><li><a href="#hosty-ollama">Hosty Ollama</a></li><li><a href="#modele">Modele</a></li><li><a href="#czat">Czat</a></li><li><a href="#router-litellm">Router LiteLLM</a></li><li><a href="#open-webui">Open WebUI</a></li><li><a href="#dziennik">Dziennik</a></li><li><a href="#ustawienia">Ustawienia</a></li><li><a href="#zasobnik-systemowy">Zasobnik systemowy</a></li><li><a href="#gdzie-są-twoje-dane">Gdzie są Twoje dane</a></li><li><a href="#problemy">Problemy</a></li></ol></nav>
+    <p>Co potrafi LamaDeck i jak włączyć każdą jego część. Ekrany są opisane w kolejności, w jakiej widać je w pasku bocznym. <em>(In English: <a href="../../guide/">GUIDE.md</a>)</em></p>
+<h2 id="instalacja-i-pierwsze-uruchomienie">Instalacja i pierwsze uruchomienie</h2>
+<p><strong>Debian / Ubuntu</strong> — repozytorium APT dodajesz raz, potem LamaDeck aktualizuje się razem z systemem:</p>
+<pre><code>sudo curl -fsSLo /usr/share/keyrings/lamadeck-archive-keyring.gpg \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck-archive-keyring.gpg
+sudo curl -fsSLo /etc/apt/sources.list.d/lamadeck.sources \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck.sources
+sudo apt update
+sudo apt install lamadeck</code></pre>
+<p>Działa też plik <code>.deb</code> ze <a href="https://github.com/cyryllo/LamaDeck/releases">strony wydań</a>: <code>sudo apt install ./lamadeck_*_all.deb</code> dodaje to samo repozytorium.</p>
+<p><strong>Każda inna dystrybucja</strong> — pobierz <code>LamaDeck-&lt;wersja&gt;-x86_64.AppImage</code> ze strony wydań, potem <code>chmod +x LamaDeck-*-x86_64.AppImage</code> i uruchom. Przy pierwszym starcie zapyta, czy dodać go do menu aplikacji.</p>
+<p>LamaDeck znajdziesz w menu w sekcji <strong>Narzędzia</strong>. Całą resztę — Ollamę, router, Open WebUI, SearXNG — instalujesz już z poziomu programu, każdą jednym przyciskiem.</p>
+<p class="callout">Do niczego, co opisuje ta instrukcja, nie potrzebujesz terminala. Gdy coś wymaga uprawnień administratora (instalacja Ollamy, zmiana jej ustawień), pojawia się zwykłe okienko hasła KDE.</p>
+<h2 id="panel-główny">Panel główny</h2>
+<figure class="shot"><a href="../../img/guide/pl/panel.png"><img src="../../img/guide/pl/panel.png" alt="Panel główny" loading="lazy"></a><figcaption>Panel główny</figcaption></figure>
+<p>Pierwszy ekran pokazuje cały stos na tym komputerze:</p>
+<ul><li><strong>Ollama</strong> — przełącznik uruchamia i zatrzymuje usługę Ollama. Karta pokazuje hosty online, modele wczytane do pamięci i obciążenie karty graficznej.</li><li><strong>Router LiteLLM</strong> — jeden adres dla wszystkich programów (patrz <a href="#router-litellm">Router LiteLLM</a>).</li><li><strong>Open WebUI</strong> — duży przycisk znaczy <em>Zainstaluj</em>, <em>Uruchom</em> albo <em>Otwórz w przeglądarce</em>, zależnie od stanu.</li><li><strong>Zasoby komputera</strong> — CPU, VRAM i RAM, ruch sieciowy i obciążenie procesora, odświeżane co dwie sekundy.</li></ul>
+<p><strong>Instalacja usług:</strong> karta czegoś, czego jeszcze nie ma, pokazuje przycisk <strong>Zainstaluj</strong> zamiast przełącznika. Ollama instaluje się oficjalnym skryptem (pyta o hasło); router i Open WebUI instalują się tylko dla Twojego konta, bez hasła i bez Dockera. Instalacja idzie w tle, a gdy się skończy, dostajesz powiadomienie na pulpicie.</p>
+<p>Na górze <strong>Wszystkie usługi</strong> uruchamia albo zatrzymuje wszystko we właściwej kolejności, <strong>Uruchom ponownie</strong> uruchamia je od nowa, a <strong>Zatrzymaj wszystko</strong> zatrzymuje.</p>
+<h2 id="hosty-ollama">Hosty Ollama</h2>
+<figure class="shot"><a href="../../img/guide/pl/hosty.png"><img src="../../img/guide/pl/hosty.png" alt="Hosty Ollama" loading="lazy"></a><figcaption>Hosty Ollama</figcaption></figure>
+<p>LamaDeck obsługuje Ollamę na kilku komputerach naraz — na tym i na innych w domowej sieci.</p>
+<ul><li><strong>Dodaj host</strong> — wpisz adres drugiego komputera (np. <code>192.168.0.236</code>). <code>http://</code> i port <code>11434</code> program dopisze sam.</li><li>Na <strong>tamtym komputerze</strong> Ollama musi przyjmować połączenia z sieci. Jeśli też ma LamaDeck: *Ustawienia → zmienne środowiskowe Ollamy → przełącznik <code>OLLAMA_HOST</code>*, potem <strong>Zapisz</strong>.</li><li>Przy każdym hoście widać wersję Ollamy, czas odpowiedzi, pamięć zajętą przez modele i listę modeli (zielona kość pamięci = wczytany, szary dysk = tylko na dysku).</li><li><strong>Pamięć RAM</strong> tego komputera pokazuje, ile naprawdę zajmuje Ollama. Na komputerach z <strong>APU</strong> (grafika wbudowana w procesor) część modelu leży w zwykłym RAM-ie współdzielonym z kartą — widać to jako „Ollama X GB + APU Y GB”, szczegóły w dymku.</li><li><strong>Uruchom ponownie</strong> i <strong>Dziennik</strong> działają tylko dla tego komputera. Tego komputera nie da się usunąć z listy; pozostałe hosty mają przycisk usuwania.</li></ul>
+<h2 id="modele">Modele</h2>
+<figure class="shot"><a href="../../img/guide/pl/modele.png"><img src="../../img/guide/pl/modele.png" alt="Modele" loading="lazy"></a><figcaption>Modele</figcaption></figure>
+<p><strong>Szukanie i pobieranie modelu:</strong></p>
+<ol><li>Wpisz nazwę (np. <code>qwen3</code>) i naciśnij <strong>Szukaj</strong>. LamaDeck szuka naraz w oficjalnej bibliotece Ollamy i na Hugging Face (pliki GGUF).</li><li>Kliknij wynik — po prawej zobaczysz wszystkie warianty z <strong>prawdziwym rozmiarem pliku</strong> i długością kontekstu.</li><li>Kliknij wariant. Pod spodem widać szacowaną potrzebną pamięć.</li><li>Wybierz komputer w <strong>Na host</strong> i naciśnij <strong>Pobierz</strong>. Pasek postępu pokazuje rozmiar i prędkość; <strong>Anuluj</strong> przerywa, a kolejne pobieranie zacznie od miejsca, w którym przerwało.</li></ol>
+<p>Jeśli znasz dokładną nazwę (<code>llama3.2:3b</code>, <code>hf.co/autor/repo:Q4_K_M</code>), wpisz ją i naciśnij Enter — pobieranie zacznie się od razu. Wklejony link do ollama.com albo huggingface.co otwiera warianty tego modelu.</p>
+<p><strong>Pola obok wyszukiwarki:</strong></p>
+<ul><li><strong>Tylko modele MoE</strong> — tylko modele typu mixture of experts. Przy każdym słowie liczą tylko część modelu, więc działają dużo szybciej na APU i komputerach bez mocnej karty graficznej.</li><li><strong>Modele społeczności</strong> — także modele, które na ollama.com opublikowali inni ludzie (<code>autor/model</code>). Domyślnie są ukryte, bo Ollama ich nie sprawdza.</li></ul>
+<p><strong>Zainstalowane modele</strong> to kafelki ze wszystkich hostów, z filtrami (Czat, Kod, Embedding, Wizja). Każdy kafelek ma <strong>Załaduj</strong> / <strong>Zwolnij</strong> (do pamięci i z niej), <strong>Kopiuj na host</strong> (pobiera ten sam model na inny komputer) i przycisk usuwania.</p>
+<h2 id="czat">Czat</h2>
+<figure class="shot"><a href="../../img/guide/pl/czat.png"><img src="../../img/guide/pl/czat.png" alt="Czat z wyszukiwaniem w internecie" loading="lazy"></a><figcaption>Czat z wyszukiwaniem w internecie</figcaption></figure>
+<p>Prosty czat z dowolnym modelem na dowolnym hoście, prosto z Ollamy — działa bez Open WebUI i bez routera.</p>
+<p><strong>Podstawy:</strong></p>
+<ul><li>Model wybierasz po prawej. Tagi pod nim mówią, co potrafi: <em>zdjęcia</em>, <em>myślenie</em>, <em>narzędzia</em>, i czy jest już <em>w pamięci</em>.</li><li><strong>Enter</strong> wysyła, <strong>Shift+Enter</strong> to nowa linia. Gdy model pisze, <strong>Wyślij</strong> zmienia się w <strong>Zatrzymaj</strong>.</li><li>Pod każdą odpowiedzią: tokeny na sekundę, liczba tokenów i czas. Prawa karta pokazuje szczegóły i <strong>Kontekst</strong> — ile pamięci rozmowy modelu jest już zajęte. Od 80% pojawia się ostrzeżenie; wtedy zacznij <strong>Nową rozmowę</strong>.</li><li><strong>Myślenie modelu</strong> włącza albo wyłącza rozumowanie w modelach, które myślą przed odpowiedzią (qwen3, gemma4…) — wyłączone daje krótką odpowiedź w ułamku sekundy. <strong>Pokazuj rozumowanie</strong> pokazuje je w rozmowie.</li><li>Ikony przy odpowiedzi: <strong>kopiuj</strong> odpowiedź, <strong>wygeneruj ponownie</strong> (modelem wybranym teraz — wygodne do porównywania modeli) i <strong>popraw</strong> ostatnie pytanie. Ikona nad blokiem kodu kopiuje sam kod.</li></ul>
+<p><strong>Załączniki</strong> — przycisk ze spinaczem, przeciągnięcie pliku na okno albo <strong>Ctrl+V</strong> ze zrzutem ekranu:</p>
+<ul><li>zdjęcia (dla modeli z tagiem <em>zdjęcia</em>),</li><li>dokumenty: PDF, Word, Excel, PowerPoint, LibreOffice, EPUB,</li><li>pliki tekstowe: kod, <code>.txt</code>, <code>.md</code>, <code>.csv</code>…</li><li>Pliki powyżej 100 KB (do 20 MB) są przeszukiwane fragmentami zamiast wklejane w całości. Potrzebny jest do tego model embeddingów — <em>Ustawienia → Czat → Model do wyszukiwania w dużych plikach</em>; jeśli żadnego nie masz, przycisk <strong>Pobierz</strong> w tym miejscu pobierze zalecany.</li></ul>
+<p><strong>Linki:</strong> wklej link do pytania, a LamaDeck sam pobierze stronę i dołączy jej tekst.</p>
+<p><strong>Wyszukiwanie w internecie</strong> (odpowiedź podaje źródła [1], [2]…):</p>
+<ol><li><em>Ustawienia → Czat → Wyszukiwanie w internecie → Źródło wyników</em> — wybierz <strong>SearXNG na tym komputerze</strong> i naciśnij <strong>Zainstaluj</strong> (kilka minut, bez hasła). Albo wybierz własny serwer SearXNG, albo <strong>Ollamę</strong> z kluczem API z darmowego konta na ollama.com.</li><li><strong>Sprawdź wyszukiwanie</strong> pokaże, czy działa.</li><li>W czacie kliknij przycisk z <strong>globusem</strong> obok spinacza — podświetli się na niebiesko. Od teraz każde pytanie jest szukane w internecie, dopóki nie klikniesz go ponownie.</li></ol>
+<p>Model pisze 1–3 zapytania, LamaDeck czyta do 5 stron, wybiera fragmenty pasujące do pytania, a odpowiedź ma pod spodem listę klikalnych źródeł. W dymku widać, co program właśnie robi.</p>
+<p><strong>Rozmowy</strong> zapisują się same po każdej odpowiedzi (tylko na tym komputerze). Lista po lewej je otwiera i przeszukuje tytuły oraz treść. Prawy klik na rozmowie: <strong>Zmień nazwę</strong> (też dwuklik albo F2), <strong>Eksportuj do Markdown</strong> albo <strong>Usuń rozmowę</strong>.</p>
+<h2 id="router-litellm">Router LiteLLM</h2>
+<figure class="shot"><a href="../../img/guide/pl/router.png"><img src="../../img/guide/pl/router.png" alt="Router LiteLLM" loading="lazy"></a><figcaption>Router LiteLLM</figcaption></figure>
+<p>Router daje wszystkim programom jeden adres, <code>http://localhost:4000/v1</code> (zgodny z API OpenAI), za którym są modele ze wszystkich Twoich hostów.</p>
+<ul><li><strong>Uruchom</strong> go startuje. Zmiany tras działają po <strong>Uruchom ponownie router</strong> — przypomina o tym pasek.</li><li><strong>Dodaj alias</strong> — stała nazwa, np. <code>code</code> albo <code>chat</code>, dla wybranego modelu. Programy używają aliasu, więc model za nim zmienisz bez zmieniania czegokolwiek w nich.</li><li><strong>Gdy model jest na kilku hostach</strong> — na zmianę, najmniej zajęty albo najszybszy.</li><li><strong>Wszystkie modele</strong> — które modele router udostępnia pod własnymi nazwami.</li><li><strong>Połącz program</strong> — gotowe ustawienia dla <strong>Continue.dev</strong> (<code>config.yaml</code> do skopiowania) i instrukcja krok po kroku dla <strong>Open WebUI</strong>.</li><li><strong>Klucz API</strong> — domyślnie wyłączony (modeli może używać każdy w Twojej sieci); włączony trafia od razu do ustawień Continue.</li></ul>
+<h2 id="open-webui">Open WebUI</h2>
+<figure class="shot"><a href="../../img/guide/pl/webui.png"><img src="../../img/guide/pl/webui.png" alt="Open WebUI" loading="lazy"></a><figcaption>Open WebUI</figcaption></figure>
+<p>Pełny czat w przeglądarce (konta użytkowników, bazy wiedzy, głos) — instalowany bez Dockera.</p>
+<ul><li>Duży przycisk <strong>instaluje</strong>, <strong>uruchamia</strong> albo <strong>otwiera</strong> Open WebUI w przeglądarce. Pod nim <strong>Uruchom ponownie</strong>, <strong>Zatrzymaj</strong> i <strong>Kopiuj adres</strong>.</li><li><strong>Ustawienia:</strong> otwieranie przeglądarki po starcie, <strong>Wymagaj logowania</strong> (da się wyłączyć tylko, dopóki nie ma żadnych kont) i port.</li><li><strong>Kopia zapasowa danych</strong> zapisuje wszystkie czaty i konta do pliku ZIP.</li><li><strong>Połącz z routerem...</strong> pokazuje, jak dodać router w Open WebUI, żeby widział modele ze wszystkich Twoich hostów.</li></ul>
+<h2 id="dziennik">Dziennik</h2>
+<figure class="shot"><a href="../../img/guide/pl/dziennik.png"><img src="../../img/guide/pl/dziennik.png" alt="Dziennik" loading="lazy"></a><figcaption>Dziennik</figcaption></figure>
+<p>Komunikaty Ollamy, LiteLLM, Open WebUI, SearXNG i samego LamaDeck w jednym miejscu. Przyciski na górze filtrują po usłudze. Błędy mają <strong>proste wyjaśnienie</strong>, co znaczą, a gdy to pasuje — link do hosta. <strong>Zapisz do pliku</strong> zachowuje dziennik, <strong>Wyczyść widok</strong> tylko go chowa.</p>
+<p>Do dziennika usługi Ollama potrzebne jest pozwolenie: <strong>Wczytaj teraz</strong> czyta go jednorazowo (pyta o hasło), <strong>Zezwól na stałe</strong> dopisuje Twoje konto do grupy <code>systemd-journal</code> (działa po ponownym zalogowaniu).</p>
+<h2 id="ustawienia">Ustawienia</h2>
+<figure class="shot"><a href="../../img/guide/pl/ustawienia.png"><img src="../../img/guide/pl/ustawienia.png" alt="Ustawienia" loading="lazy"></a><figcaption>Ustawienia</figcaption></figure>
+<ul><li><strong>Język interfejsu</strong> — siedem języków, zmiana od razu.</li><li><strong>Autostart</strong> — Ollama razem z systemem, router i Open WebUI po zalogowaniu.</li><li><strong>Ikona w zasobniku systemowym</strong> i <strong>Uruchamiaj program po zalogowaniu</strong> — patrz <a href="#zasobnik-systemowy">Zasobnik systemowy</a>.</li><li><strong>Wersje i aktualizacje</strong> — <strong>Sprawdź aktualizacje</strong> dla Ollamy, LiteLLM, Open WebUI i SearXNG. Nic nie aktualizuje się samo.</li><li><strong>Czat</strong> — model do wyszukiwania w dużych plikach i źródło wyszukiwania w internecie (patrz <a href="#czat">Czat</a>):</li></ul>
+<figure class="shot"><a href="../../img/guide/pl/ustawienia-czat.png"><img src="../../img/guide/pl/ustawienia-czat.png" alt="Ustawienia czatu" loading="lazy"></a><figcaption>Ustawienia czatu</figcaption></figure>
+<ul><li><strong>Zmienne środowiskowe Ollamy</strong> (niżej na tym samym ekranie) — każda z krótkim opisem. <strong>Zastosuj zalecane wartości</strong> wypełnia formularz punktem startowym (kontekst 16k tokenów, 30 minut w pamięci, dwa modele naraz, Vulkan dla grafiki AMD) — tylko wypełnia, więc najpierw go przejrzyj. <strong>Zapisz</strong> zapisuje wszystko naraz i raz uruchamia Ollamę ponownie (pyta o hasło).</li></ul>
+<h2 id="zasobnik-systemowy">Zasobnik systemowy</h2>
+<figure class="shot"><a href="../../img/guide/pl/zasobnik.png"><img src="../../img/guide/pl/zasobnik.png" alt="Okienko w zasobniku" loading="lazy"></a><figcaption>Okienko w zasobniku</figcaption></figure>
+<p>Włącz <em>Ustawienia → Ikona w zasobniku systemowym</em>. Wtedy:</p>
+<ul><li>lewy klik na ikonie — to małe okienko: przełączniki usług, CPU / VRAM / RAM, modele w pamięci, <strong>Otwórz czat</strong> i <strong>Otwórz panel zarządzania</strong>,</li><li>środkowy klik — główne okno, prawy — menu z <strong>Zakończ</strong>,</li><li>zamknięcie okna tylko chowa je do zasobnika; program kończysz przez <strong>Zakończ</strong> w menu ikony,</li><li><strong>Uruchamiaj program po zalogowaniu</strong> startuje LamaDeck od razu schowany w zasobniku.</li></ul>
+<h2 id="gdzie-są-twoje-dane">Gdzie są Twoje dane</h2>
+<div class="table-wrap"><table><thead><tr><th>Co</th><th>Gdzie</th></tr></thead><tbody><tr><td>Ustawienia</td><td><code>~/.config/LamaDeck/LamaDeck.conf</code></td></tr><tr><td>Rozmowy z czatu</td><td><code>~/.local/share/LamaDeck/czaty/</code></td></tr><tr><td>SearXNG</td><td><code>~/.local/share/LamaDeck/searxng/</code>, ustawienia w <code>~/.config/LamaDeck/searxng/</code></td></tr><tr><td>Ustawienia routera</td><td><code>~/.config/LamaDeck/litellm_config.yaml</code></td></tr><tr><td>Open WebUI</td><td><code>~/.local/share/uv/tools/open-webui/</code></td></tr></tbody></table></div>
+<p>Usunięcie ani aktualizacja LamaDeck ich nie ruszają. Nic nie wychodzi z Twojego komputera poza wyszukiwaniem w internecie, które włączasz sam.</p>
+<h2 id="problemy">Problemy</h2>
+<ul><li><strong>Host jest „offline”</strong> — sprawdź, czy komputer jest włączony i czy Ollama na nim przyjmuje połączenia z sieci (<code>OLLAMA_HOST</code>, patrz <a href="#hosty-ollama">Hosty Ollama</a>). Dziennik wyjaśni błąd.</li><li><strong>Model zapomina początek rozmowy</strong> — kontekst jest pełny (pasek w czacie robi się czerwony). Zacznij nową rozmowę albo zwiększ <code>OLLAMA_CONTEXT_LENGTH</code> w Ustawieniach.</li><li><strong>Duży plik albo wyszukiwanie długo czeka</strong> — obok modelu czatu wczytuje się model embeddingów. Przy <code>OLLAMA_MAX_LOADED_MODELS=2</code> (jedna z zalecanych wartości) oba zostają w pamięci.</li><li><strong>Wyszukiwanie nie daje wyników</strong> — naciśnij <em>Sprawdź wyszukiwanie</em> w Ustawieniach; SearXNG mógł zostać zatrzymany. Niektóre wyszukiwarki czasem pytają o captchę — SearXNG korzysta wtedy z pozostałych.</li></ul>
+<p>Znalazłeś błąd? <a href="https://github.com/cyryllo/LamaDeck/issues">Zgłoś go na GitHubie</a>.</p>
+  </div>
+</main>
+<footer>
+  <div class="wrap-wide">
+    <span>LamaDeck</span>
+    <span><a href="https://github.com/cyryllo/LamaDeck/issues">GitHub Issues</a></span>
+  </div>
+</footer>
+</body>
+</html>
