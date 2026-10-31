@@ -599,6 +599,8 @@ QFrame#card QFrame#chatChip QPushButton#iconButton { min-height: 0; min-width: 0
 QFrame#card QLabel#chatNotice[state="warn"] { color: #f0b453; }
 /* Ustawienia → Czat: wiersz "brak modelu embeddingów" z przyciskiem pobierania - tło karty */
 QFrame#card QFrame#ragMissing { background: transparent; }
+/* Ustawienia - karta "Wyszukiwanie w internecie": ramki pól źródeł bez własnego tła */
+QFrame#card QFrame#searchPanel { background: transparent; }
 /* Lista zapisanych rozmów (ekran Czat, lewa karta) - wpis = tytuł + data/model */
 QListWidget#chatList { background: transparent; border: none; }
 QListWidget#chatList::item { padding: 8px 10px; margin-bottom: 2px; border-radius: 8px; color: #c9cfd6; }

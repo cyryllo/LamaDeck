@@ -9935,6 +9935,7 @@ class MainWindow(QMainWindow):
 
         # --- SearXNG na tym komputerze ---
         self.ramka_searxng = QFrame()
+        self.ramka_searxng.setObjectName("searchPanel")
         v = QVBoxLayout(self.ramka_searxng)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
@@ -9966,6 +9967,7 @@ class MainWindow(QMainWindow):
 
         # --- SearXNG pod innym adresem ---
         self.ramka_searxng_adres = QFrame()
+        self.ramka_searxng_adres.setObjectName("searchPanel")
         v = QVBoxLayout(self.ramka_searxng_adres)
         v.setContentsMargins(0, 10, 0, 10)
         v.setSpacing(6)
@@ -9982,6 +9984,7 @@ class MainWindow(QMainWindow):
 
         # --- Ollama ---
         self.ramka_wyszukiwania_ollama = QFrame()
+        self.ramka_wyszukiwania_ollama.setObjectName("searchPanel")
         v = QVBoxLayout(self.ramka_wyszukiwania_ollama)
         v.setContentsMargins(0, 10, 0, 10)
         v.setSpacing(6)
@@ -10001,6 +10004,7 @@ class MainWindow(QMainWindow):
 
         # --- Sprawdzenie ---
         self.ramka_test_wyszukiwania = QFrame()
+        self.ramka_test_wyszukiwania.setObjectName("searchPanel")
         h = QHBoxLayout(self.ramka_test_wyszukiwania)
         h.setContentsMargins(0, 10, 0, 0)
         self.lbl_test_wyszukiwania = _etykieta("", "muted")
