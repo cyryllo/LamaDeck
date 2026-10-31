@@ -1,0 +1,112 @@
+/* LamaDeck project page - the same dark Breeze look as the app (theme.qss).
+   Layout idea: one narrow reading column, screenshots break out wider in a window frame. */
+@font-face { font-family: "Inter"; src: url("fonts/Inter-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("fonts/Inter-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("fonts/Inter-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+
+:root {
+  color-scheme: dark;
+  --bg: #1f2328;
+  --surface: #2c3138;
+  --line: #3a4048;
+  --text: #e8eaed;
+  --muted: #a3abb5;
+  --accent: #3daee9;
+  --accent-soft: #1d3a4f;
+  --ok: #5fd38d;
+  --font-body: "Inter", system-ui, "Segoe UI", "Noto Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+  --column: 46rem;
+  --wide: 72rem;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 1.0625rem/1.65 var(--font-body);
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+img { max-width: 100%; height: auto; display: block; }
+code, pre { font-family: var(--font-mono); font-size: 0.9em; }
+code { background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; }
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.75rem; font-weight: 700; }
+h3 { font-size: 1.125rem; font-weight: 600; }
+p { margin: 0; }
+
+.wrap { width: min(100% - 2rem, var(--column)); margin-inline: auto; }
+.wrap-wide { width: min(100% - 2rem, var(--wide)); margin-inline: auto; }
+
+/* Top bar */
+.top { border-bottom: 1px solid var(--line); }
+.top .wrap-wide { display: flex; align-items: center; gap: 1.5rem; padding-block: 0.75rem; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 0.6rem; color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.125rem; }
+.brand img { width: 36px; height: 36px; }
+.top nav { display: flex; gap: 1.25rem; margin-left: auto; flex-wrap: wrap; font-size: 0.95rem; }
+.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a:hover { color: var(--text); }
+.top nav .lang { color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 0 0.5rem; }
+
+/* Opening */
+.intro { padding-block: 4rem 2.5rem; display: grid; gap: 1.25rem; }
+.intro h1 { font-size: clamp(2.25rem, 6vw, 3.25rem); font-weight: 700; letter-spacing: -0.02em; }
+.intro .lead { color: var(--muted); font-size: 1.2rem; max-width: 40rem; }
+.status { display: inline-flex; align-items: center; gap: 0.5rem; width: fit-content; font-size: 0.875rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0.2rem 0.75rem; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.button { display: inline-block; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: #0d1a24; }
+.button:hover { filter: brightness(1.1); }
+
+/* Screenshot in a window frame */
+.shot { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); box-shadow: 0 24px 60px rgb(0 0 0 / 0.45); }
+.shot figcaption { font-size: 0.875rem; color: var(--muted); padding: 0.6rem 1rem; border-top: 1px solid var(--line); }
+
+/* Sections */
+section { padding-block: 4rem 0; }
+section > .wrap { display: grid; gap: 1.25rem; }
+.section-lead { color: var(--muted); }
+
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+@media (max-width: 60rem) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 38rem) { .features { grid-template-columns: 1fr; } }
+.feature { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem; display: grid; gap: 0.5rem; align-content: start; }
+.feature p, .feature li { color: var(--muted); font-size: 0.975rem; }
+.feature ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 2rem; align-items: center; }
+.split.tray { grid-template-columns: minmax(0, 1.6fr) minmax(0, 18rem); }
+.split ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.5rem; color: var(--muted); }
+.split ul strong { color: var(--text); font-weight: 600; }
+@media (max-width: 52rem) { .split, .split.tray { grid-template-columns: 1fr; } }
+
+/* Install */
+.steps { display: grid; gap: 1rem; }
+.step { border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem; display: grid; gap: 0.75rem; background: var(--surface); }
+.step.recommended { border-color: var(--accent); }
+.step .tag { font-size: 0.8rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0.1rem 0.6rem; width: fit-content; }
+.step p { color: var(--muted); }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.55; font-variant-ligatures: none; }
+pre .c { color: var(--muted); }
+.note { color: var(--muted); font-size: 0.95rem; }
+
+/* Roadmap */
+.roadmap { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 0.4rem; }
+.milestone { position: relative; padding: 0 0 1.75rem 1.5rem; display: grid; gap: 0.4rem; }
+.milestone::before { content: ""; position: absolute; left: -0.45rem; top: 0.35rem; width: 0.8rem; height: 0.8rem; border-radius: 50%; background: var(--bg); border: 2px solid var(--muted); }
+.milestone.now::before { background: var(--accent); border-color: var(--accent); }
+.milestone p, .milestone li { color: var(--muted); }
+.milestone ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; }
+.milestone .done { color: var(--ok); }
+
+footer { margin-top: 5rem; border-top: 1px solid var(--line); padding-block: 2rem; color: var(--muted); font-size: 0.9rem; }
+footer .wrap-wide { display: flex; gap: 1rem 2rem; flex-wrap: wrap; justify-content: space-between; }

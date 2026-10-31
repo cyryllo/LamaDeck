@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LamaDeck</title>
+<meta name="description" content="LamaDeck - a KDE desktop control panel for your local AI stack: Ollama on several hosts, a LiteLLM router, Open WebUI and a built-in chat. No terminal, no Docker, no cloud.">
+<link rel="icon" href="img/logo.png">
+<link rel="alternate" hreflang="pl" href="pl/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap-wide">
+    <a class="brand" href="./"><img src="img/logo.png" alt="" width="36" height="36">LamaDeck</a>
+    <nav aria-label="Page">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="https://github.com/cyryllo/LamaDeck">GitHub</a>
+      <a class="lang" href="pl/" hreflang="pl" lang="pl">Polski</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap intro">
+    <span class="status">Version 0.9 · free and open source (GPL-3.0)</span>
+    <h1>A control panel for your local AI stack</h1>
+    <p class="lead">LamaDeck is a desktop app for KDE that runs Ollama on every computer in your
+      home network, joins all their models behind one address for VS Code and other tools, and
+      has its own chat. No terminal, no Docker, no cloud.</p>
+    <div class="actions">
+      <a class="button primary" href="#install">Install on Debian / Ubuntu</a>
+      <a class="button" href="https://github.com/cyryllo/LamaDeck">Source code on GitHub</a>
+    </div>
+  </div>
+
+  <div class="wrap-wide">
+    <figure class="shot">
+      <img src="img/lamadeck-dashboard.png" alt="LamaDeck dashboard: switches for Ollama, the LiteLLM router and Open WebUI, hosts online, loaded models and CPU, VRAM and RAM gauges" width="1600" height="900">
+      <figcaption>Dashboard: every service with its own switch, the models in memory, and the load on this computer.</figcaption>
+    </figure>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything in one window</h2>
+      <p class="section-lead">It started as a small switch for the Ollama service and grew into one
+        place for the whole stack. Every button calls the same tools you would type in a terminal,
+        and actions that need admin rights ask for your password in the usual KDE dialog.</p>
+    </div>
+    <div class="wrap-wide features">
+      <article class="feature">
+        <h3>Ollama on several hosts</h3>
+        <p>This computer and any machine on your LAN: online or offline, version, response time,
+          VRAM and RAM used, and which models sit on disk or in memory. Add a host by typing its
+          address.</p>
+      </article>
+      <article class="feature">
+        <h3>One address for all models</h3>
+        <p>The LiteLLM router puts every host behind <code>http://localhost:4000/v1</code>
+          (OpenAI-compatible). Fixed aliases such as <code>code</code> or <code>chat</code>, and a
+          ready <code>config.yaml</code> for Continue.dev.</p>
+      </article>
+      <article class="feature">
+        <h3>Find and download models</h3>
+        <p>One search for the Ollama library and Hugging Face GGUF files, with the real file size
+          of every variant and a memory estimate. An "only MoE" filter for APUs and laptops.</p>
+      </article>
+      <article class="feature">
+        <h3>Built-in chat</h3>
+        <p>Talk to any model on any host, with tokens per second under every answer. Pictures,
+          PDF and Office documents, links to web pages, and conversations saved on your
+          disk.</p>
+      </article>
+      <article class="feature">
+        <h3>Open WebUI with one click</h3>
+        <p>Installed and run without Docker or admin rights. Start, stop, open it in the browser,
+          change the port and back up all chats to a ZIP file.</p>
+      </article>
+      <article class="feature">
+        <h3>Logs that explain themselves</h3>
+        <p>Ollama, LiteLLM, Open WebUI and the app in one list. Errors get a plain explanation of
+          what went wrong, and a link to the host they mention.</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide split">
+      <div>
+        <h2>A chat that shows the numbers</h2>
+        <ul style="margin-top:1.25rem">
+          <li><strong>Speed of every answer</strong>, measured by Ollama: generation and prompt
+            processing in tokens per second.</li>
+          <li><strong>Context usage</strong>, e.g. 4,051 / 65,536 tokens, with a warning before
+            the model starts forgetting the beginning.</li>
+          <li><strong>Thinking on or off</strong> for reasoning models such as gemma4 or qwen3: a short
+            answer in half a second instead of fifteen.</li>
+          <li><strong>Large files up to 20 MB</strong> are split into excerpts and searched with an
+            embedding model in Ollama. Nothing else to install.</li>
+          <li>Regenerate, edit the last question, copy, rename and export to Markdown.</li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <img src="img/lamadeck-chat.png" alt="LamaDeck chat: a conversation list on the left, a code answer in the middle, model details and speed statistics on the right" width="1600" height="900" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide split tray">
+      <div>
+        <h2>Or keep it in the tray</h2>
+        <ul style="margin-top:1.25rem">
+          <li>A small panel next to the clock: service switches, CPU, VRAM and RAM, and the models
+            in memory.</li>
+          <li>Opens the chat or the main window with one click. Closing the window keeps the app
+            running.</li>
+          <li>Optionally starts after login, already hidden in the tray.</li>
+          <li>Seven interface languages: English, Polish, German, Spanish, French, Portuguese and
+            Italian.</li>
+        </ul>
+      </div>
+      <figure class="shot" style="max-width:18rem">
+        <img src="img/lamadeck-tray.png" alt="LamaDeck tray panel with service switches and resource gauges" width="380" height="560" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="section-lead">For Debian 13, Ubuntu 24.04 and newer, on KDE Plasma (other desktops
+        work too). Ollama itself can be installed from inside the app.</p>
+      <div class="steps">
+        <div class="step recommended">
+          <span class="tag">Recommended</span>
+          <h3>From the APT repository</h3>
+          <p>Add the repository once. After that LamaDeck updates together with the rest of your
+            system.</p>
+<pre><code>sudo curl -fsSLo /usr/share/keyrings/lamadeck-archive-keyring.gpg \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck-archive-keyring.gpg
+sudo curl -fsSLo /etc/apt/sources.list.d/lamadeck.sources \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck.sources
+sudo apt update
+sudo apt install lamadeck</code></pre>
+        </div>
+        <div class="step">
+          <h3>From a downloaded .deb</h3>
+          <p>Download <code>lamadeck_…_all.deb</code> from the
+            <a href="https://github.com/cyryllo/LamaDeck/releases">releases page</a> and install it.
+            The package adds the APT repository for you, so updates arrive the same way.</p>
+<pre><code>sudo apt install ./lamadeck_*_all.deb</code></pre>
+        </div>
+        <div class="step">
+          <h3>Without admin rights</h3>
+          <p>Copies the app into your home folder and adds it to the menu. Run the same script
+            again to update.</p>
+<pre><code>git clone https://github.com/cyryllo/LamaDeck.git
+cd LamaDeck
+./install.sh</code></pre>
+        </div>
+      </div>
+      <p class="note">Coming in 0.9.x: an AppImage, one file for Fedora, Arch, openSUSE and other
+        distributions. LamaDeck was called "Ollama Manager" up to version 0.9; installing it
+        replaces the old package and keeps your settings and conversations.</p>
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <div class="wrap">
+      <h2>Roadmap</h2>
+      <div class="roadmap">
+        <div class="milestone now">
+          <h3>0.9.x · now</h3>
+          <ul>
+            <li><span class="done">Done:</span> saved conversations, context usage, thinking
+              on/off, regenerate and edit, Markdown export, links in a question</li>
+            <li><span class="done">Done:</span> own APT repository</li>
+            <li>AppImage for other distributions</li>
+          </ul>
+        </div>
+        <div class="milestone">
+          <h3>1.0 · web search in the chat</h3>
+          <p>A switch next to the message: the model writes a few search queries, the app reads the
+            pages and answers with sources. Works with any model, off by default.</p>
+        </div>
+        <div class="milestone">
+          <h3>After 1.0 · bug fixes</h3>
+          <p>The app covers what it set out to do. Anything bigger, such as user accounts,
+            knowledge bases or voice, is what Open WebUI is for, and it is built in.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap-wide">
+    <span>LamaDeck is an independent project, not affiliated with Ollama.</span>
+    <span><a href="https://github.com/cyryllo/LamaDeck/issues">Report a bug</a> ·
+      <a href="https://github.com/cyryllo/LamaDeck/blob/main/LICENSE">GPL-3.0</a> ·
+      <a href="apt/">APT repository</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
