@@ -427,7 +427,6 @@
   "Pamięć RAM": "Arbeitsspeicher (RAM)",
   "VRAM {vram:.1f} GB · RAM {ram:.1f} GB · modele: {n}": "VRAM {vram:.1f} GB · RAM {ram:.1f} GB · Modelle: {n}",
   "część modeli poza VRAM (wg API)": "Teil der Modelle außerhalb des VRAM (laut API)",
-  "procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Prozesse {a:.1f} GB + Modelldateien {p:.1f} GB",
   "MoE (mixture of experts) to modele, które przy każdym zapytaniu liczą tylko część parametrów - działają szybciej na APU i komputerach bez mocnej karty graficznej.\nRozpoznawane po opisie, nazwie i tagach - część modeli MoE może zostać pominięta.": "MoE-Modelle (Mixture of Experts) nutzen pro Anfrage nur einen Teil ihrer Parameter - sie laufen schneller auf APUs und Computern ohne starke Grafikkarte.\nErkannt an Beschreibung, Name und Tags - einige MoE-Modelle werden eventuell nicht erkannt.",
   "Sprawdzam warianty modeli...": "Prüfe Modellvarianten...",
   "Tylko modele MoE": "Nur MoE-Modelle",
@@ -649,5 +648,9 @@
   "Wybieram z nich pasujące fragmenty...": "Wähle passende Abschnitte aus...",
   "Źródła:": "Quellen:",
   "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Im Internet suchen: {stan}\nDas Modell formuliert die Anfragen, das Programm liest die gefundenen Seiten, und die Antwort nennt ihre Quellen. Quelle der Ergebnisse: {zrodlo} (änderbar in den Einstellungen).",
-  "Wyszukiwanie w internecie nie dało wyników. {blad}": "Die Websuche hat keine Ergebnisse geliefert. {blad}"
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "Die Websuche hat keine Ergebnisse geliefert. {blad}",
+  "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
+  "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
+  "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama: Prozesse {a:.1f} GB + Modelldateien {p:.1f} GB",
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB normaler Arbeitsspeicher, den die Grafikkarte nutzt (GTT) - dorthin kommt der Teil eines Modells, der nicht in den reservierten VRAM passt. Für die ganze Karte gezählt, enthält also auch etwas Speicher des Desktops."
 }

@@ -572,6 +572,22 @@ def _vram_lokalnie_calkowita():
     return None
 
 
+def _gtt_lokalnie_zajete():
+    # WHAT: ile zwykłego RAM-u zajmuje karta graficzna TEGO komputera (AMD: GTT), w bajtach.
+    # WHY:  na APU (zgłoszenie użytkownika: 16 GB wydzielone na VRAM, reszta modelu w RAM)
+    #       Ollama liczy cały model jako "w VRAM", a pamięci GTT przydziela jądro - nie ma
+    #       jej w pamięci procesów (_ollama_pamiec_procesow). Bez tego karta RAM pokazywała
+    #       0,9 GB przy 15 GB modelu w RAM. Liczy się całe GTT karty (z pulpitem - zwykle
+    #       kilkaset MB), bo sterownik nie dzieli go na programy. NVIDIA - brak takiego odczytu.
+    suma = 0
+    for plik in Path("/sys/class/drm").glob("card[0-9]*/device/mem_info_gtt_used"):
+        try:
+            suma += int(plik.read_text().strip())
+        except (OSError, ValueError):
+            pass
+    return suma
+
+
 def sprawdz_host(serwer):
     # WHAT: stan jednego hosta z listy serwerów do ekranu "Hosty Ollama":
     #       czy odpowiada, wersja Ollamy, czas odpowiedzi, modele (na dysku /
@@ -609,8 +625,9 @@ def sprawdz_host(serwer):
             wynik["ram_calkowite"] = ProbnikZasobow._ram()[1]
             procesy = _ollama_pamiec_procesow()
             if procesy:
+                procesy["gtt"] = _gtt_lokalnie_zajete()
                 wynik["ram_procesy"] = procesy
-                wynik["ram_uzyte"] = procesy["anon"] + procesy["pliki"]
+                wynik["ram_uzyte"] = procesy["anon"] + procesy["pliki"] + procesy["gtt"]
         for m in klient.list_models():
             zal = zaladowane.get(m["name"])
             wynik["modele"].append({
@@ -7008,11 +7025,26 @@ class MainWindow(QMainWindow):
                 self.lbl_host_ram.setText(f"{uzyte:.1f} GB")
                 self.pasek_host_ram.hide()
             if procesy:
-                self.lbl_host_ram_opis.setText(_("procesy {a:.1f} GB + pliki modeli {p:.1f} GB").format(
-                    a=procesy["anon"] / gib, p=procesy["pliki"] / gib))
+                # WHY: krótko na karcie (prośba użytkownika) - Ollama (procesy + pliki modeli)
+                #      i APU (GTT, tylko gdy jest); dokładny podział w dymku
+                ollama = (procesy["anon"] + procesy["pliki"]) / gib
+                if procesy.get("gtt"):
+                    self.lbl_host_ram_opis.setText(_("Ollama {o:.1f} GB + APU {g:.1f} GB").format(
+                        o=ollama, g=procesy["gtt"] / gib))
+                else:
+                    self.lbl_host_ram_opis.setText(_("Ollama {o:.1f} GB").format(o=ollama))
+                dymek = _("Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB").format(
+                    a=procesy["anon"] / gib, p=procesy["pliki"] / gib)
+                if procesy.get("gtt"):
+                    dymek += "\n" + _(
+                        "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia "
+                        "część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc "
+                        "obejmuje też trochę pamięci pulpitu.").format(g=procesy["gtt"] / gib)
+                self.lbl_host_ram_opis.setToolTip(dymek)
             else:
                 # WHY: zdalnego hosta nie zmierzymy z tego komputera - tylko API
                 self.lbl_host_ram_opis.setText(_("część modeli poza VRAM (wg API)"))
+                self.lbl_host_ram_opis.setToolTip("")
 
         if stan and stan["ping_ms"] is not None:
             self.lbl_host_ping.setText(f"{stan['ping_ms']:.0f} ms")

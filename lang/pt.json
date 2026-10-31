@@ -427,7 +427,6 @@
   "Pamięć RAM": "Memória (RAM)",
   "VRAM {vram:.1f} GB · RAM {ram:.1f} GB · modele: {n}": "VRAM {vram:.1f} GB · RAM {ram:.1f} GB · modelos: {n}",
   "część modeli poza VRAM (wg API)": "parte dos modelos fora da VRAM (segundo a API)",
-  "procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "processos {a:.1f} GB + ficheiros de modelos {p:.1f} GB",
   "MoE (mixture of experts) to modele, które przy każdym zapytaniu liczą tylko część parametrów - działają szybciej na APU i komputerach bez mocnej karty graficznej.\nRozpoznawane po opisie, nazwie i tagach - część modeli MoE może zostać pominięta.": "Os modelos MoE (mixture of experts) usam só uma parte dos parâmetros em cada pedido - são mais rápidos em APU e computadores sem uma placa gráfica potente.\nDetetados pela descrição, nome e etiquetas - alguns modelos MoE podem escapar.",
   "Sprawdzam warianty modeli...": "A verificar variantes dos modelos...",
   "Tylko modele MoE": "Só modelos MoE",
@@ -649,5 +648,9 @@
   "Wybieram z nich pasujące fragmenty...": "A escolher os excertos relevantes...",
   "Źródła:": "Fontes:",
   "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Pesquisar na web: {stan}\nO modelo escreve as pesquisas, o programa lê as páginas encontradas e a resposta indica as fontes. Fonte dos resultados: {zrodlo} (muda-se nas Definições).",
-  "Wyszukiwanie w internecie nie dało wyników. {blad}": "A pesquisa na web não deu resultados. {blad}"
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "A pesquisa na web não deu resultados. {blad}",
+  "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
+  "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
+  "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama: processos {a:.1f} GB + ficheiros de modelos {p:.1f} GB",
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB de RAM normal usada pela placa gráfica (GTT) - vai para lá a parte do modelo que não cabe na VRAM reservada. Contada para toda a placa, por isso inclui também alguma memória do ambiente de trabalho."
 }

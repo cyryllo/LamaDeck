@@ -427,7 +427,6 @@
   "Pamięć RAM": "Mémoire (RAM)",
   "VRAM {vram:.1f} GB · RAM {ram:.1f} GB · modele: {n}": "VRAM {vram:.1f} Go · RAM {ram:.1f} Go · modèles : {n}",
   "część modeli poza VRAM (wg API)": "partie des modèles hors VRAM (selon l'API)",
-  "procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "processus {a:.1f} Go + fichiers de modèles {p:.1f} Go",
   "MoE (mixture of experts) to modele, które przy każdym zapytaniu liczą tylko część parametrów - działają szybciej na APU i komputerach bez mocnej karty graficznej.\nRozpoznawane po opisie, nazwie i tagach - część modeli MoE może zostać pominięta.": "Les modèles MoE (mixture of experts) n'utilisent qu'une partie de leurs paramètres à chaque requête - ils sont plus rapides sur les APU et les ordinateurs sans carte graphique puissante.\nDétectés par la description, le nom et les tags - certains modèles MoE peuvent être manqués.",
   "Sprawdzam warianty modeli...": "Vérification des variantes de modèles...",
   "Tylko modele MoE": "Modèles MoE uniquement",
@@ -649,5 +648,9 @@
   "Wybieram z nich pasujące fragmenty...": "Sélection des passages pertinents...",
   "Źródła:": "Sources :",
   "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Rechercher sur le web : {stan}\nLe modèle rédige les requêtes, le programme lit les pages trouvées et la réponse cite ses sources. Source des résultats : {zrodlo} (modifiable dans les Paramètres).",
-  "Wyszukiwanie w internecie nie dało wyników. {blad}": "La recherche web n'a donné aucun résultat. {blad}"
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "La recherche web n'a donné aucun résultat. {blad}",
+  "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
+  "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
+  "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama : processus {a:.1f} Go + fichiers de modèles {p:.1f} Go",
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU : {g:.1f} Go de RAM ordinaire utilisée par la carte graphique (GTT) - la partie d'un modèle qui ne tient pas dans la VRAM réservée s'y trouve. Comptée pour toute la carte, elle inclut donc aussi un peu de mémoire du bureau."
 }
