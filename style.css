@@ -115,7 +115,9 @@ footer .wrap-wide { display: flex; gap: 1rem 2rem; flex-wrap: wrap; justify-cont
 
 /* User guide (generated from docs/*.md by site/guide.py) - the same reading column as the home page */
 .guide { padding-block: 3rem 0; }
-.guide .wrap { display: block; }
+/* WHY: one width for text and screenshots - wider than the home page column, so the app's
+ *      text in the screenshots stays readable, and nothing sticks out past the text */
+.guide .wrap { display: block; width: min(100% - 2rem, 58rem); }
 .guide h1 { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1.5rem; }
 .guide h2 { margin: 3rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .guide h3 { margin: 1.5rem 0 0.5rem; }
@@ -123,8 +125,7 @@ footer .wrap-wide { display: flex; gap: 1rem 2rem; flex-wrap: wrap; justify-cont
 .guide p { margin: 0 0 1rem; }
 .guide ul, .guide ol { margin: 0 0 1rem; padding-left: 1.3rem; display: grid; gap: 0.4rem; }
 .guide pre { margin: 0 0 1rem; }
-/* WHY: screenshots wider than the text column - in 46rem the app's text was too small to read */
-.guide .shot { margin: 0 0 1.5rem; width: min(100vw - 2rem, 64rem); position: relative; left: 50%; transform: translateX(-50%); }
+.guide .shot { margin: 0 0 1.5rem; }
 .guide .shot a { display: block; }
 .guide .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; color: var(--muted); }
 .guide .toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
