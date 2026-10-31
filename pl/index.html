@@ -26,11 +26,12 @@
 
 <main>
   <div class="wrap intro">
-    <span class="status">Wersja 0.9 · wolne i otwarte oprogramowanie (GPL-3.0)</span>
+    <span class="status">Wersja 1.0 · wolne i otwarte oprogramowanie (GPL-3.0)</span>
     <h1>Panel sterowania lokalnym stosem AI</h1>
     <p class="lead">LamaDeck to program na KDE, który obsługuje Ollamę na każdym komputerze
       w domowej sieci, łączy wszystkie ich modele pod jednym adresem dla VS Code i innych
-      narzędzi, a do tego ma własny czat. Bez terminala, bez Dockera, bez chmury.</p>
+      narzędzi, a do tego ma własny czat, który umie szukać w internecie i podawać źródła. Bez
+      terminala, bez Dockera, bez chmury.</p>
     <div class="actions">
       <a class="button primary" href="#instalacja">Zainstaluj na Debianie / Ubuntu</a>
       <a class="button" href="https://github.com/cyryllo/LamaDeck">Kod źródłowy na GitHubie</a>
@@ -73,8 +74,8 @@
       <article class="feature">
         <h3>Wbudowany czat</h3>
         <p>Rozmowa z dowolnym modelem na dowolnym hoście, z liczbą tokenów na sekundę pod każdą
-          odpowiedzią. Zdjęcia, dokumenty PDF i Office, linki do stron i rozmowy zapisywane na
-          Twoim dysku.</p>
+          odpowiedzią. Wyszukiwanie w internecie ze źródłami, zdjęcia, dokumenty PDF i Office,
+          linki do stron i rozmowy zapisywane na Twoim dysku.</p>
       </article>
       <article class="feature">
         <h3>Open WebUI jednym kliknięciem</h3>
@@ -95,6 +96,9 @@
       <div>
         <h2>Czat, który pokazuje liczby</h2>
         <ul style="margin-top:1.25rem">
+          <li><strong>Wyszukiwanie w internecie ze źródłami</strong>: jedno kliknięcie w globus,
+            model pisze zapytania, program czyta strony, a odpowiedź podaje je jako [1], [2].
+            Wyniki z SearXNG instalowanego jednym kliknięciem, bez konta.</li>
           <li><strong>Szybkość każdej odpowiedzi</strong>, mierzona przez samą Ollamę: generowanie
             i przetwarzanie pytania w tokenach na sekundę.</li>
           <li><strong>Zajętość kontekstu</strong>, np. 4 051 / 65 536 tokenów, z ostrzeżeniem,
@@ -188,22 +192,19 @@ cd LamaDeck
       <h2>Plan</h2>
       <div class="roadmap">
         <div class="milestone now">
-          <h3>0.9.x · teraz</h3>
+          <h3>1.0 · kompletna</h3>
           <ul>
-            <li><span class="done">Gotowe:</span> zapisywanie rozmów, zajętość kontekstu,
-              wyłączanie myślenia, ponowne generowanie i poprawianie, eksport do Markdown, linki
-              w pytaniu</li>
-            <li><span class="done">Gotowe:</span> własne repozytorium APT i AppImage dla innych
-              dystrybucji</li>
+            <li><span class="done">Gotowe:</span> hosty, modele, router LiteLLM, Open WebUI,
+              dziennik, zasobnik, siedem języków</li>
+            <li><span class="done">Gotowe:</span> czat z załącznikami, zapisywane rozmowy,
+              zajętość kontekstu, myślenie wł./wył., eksport do Markdown</li>
+            <li><span class="done">Gotowe:</span> wyszukiwanie w internecie w czacie ze źródłami
+              (SearXNG albo wyszukiwarka Ollamy)</li>
+            <li><span class="done">Gotowe:</span> repozytorium APT, .deb i AppImage</li>
           </ul>
         </div>
         <div class="milestone">
-          <h3>1.0 · wyszukiwanie w internecie w czacie</h3>
-          <p>Przełącznik przy wiadomości: model pisze kilka zapytań, program czyta strony
-            i odpowiada ze źródłami. Działa z każdym modelem, domyślnie wyłączone.</p>
-        </div>
-        <div class="milestone">
-          <h3>Po 1.0 · poprawki błędów</h3>
+          <h3>Od teraz · poprawki błędów</h3>
           <p>Program robi to, do czego powstał. Wszystko większe, jak konta użytkowników, bazy
             wiedzy czy głos, to zadanie Open WebUI, a ono jest wbudowane.</p>
         </div>

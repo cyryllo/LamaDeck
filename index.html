@@ -26,11 +26,12 @@
 
 <main>
   <div class="wrap intro">
-    <span class="status">Version 0.9 · free and open source (GPL-3.0)</span>
+    <span class="status">Version 1.0 · free and open source (GPL-3.0)</span>
     <h1>A control panel for your local AI stack</h1>
     <p class="lead">LamaDeck is a desktop app for KDE that runs Ollama on every computer in your
       home network, joins all their models behind one address for VS Code and other tools, and
-      has its own chat. No terminal, no Docker, no cloud.</p>
+      has its own chat that can search the web and cite its sources. No terminal, no Docker, no
+      cloud.</p>
     <div class="actions">
       <a class="button primary" href="#install">Install on Debian / Ubuntu</a>
       <a class="button" href="https://github.com/cyryllo/LamaDeck">Source code on GitHub</a>
@@ -71,9 +72,9 @@
       </article>
       <article class="feature">
         <h3>Built-in chat</h3>
-        <p>Talk to any model on any host, with tokens per second under every answer. Pictures,
-          PDF and Office documents, links to web pages, and conversations saved on your
-          disk.</p>
+        <p>Talk to any model on any host, with tokens per second under every answer. Web search
+          with sources, pictures, PDF and Office documents, links to web pages, and conversations
+          saved on your disk.</p>
       </article>
       <article class="feature">
         <h3>Open WebUI with one click</h3>
@@ -93,6 +94,9 @@
       <div>
         <h2>A chat that shows the numbers</h2>
         <ul style="margin-top:1.25rem">
+          <li><strong>Web search with sources</strong>: one click on the globe button, the model
+            writes the queries, the app reads the pages and the answer cites them as [1], [2].
+            Results from SearXNG installed with one click, no account.</li>
           <li><strong>Speed of every answer</strong>, measured by Ollama: generation and prompt
             processing in tokens per second.</li>
           <li><strong>Context usage</strong>, e.g. 4,051 / 65,536 tokens, with a warning before
@@ -185,21 +189,19 @@ cd LamaDeck
       <h2>Roadmap</h2>
       <div class="roadmap">
         <div class="milestone now">
-          <h3>0.9.x · now</h3>
+          <h3>1.0 · complete</h3>
           <ul>
-            <li><span class="done">Done:</span> saved conversations, context usage, thinking
-              on/off, regenerate and edit, Markdown export, links in a question</li>
-            <li><span class="done">Done:</span> own APT repository and an AppImage for other
-              distributions</li>
+            <li><span class="done">Done:</span> hosts, models, LiteLLM router, Open WebUI, log, tray,
+              seven languages</li>
+            <li><span class="done">Done:</span> chat with attachments, saved conversations, context
+              usage, thinking on/off, Markdown export</li>
+            <li><span class="done">Done:</span> web search in the chat with sources (SearXNG or
+              Ollama's web search)</li>
+            <li><span class="done">Done:</span> APT repository, .deb and AppImage</li>
           </ul>
         </div>
         <div class="milestone">
-          <h3>1.0 · web search in the chat</h3>
-          <p>A switch next to the message: the model writes a few search queries, the app reads the
-            pages and answers with sources. Works with any model, off by default.</p>
-        </div>
-        <div class="milestone">
-          <h3>After 1.0 · bug fixes</h3>
+          <h3>From now on · bug fixes</h3>
           <p>The app covers what it set out to do. Anything bigger, such as user accounts,
             knowledge bases or voice, is what Open WebUI is for, and it is built in.</p>
         </div>
