@@ -4669,11 +4669,9 @@ class WidokCzatu(QTextBrowser):
             format_linku.setAlignment(Qt.AlignmentFlag.AlignRight)
             format_linku.setTopMargin(6)
             c.setBlockFormat(format_linku)
-            link = self._znaki(self.kolorLinku)
-            link.setAnchor(True)
-            link.setAnchorHref(f"kopiuj:{numer}")
-            link.setFontPointSize(max(1.0, self.font().pointSizeF() - 1))
-            c.insertText(_("Kopiuj kod"), link)
+            # WHY: ikona zamiast napisu "Kopiuj kod" (prośba użytkownika) - ta sama co "kopiuj
+            #      odpowiedź" w nagłówku; opis w dymku
+            self._ikona(c, "kopiuj", f"kopiuj:{numer}", _("Kopiuj kod"))
 
 
 class Paleta(QWidget):
