@@ -53,7 +53,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
     QImage, QBitmap, QRegion, QCursor, QTextCursor, QTextFrameFormat, QTextBlockFormat, QTextCharFormat,
-    QTextDocument, QTextImageFormat, QKeySequence, QShortcut,
+    QTextDocument, QTextImageFormat, QKeySequence, QShortcut, QTextFormat,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -3988,6 +3988,36 @@ class WidokCzatu(QTextBrowser):
         c.insertImage(f)
         self._dymki[adres] = dymek
 
+    # WHAT: własna właściwość ramki - które tło (pytanie / odpowiedź) narysować pod dymkiem
+    _ROLA_DYMKA = QTextFormat.Property.UserProperty + 1
+    _PROMIEN_DYMKA = 10
+
+    def paintEvent(self, zdarzenie):
+        # WHAT: zaokrąglone tła dymków pod tekstem, potem zwykłe rysowanie dokumentu.
+        # WHY:  QTextFrameFormat nie zna zaokrągleń (rysuje kanciaste tło), a widżetów
+        #       w QTextBrowser osadzić się nie da. Pozycje ramek bierzemy z układu dokumentu
+        #       i przesuwamy o przewinięcie, kolory - z theme.qss (tloTy / tloModelu).
+        malarz = QPainter(self.viewport())
+        malarz.setRenderHint(QPainter.RenderHint.Antialiasing)
+        malarz.setPen(Qt.PenStyle.NoPen)
+        przesuniecie = QPointF(-self.horizontalScrollBar().value(), -self.verticalScrollBar().value())
+        widoczne = QRectF(self.viewport().rect())
+        uklad = self.document().documentLayout()
+        for ramka in self.document().rootFrame().childFrames():
+            rola = ramka.frameFormat().property(self._ROLA_DYMKA)
+            if not rola:
+                continue
+            prostokat = uklad.frameBoundingRect(ramka).translated(przesuniecie)
+            if not prostokat.intersects(widoczne):
+                continue
+            f = ramka.frameFormat()
+            # WHY: frameBoundingRect obejmuje marginesy - tło tylko na obszarze dymka
+            prostokat = prostokat.adjusted(f.leftMargin(), f.topMargin(), -f.rightMargin(), -f.bottomMargin())
+            malarz.setBrush(self.tloTy if rola == "user" else self.tloModelu)
+            malarz.drawRoundedRect(prostokat, self._PROMIEN_DYMKA, self._PROMIEN_DYMKA)
+        malarz.end()
+        super().paintEvent(zdarzenie)
+
     def viewportEvent(self, zdarzenie):
         # WHAT: dymek z opisem po najechaniu na ikonę.
         if zdarzenie.type() == QEvent.Type.ToolTip:
@@ -4026,10 +4056,14 @@ class WidokCzatu(QTextBrowser):
                                                        "znikną z rozmowy"))
         # --- dymek ---
         ramka_f = QTextFrameFormat()
-        ramka_f.setBackground(self.tloTy if w["rola"] == "user" else self.tloModelu)
+        # WHY: bez tła w dokumencie - ramka QTextDocument nie ma zaokrąglonych rogów, więc
+        #      dymek rysuje paintEvent (zaokrąglony prostokąt pod tekstem); tu tylko rola
+        ramka_f.setProperty(self._ROLA_DYMKA, "user" if w["rola"] == "user" else "model")
         ramka_f.setPadding(12)
         ramka_f.setTopMargin(4)
         ramka_f.setBottomMargin(16)
+        # WHY: odstęp od suwaka po prawej - dymki dochodziły do samej krawędzi
+        ramka_f.setRightMargin(14)
         ramka_f.setBorder(0)
         ramka = c.insertFrame(ramka_f)
         if w["rola"] != "assistant":
