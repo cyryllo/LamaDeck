@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>LamaDeck APT repository</title>
+<style>body{font-family:sans-serif;max-width:46em;margin:2em auto;padding:0 1em;line-height:1.5}
+pre{background:#f2f2f2;padding:.8em;overflow-x:auto}</style></head><body>
+<h1>LamaDeck APT repository</h1>
+<p>Debian / Ubuntu repository of <a href="https://github.com/cyryllo/LamaDeck">LamaDeck</a>.
+Installing the <code>.deb</code> from the GitHub releases adds it automatically.
+To add it by hand:</p>
+<pre>sudo curl -fsSLo /usr/share/keyrings/lamadeck-archive-keyring.gpg https://cyryllo.github.io/LamaDeck/apt/lamadeck-archive-keyring.gpg
+sudo curl -fsSLo /etc/apt/sources.list.d/lamadeck.sources https://cyryllo.github.io/LamaDeck/apt/lamadeck.sources
+sudo apt update
+sudo apt install lamadeck</pre>
+</body></html>
