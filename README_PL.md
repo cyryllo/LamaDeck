@@ -12,9 +12,9 @@ wszystko działa lokalnie, w Twoim LAN.
 > przenosi przy pierwszym uruchomieniu.
 
 > **Status: stabilna (v0.9.0) — prawie 1.0.** Używam jej na co dzień na własnym sprzęcie
-> i działa zgodnie z oczekiwaniami. Funkcje są prawie kompletne: przed 1.0 zostało kilka
-> dodatków do czatu (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same
-> poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
+> i działa zgodnie z oczekiwaniami. Linia 0.9.x to ostatnie dodatki do czatu
+> i pakiety (repozytorium APT, AppImage); **1.0** dokłada wyszukiwanie w internecie w czacie
+> (patrz [plan](#plan-do-wersji-10)), a potem projekt przechodzi na same poprawki błędów. [Zgłoszenia błędów i uwagi](../../issues) są mile widziane.
 
 ![LamaDeck — panel główny](screenshots/lamadeck-dashboard_pl.png)
 
@@ -208,7 +208,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 ## Plan do wersji 1.0
 
-**0.9.x** (obecna) to wersja prawie końcowa. Przed **1.0** zostało:
+**0.9.x** (obecna) — ostatnie dodatki i pakiety, testowane przed 1.0:
 
 - [x] Czat: **automatyczne zapisywanie rozmów** do lokalnych plików, z listą zapisanych
   rozmów (otwieranie, usuwanie, wyszukiwanie)
@@ -222,11 +222,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [ ] **Własne repozytorium APT** — dodajesz je raz, potem `sudo apt install lamadeck`,
   a aktualizacje przychodzą razem z systemem
 - [ ] **AppImage** — jeden plik działający na każdej dystrybucji (Fedora, Arch, openSUSE…)
-
 - [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza
   jej tekst do pytania
 
-**1.1 — wyszukiwanie w internecie w czacie.** Przełącznik przy wiadomości: model pisze kilka
+**1.0 — wyszukiwanie w internecie w czacie.** Przełącznik przy wiadomości: model pisze kilka
 zapytań, program wyszukuje, czyta strony i odpowiada ze źródłami — tak jak Open WebUI,
 z każdym modelem. Wyniki z wyszukiwarki Ollamy (darmowe konto na ollama.com) albo z własnego
 serwera SearXNG; domyślnie wyłączone, z jasną informacją, że zapytania wychodzą do internetu.

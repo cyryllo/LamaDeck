@@ -13,8 +13,9 @@ a built-in chat. No terminal, no Docker, no cloud — everything runs on your LA
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
 > **Status: stable (v0.9.0) — almost 1.0.** Daily driver on my own setup, working as expected.
-> The feature set is nearly complete: a few chat additions are left before 1.0 (see the
-> [roadmap](#roadmap-to-10)), after which the project switches to bug fixes only.
+> The 0.9.x line brings the last chat additions and packaging (APT repository, AppImage);
+> **1.0** adds web search in the chat (see the [roadmap](#roadmap-to-10)), after which the
+> project switches to bug fixes only.
 > [Bug reports and feedback](../../issues) are welcome.
 
 ![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)
@@ -208,7 +209,7 @@ fonts are bundled, so it looks the same everywhere).
 
 ## Roadmap to 1.0
 
-**0.9.x** (current) is the near-final release. What's left before **1.0**:
+**0.9.x** (current) — the last additions and packaging, tested before 1.0:
 
 - [x] Chat: **automatic saving of conversations** to local files, with a list of saved
   conversations (open, delete, search)
@@ -222,11 +223,10 @@ fonts are bundled, so it looks the same everywhere).
 - [ ] **Own APT repository** — add it once, then `sudo apt install lamadeck` and updates
   come with the system
 - [ ] **AppImage** — one file that runs on any distribution (Fedora, Arch, openSUSE…)
-
 - [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and
   adds its text to the question
 
-**1.1 — web search in the chat.** A switch next to the message: the model writes a few search
+**1.0 — web search in the chat.** A switch next to the message: the model writes a few search
 queries, the app searches, reads the pages and answers with sources — like Open WebUI does,
 and with any model. Results from Ollama's own web search (free ollama.com account) or your own
 SearXNG server; off by default, with a clear note that queries go to the internet.
