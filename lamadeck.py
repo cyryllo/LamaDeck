@@ -38,6 +38,7 @@ import getpass
 import grp
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -1045,6 +1046,298 @@ def webui_autostart(wlacz):
         _systemctl_user(["enable", "--now", "open-webui.service"])
     else:
         _systemctl_user(["disable", "--now", "open-webui.service"])
+
+
+# =============================================================================
+#  SearXNG - wyszukiwarka dla czatu, instalowana dla użytkownika (jak Open WebUI)
+# =============================================================================
+# WHAT: SearXNG odpytuje zwykłe wyszukiwarki (Google, Bing, DuckDuckGo...) z tego
+#       komputera i oddaje wyniki w JSON - źródło wyników dla wyszukiwania w czacie.
+# WHY:  bez konta i klucza, w całości w katalogu domowym. NIE przez 'uv tool install':
+#       SearXNG nie ma pakietu na PyPI (pod nazwą "searxng" jest tam cudzy, inny
+#       projekt), a jego setup.py przy budowaniu importuje sam program - w czystym
+#       środowisku budowania uv brakuje mu bibliotek. Dlatego jak w oficjalnej
+#       instrukcji: środowisko (uv venv), najpierw zależności, potem program bez
+#       izolacji budowania.
+SEARXNG_PORT = 8888
+SEARXNG_URL = f"http://127.0.0.1:{SEARXNG_PORT}"
+_SEARXNG_COMMIT_API = "https://api.github.com/repos/searxng/searxng/commits/master"
+_SEARXNG_ARCHIWUM = "https://codeload.github.com/searxng/searxng/tar.gz/{sha}"
+
+
+def _searxng_katalog():
+    # WHY: w katalogu danych LamaDeck, nie programu - install.sh --uninstall kasuje program
+    return _katalog_danych() / NAZWA_PROGRAMU / "searxng"
+
+
+def _searxng_python():
+    return _searxng_katalog() / "venv" / "bin" / "python"
+
+
+def _searxng_plik_wersji():
+    return _searxng_katalog() / "wersja.json"
+
+
+def _searxng_settings_sciezka():
+    return _katalog_config() / NAZWA_PROGRAMU / "searxng" / "settings.yml"
+
+
+def _searxng_service_sciezka():
+    return Path.home() / ".config" / "systemd" / "user" / "searxng.service"
+
+
+def searxng_zainstalowane():
+    # WHY: plik wersji powstaje na samym końcu instalacji - przerwana instalacja
+    #      nie udaje gotowej
+    return _searxng_plik_wersji().exists() and (_searxng_katalog() / "venv" / "bin" / "granian").exists()
+
+
+def _searxng_commit_master():
+    # WHAT: najnowszy commit gałęzi master SearXNG: (sha, wersja "RRRR.MM.DD.GGMM").
+    # WHY:  SearXNG nie wydaje wersji - rozwija się ciągle na master. Wersją jest data
+    #       commita (z godziną, bo bywa kilka commitów dziennie); SearXNG sam nazywa
+    #       wersje datą + skrótem commita.
+    r = requests.get(_SEARXNG_COMMIT_API, timeout=10, headers={"Accept": "application/vnd.github+json"})
+    r.raise_for_status()
+    dane = r.json()
+    data = dane["commit"]["committer"]["date"]  # np. 2026-10-30T18:05:25Z
+    wersja = f"{data[0:4]}.{data[5:7]}.{data[8:10]}.{data[11:13]}{data[14:16]}"
+    return dane["sha"], wersja
+
+
+def searxng_wersja_lokalna():
+    try:
+        return json.loads(_searxng_plik_wersji().read_text(encoding="utf-8"))["wersja"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def searxng_wersja_najnowsza():
+    return _searxng_commit_master()[1]
+
+
+def _searxng_zapisz_settings():
+    # WHAT: settings.yml SearXNG - tylko różnice względem domyślnych (use_default_settings).
+    # WHY:  - json w "formats": domyślnie SearXNG oddaje tylko HTML, a program czyta JSON;
+    #       - 127.0.0.1: wyszukiwarka tylko dla tego komputera, nie dla całej sieci;
+    #       - limiter wyłączony: chroni publiczne instancje przed botami i wymaga
+    #         osobnej bazy (Valkey) - tu jedynym "klientem" jest ten program;
+    #       - secret_key losowy, generowany raz (domyślny SearXNG odrzuca przy starcie).
+    #       Istniejący plik zostaje - ktoś mógł w nim coś zmienić (np. wyszukiwarki).
+    sciezka = _searxng_settings_sciezka()
+    if sciezka.exists():
+        return
+    sciezka.parent.mkdir(parents=True, exist_ok=True)
+    sciezka.write_text(
+        "# SearXNG dla LamaDeck - tylko zmiany względem ustawień domyślnych.\n"
+        "# Pełna lista: https://docs.searxng.org/admin/settings/\n"
+        "use_default_settings: true\n"
+        "general:\n"
+        "  instance_name: \"LamaDeck SearXNG\"\n"
+        "server:\n"
+        f"  port: {SEARXNG_PORT}\n"
+        "  bind_address: \"127.0.0.1\"\n"
+        f"  secret_key: \"{secrets.token_hex(32)}\"\n"
+        "  limiter: false\n"
+        "  public_instance: false\n"
+        "search:\n"
+        "  formats:\n"
+        "    - html\n"
+        "    - json\n",
+        encoding="utf-8")
+    sciezka.chmod(0o600)  # WHY: zawiera secret_key
+
+
+def _zapisz_searxng_unit():
+    # WHAT: usługa systemd --user SearXNG (serwer granian, jak w oficjalnym kontenerze).
+    katalog = _searxng_katalog()
+    tresc = (
+        "[Unit]\n"
+        "Description=SearXNG (LamaDeck)\n"
+        "After=network-online.target\n"
+        "\n"
+        "[Service]\n"
+        f"Environment=SEARXNG_SETTINGS_PATH={_searxng_settings_sciezka()}\n"
+        # WHY: --blocking-threads 4 jak w oficjalnym kontenerze - domyślnie granian
+        #      pozwala na 512 wątków (ostrzeżenie w logu), a tu pyta jeden program
+        f"ExecStart={katalog}/venv/bin/granian --interface wsgi --host 127.0.0.1 "
+        f"--port {SEARXNG_PORT} --blocking-threads 4 searx.webapp:app\n"
+        f"WorkingDirectory={katalog}\n"
+        "Restart=on-failure\n"
+        "\n"
+        "[Install]\n"
+        "WantedBy=default.target\n"
+    )
+    sciezka = _searxng_service_sciezka()
+    sciezka.parent.mkdir(parents=True, exist_ok=True)
+    sciezka.write_text(tresc)
+    _systemctl_user(["daemon-reload"])
+
+
+def _uv_uruchom(polecenie, opis):
+    wynik = subprocess.run(polecenie, capture_output=True, text=True, timeout=None)
+    if wynik.returncode != 0:
+        raise RuntimeError(wynik.stderr.strip()[-2000:] or _("{opis}: nieznany błąd").format(opis=opis))
+
+
+def searxng_zainstaluj():
+    # WHAT: pobiera SearXNG (archiwum z GitHuba, bez gita), instaluje go w osobnym
+    #       środowisku w katalogu domowym i zapisuje ustawienia oraz usługę --user.
+    #       Ta sama funkcja aktualizuje - instaluje od nowa najnowszy stan.
+    uv = _uv_zapewnij()
+    sha, wersja = _searxng_commit_master()
+    katalog = _searxng_katalog()
+    katalog.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=katalog) as tmp:
+        tmp = Path(tmp)
+        archiwum = tmp / "searxng.tar.gz"
+        with requests.get(_SEARXNG_ARCHIWUM.format(sha=sha), stream=True, timeout=60) as r:
+            r.raise_for_status()
+            with open(archiwum, "wb") as f:
+                for kawalek in r.iter_content(1 << 16):
+                    f.write(kawalek)
+        with tarfile.open(archiwum) as tar:
+            # WHY: filtr "data" odrzuca ścieżki poza katalogiem i pliki specjalne (Python 3.12+)
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(tmp, filter="data")
+            else:
+                tar.extractall(tmp)
+        zrodla = next(p for p in tmp.iterdir() if p.is_dir())
+        # WHY: SearXNG bierze wersję z gita - w archiwum go nie ma i import kończyłby się
+        #      błędem. version_frozen.py to jego własny sposób na "zamrożoną" wersję.
+        (zrodla / "searx" / "version_frozen.py").write_text(
+            f'VERSION_STRING = "{wersja}+{sha[:7]}"\n'
+            f'VERSION_TAG = "{wersja}+{sha[:7]}"\n'
+            f'DOCKER_TAG = "{wersja}-{sha[:7]}"\n'
+            'GIT_URL = "https://github.com/searxng/searxng"\n'
+            'GIT_BRANCH = "master"\n', encoding="utf-8")
+        venv = katalog / "venv"
+        python = str(_searxng_python())
+        # WHY: nowe środowisko przy każdej instalacji - aktualizacja nie zostawia starych bibliotek
+        _uv_uruchom([uv, "venv", "--clear", "--python", "3.12", str(venv)], "uv venv")
+        _uv_uruchom([uv, "pip", "install", "--python", python, "setuptools", "wheel",
+                     "-r", str(zrodla / "requirements.txt"), "-r", str(zrodla / "requirements-server.txt")],
+                    "uv pip install")
+        _uv_uruchom([uv, "pip", "install", "--python", python, "--no-build-isolation", str(zrodla)],
+                    "uv pip install searxng")
+    _searxng_zapisz_settings()
+    _zapisz_searxng_unit()
+    _searxng_plik_wersji().write_text(json.dumps({"wersja": wersja, "sha": sha}), encoding="utf-8")
+
+
+def searxng_aktualizuj():
+    # WHY: działający serwer trzyma stare pliki w pamięci - po aktualizacji restart
+    dzialal = _searxng_dziala()
+    searxng_zainstaluj()
+    if dzialal:
+        _systemctl_user(["restart", "searxng.service"])
+
+
+def _searxng_dziala():
+    try:
+        return requests.get(f"{SEARXNG_URL}/healthz", timeout=1).status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def searxng_uruchom():
+    if _searxng_dziala():
+        return
+    _zapisz_searxng_unit()
+    _systemctl_user(["start", "searxng.service"])
+    # WHY: pierwszy start wczytuje listę wyszukiwarek - zwykle kilka sekund
+    for _ in range(60):
+        if _searxng_dziala():
+            return
+        time.sleep(1)
+    raise RuntimeError(_("SearXNG nie odpowiedział w ciągu minuty. Log usługi: ekran Dziennik."))
+
+
+def searxng_zatrzymaj():
+    _systemctl_user(["stop", "searxng.service"])
+
+
+def searxng_autostart_wlaczony():
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-enabled", "searxng.service"],
+                           capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.stdout.strip() == "enabled"
+
+
+def searxng_autostart(wlacz):
+    if wlacz:
+        _zapisz_searxng_unit()
+        _systemctl_user(["enable", "--now", "searxng.service"])
+    else:
+        _systemctl_user(["disable", "--now", "searxng.service"])
+
+
+def searxng_usun():
+    # WHAT: zatrzymuje i usuwa SearXNG: usługę, środowisko i ustawienia.
+    try:
+        _systemctl_user(["disable", "--now", "searxng.service"])
+    except (RuntimeError, OSError):
+        pass
+    _searxng_service_sciezka().unlink(missing_ok=True)
+    try:
+        _systemctl_user(["daemon-reload"])
+    except (RuntimeError, OSError):
+        pass
+    shutil.rmtree(_searxng_katalog(), ignore_errors=True)
+    shutil.rmtree(_searxng_settings_sciezka().parent, ignore_errors=True)
+
+
+# =============================================================================
+#  Wyszukiwanie w internecie - źródła wyników dla czatu
+# =============================================================================
+# WHAT: źródło wyników (QSettings wyszukiwanie/zrodlo). Domyślnie wyłączone -
+#       zapytania wychodzą do internetu, więc to świadomy wybór użytkownika.
+ZRODLA_WYSZUKIWANIA = ["wylaczone", "searxng", "searxng_adres", "ollama"]
+OLLAMA_WEB_SEARCH = "https://ollama.com/api/web_search"
+
+
+def wyszukiwanie_ustawienie(klucz, domyslnie=""):
+    return _ustawienia().value(f"wyszukiwanie/{klucz}", domyslnie)
+
+
+def wyszukiwanie_zapisz(klucz, wartosc):
+    _ustawienia().setValue(f"wyszukiwanie/{klucz}", wartosc)
+
+
+def wyszukaj_w_internecie(zapytanie, ile=5, zrodlo=None):
+    # WHAT: wyniki wyszukiwania z wybranego źródła: [{"tytul", "url", "tresc"}].
+    # WHY:  jeden format dla obu źródeł - czat nie musi wiedzieć, skąd są wyniki.
+    zrodlo = zrodlo or wyszukiwanie_ustawienie("zrodlo", "wylaczone")
+    if zrodlo in ("searxng", "searxng_adres"):
+        adres = SEARXNG_URL if zrodlo == "searxng" else wyszukiwanie_ustawienie("searxng_adres", "").rstrip("/")
+        if not adres:
+            raise RuntimeError(_("Nie podano adresu SearXNG."))
+        try:
+            r = requests.get(f"{adres}/search", params={"q": zapytanie, "format": "json"}, timeout=20)
+        except requests.ConnectionError:
+            raise RuntimeError(_("SearXNG pod adresem {adres} nie odpowiada.").format(adres=adres)) from None
+        if r.status_code == 403:
+            # WHY: najczęstszy problem z cudzym SearXNG - format JSON jest domyślnie wyłączony
+            raise RuntimeError(_("SearXNG odmówił wyników w formacie JSON - w jego settings.yml dopisz "
+                                 "\"json\" w search: formats."))
+        r.raise_for_status()
+        wyniki = r.json().get("results", [])
+        return [{"tytul": w.get("title", ""), "url": w.get("url", ""), "tresc": w.get("content", "")}
+                for w in wyniki if w.get("url")][:ile]
+    if zrodlo == "ollama":
+        klucz = wyszukiwanie_ustawienie("klucz_ollama", "")
+        if not klucz:
+            raise RuntimeError(_("Brak klucza API Ollamy (ollama.com/settings/keys)."))
+        r = requests.post(OLLAMA_WEB_SEARCH, json={"query": zapytanie, "max_results": min(ile, 10)},
+                          headers={"Authorization": f"Bearer {klucz}"}, timeout=30)
+        if r.status_code in (401, 403):
+            raise RuntimeError(_("Ollama odrzuciła klucz API - sprawdź go na ollama.com/settings/keys."))
+        r.raise_for_status()
+        return [{"tytul": w.get("title", ""), "url": w.get("url", ""), "tresc": w.get("content", "")}
+                for w in r.json().get("results", [])]
+    raise RuntimeError(_("Wyszukiwanie w internecie jest wyłączone."))
 
 
 # =============================================================================
@@ -2198,6 +2491,7 @@ USLUGI_DZIENNIKA = {
     "Ollama": (False, f"{SERVICE_NAME}.service"),
     "LiteLLM": (True, "litellm.service"),
     "Open WebUI": (True, "open-webui.service"),
+    "SearXNG": (True, "searxng.service"),
 }
 
 def _n(tekst):
@@ -2387,6 +2681,9 @@ class RefreshWorker(WatekTla):
             "litellm": litellm_zainstalowane(),
             "litellm_autostart": litellm_autostart_wlaczony(),
             "litellm_dziala": _litellm_dziala(),
+            "searxng": searxng_zainstalowane(),
+            "searxng_autostart": searxng_autostart_wlaczony(),
+            "searxng_dziala": _searxng_dziala(),
         })
 
 
@@ -9128,7 +9425,7 @@ class MainWindow(QMainWindow):
         self._chipy_dziennika = {}
         grupa = QButtonGroup(strona)
         for klucz, nazwa in (("all", _("Wszystkie")), ("Ollama", "Ollama"), ("LiteLLM", "LiteLLM"),
-                             ("Open WebUI", "Open WebUI"), ("Program", _("Program"))):
+                             ("Open WebUI", "Open WebUI"), ("SearXNG", "SearXNG"), ("Program", _("Program"))):
             chip = self._chip(nazwa, lambda _c=False, k=klucz: self._filtruj_dziennik(k))
             grupa.addButton(chip)
             filtry.addWidget(chip)
@@ -9330,7 +9627,8 @@ class MainWindow(QMainWindow):
         self._lbl_wersji = {}
         for rodzaj, nazwa, slot in (("aktualizacja_ollamy", "Ollama", self.sprawdz_aktualizacje_ollamy),
                                     ("aktualizacja_litellm", "LiteLLM", self.sprawdz_aktualizacje_litellm),
-                                    ("aktualizacja_webui", "Open WebUI", self.sprawdz_aktualizacje_webui)):
+                                    ("aktualizacja_webui", "Open WebUI", self.sprawdz_aktualizacje_webui),
+                                    ("aktualizacja_searxng", "SearXNG", self.sprawdz_aktualizacje_searxng)):
             wiersz = QFrame()
             wiersz.setObjectName("settingRow")
             h = QHBoxLayout(wiersz)
@@ -9345,6 +9643,8 @@ class MainWindow(QMainWindow):
                 self.btn_aktualizacje_ollamy = btn
             elif rodzaj == "aktualizacja_litellm":
                 self.btn_aktualizacje_litellm = btn
+            elif rodzaj == "aktualizacja_searxng":
+                self.btn_aktualizacje_searxng = btn
             else:
                 self.btn_sprawdz_aktualizacje_webui = btn
             uk.addWidget(wiersz)
@@ -9404,6 +9704,7 @@ class MainWindow(QMainWindow):
         uk.addWidget(self.ramka_rag_brak)
         v.addWidget(karta)
         self._odswiez_modele_rag()
+        v.addWidget(self._karta_wyszukiwania())
 
         # --- Zmienne środowiskowe Ollamy ---
         karta, uk = self._karta()
@@ -9558,6 +9859,8 @@ class MainWindow(QMainWindow):
         self.sw_webui_autostart.setEnabled(stan["webui"])
         self.sw_webui_autostart.ustaw_cicho(stan["webui_autostart"])
         self.btn_sprawdz_aktualizacje_webui.setEnabled(stan["webui"] and not self._w_toku("aktualizacja_webui"))
+        self.btn_aktualizacje_searxng.setEnabled(stan["searxng"] and not self._w_toku("aktualizacja_searxng"))
+        self._odswiez_wyszukiwanie(stan)
         # WHAT: wiersze autostartu i wersji usługi, której nie ma, znikają (jak jej pozycja
         #       w pasku bocznym - _pokaz_sekcje_uslug); po instalacji same wracają.
         for widget, zainstalowana in ((self.sw_ollama_autostart, stan["zainstalowana"]),
@@ -9565,10 +9868,12 @@ class MainWindow(QMainWindow):
                                       (self.sw_litellm_autostart, stan["litellm"]),
                                       (self.btn_aktualizacje_litellm, stan["litellm"]),
                                       (self.sw_webui_autostart, stan["webui"]),
-                                      (self.btn_sprawdz_aktualizacje_webui, stan["webui"])):
+                                      (self.btn_sprawdz_aktualizacje_webui, stan["webui"]),
+                                      (self.btn_aktualizacje_searxng, stan["searxng"])):
             widget.parentWidget().setVisible(zainstalowana)  # WHY: rodzic = cały wiersz (settingRow)
         self.lbl_uwaga_wersji.setVisible(stan["zainstalowana"])
-        self.lbl_brak_uslug.setVisible(not (stan["zainstalowana"] or stan["litellm"] or stan["webui"]))
+        self.lbl_brak_uslug.setVisible(not (stan["zainstalowana"] or stan["litellm"] or stan["webui"]
+                                            or stan["searxng"]))
         for widget in self._pola_zmiennych + [self.pole_wlasne_zmienne, self.btn_zalecane_zaawansowane,
                                               self.btn_zapisz_zaawansowane]:
             widget.setEnabled(stan["zainstalowana"])
@@ -9593,6 +9898,250 @@ class MainWindow(QMainWindow):
         #      formularz niczego nie gubi przy następnym zapisie.
         wlasne = [f"{k}={v}" for k, v in env.items() if k not in OLLAMA_ZNANE_ZMIENNE]
         self.pole_wlasne_zmienne.setPlainText("\n".join(wlasne))
+
+    # --- Wyszukiwanie w internecie (źródło wyników + SearXNG) ----------------
+    def _karta_wyszukiwania(self):
+        # WHAT: karta w Ustawieniach - skąd czat bierze wyniki wyszukiwania i obsługa
+        #       SearXNG na tym komputerze (instalacja, start/stop, autostart, usuwanie).
+        # WHY:  wszystko o wyszukiwaniu w jednym miejscu; pola trzech źródeł są w osobnych
+        #       ramkach, widać tylko ramkę wybranego (_pokaz_zrodlo_wyszukiwania).
+        karta, uk = self._karta()
+        uk.setSpacing(0)
+        uk.addWidget(_etykieta(_("Wyszukiwanie w internecie"), "h2"))
+        wstep = _etykieta(_("Skąd czat bierze wyniki, gdy poprosisz go o wyszukanie czegoś w internecie. "
+                            "Zapytania wychodzą wtedy z tego komputera do internetu - dlatego domyślnie "
+                            "jest wyłączone."), "muted")
+        wstep.setWordWrap(True)
+        wstep.setContentsMargins(0, 6, 0, 8)
+        uk.addWidget(wstep)
+
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.addWidget(QLabel(_("Źródło wyników")), 1)
+        self.combo_zrodlo_wyszukiwania = QComboBox()
+        for kod, nazwa in (("wylaczone", _("Wyłączone")),
+                           ("searxng", _("SearXNG na tym komputerze")),
+                           ("searxng_adres", _("SearXNG pod innym adresem")),
+                           ("ollama", _("Ollama (konto na ollama.com)"))):
+            self.combo_zrodlo_wyszukiwania.addItem(nazwa, kod)
+        self.combo_zrodlo_wyszukiwania.setMinimumWidth(320)
+        zrodlo = wyszukiwanie_ustawienie("zrodlo", "wylaczone")
+        self.combo_zrodlo_wyszukiwania.setCurrentIndex(max(0, self.combo_zrodlo_wyszukiwania.findData(zrodlo)))
+        self.combo_zrodlo_wyszukiwania.currentIndexChanged.connect(self._zmiana_zrodla_wyszukiwania)
+        h.addWidget(self.combo_zrodlo_wyszukiwania)
+        uk.addWidget(wiersz)
+
+        # --- SearXNG na tym komputerze ---
+        self.ramka_searxng = QFrame()
+        v = QVBoxLayout(self.ramka_searxng)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(8)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel("SearXNG"))
+        self.lbl_stan_searxng = _etykieta("", "muted")
+        self.lbl_stan_searxng.setWordWrap(True)
+        teksty.addWidget(self.lbl_stan_searxng)
+        h.addLayout(teksty, 1)
+        self.btn_searxng_zainstaluj = self._przycisk(_("Zainstaluj"), "pobierz", "primary",
+                                                     slot=self.zainstaluj_searxng)
+        self.btn_searxng_start = self._przycisk(_("Uruchom"), slot=self.przelacz_searxng)
+        self.btn_searxng_otworz = self._przycisk(_("Otwórz"), "otworz", slot=self.otworz_searxng)
+        self.btn_searxng_usun = self._przycisk(_("Usuń"), "kosz", "danger", slot=self.usun_searxng)
+        for btn in (self.btn_searxng_zainstaluj, self.btn_searxng_start, self.btn_searxng_otworz,
+                    self.btn_searxng_usun):
+            h.addWidget(btn, 0, Qt.AlignmentFlag.AlignTop)
+        v.addWidget(wiersz)
+        self.sw_searxng_autostart = self._wiersz_przelacznika(
+            v, _("SearXNG startuje po zalogowaniu"), _("usługa użytkownika, bez hasła"),
+            self.przelacz_searxng_autostart)
+        uk.addWidget(self.ramka_searxng)
+
+        # --- SearXNG pod innym adresem ---
+        self.ramka_searxng_adres = QFrame()
+        v = QVBoxLayout(self.ramka_searxng_adres)
+        v.setContentsMargins(0, 10, 0, 10)
+        v.setSpacing(6)
+        v.addWidget(QLabel(_("Adres SearXNG")))
+        self.pole_searxng_adres = QLineEdit(wyszukiwanie_ustawienie("searxng_adres", ""))
+        self.pole_searxng_adres.setPlaceholderText(_("np. http://192.168.0.10:8888"))
+        self.pole_searxng_adres.editingFinished.connect(self._zapisz_adres_searxng)
+        v.addWidget(self.pole_searxng_adres)
+        opis = _etykieta(_("Twój własny SearXNG, np. na serwerze w domu. W jego settings.yml musi być "
+                           "włączony format json (search: formats)."), "muted")
+        opis.setWordWrap(True)
+        v.addWidget(opis)
+        uk.addWidget(self.ramka_searxng_adres)
+
+        # --- Ollama ---
+        self.ramka_wyszukiwania_ollama = QFrame()
+        v = QVBoxLayout(self.ramka_wyszukiwania_ollama)
+        v.setContentsMargins(0, 10, 0, 10)
+        v.setSpacing(6)
+        v.addWidget(QLabel(_("Klucz API Ollamy")))
+        self.pole_klucz_ollama = QLineEdit(wyszukiwanie_ustawienie("klucz_ollama", ""))
+        self.pole_klucz_ollama.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pole_klucz_ollama.setPlaceholderText(_("wklej klucz"))
+        self.pole_klucz_ollama.editingFinished.connect(self._zapisz_klucz_ollama)
+        v.addWidget(self.pole_klucz_ollama)
+        opis = _etykieta(_("Wyszukiwarka Ollamy wymaga darmowego konta. Klucz utworzysz na "
+                           "<a href=\"https://ollama.com/settings/keys\">ollama.com/settings/keys</a>. "
+                           "Zapytania trafiają wtedy do ollama.com."), "muted")
+        opis.setWordWrap(True)
+        opis.setOpenExternalLinks(True)
+        v.addWidget(opis)
+        uk.addWidget(self.ramka_wyszukiwania_ollama)
+
+        # --- Sprawdzenie ---
+        self.ramka_test_wyszukiwania = QFrame()
+        h = QHBoxLayout(self.ramka_test_wyszukiwania)
+        h.setContentsMargins(0, 10, 0, 0)
+        self.lbl_test_wyszukiwania = _etykieta("", "muted")
+        self.lbl_test_wyszukiwania.setWordWrap(True)
+        h.addWidget(self.lbl_test_wyszukiwania, 1)
+        self.btn_test_wyszukiwania = self._przycisk(_("Sprawdź wyszukiwanie"), "szukaj",
+                                                    slot=self.sprawdz_wyszukiwanie)
+        h.addWidget(self.btn_test_wyszukiwania, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(self.ramka_test_wyszukiwania)
+        self._pokaz_zrodlo_wyszukiwania()
+        return karta
+
+    def _pokaz_zrodlo_wyszukiwania(self):
+        zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
+        self.ramka_searxng.setVisible(zrodlo == "searxng")
+        self.ramka_searxng_adres.setVisible(zrodlo == "searxng_adres")
+        self.ramka_wyszukiwania_ollama.setVisible(zrodlo == "ollama")
+        self.ramka_test_wyszukiwania.setVisible(zrodlo != "wylaczone")
+
+    def _zmiana_zrodla_wyszukiwania(self, _indeks=None):
+        zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
+        wyszukiwanie_zapisz("zrodlo", zrodlo)
+        self.lbl_test_wyszukiwania.setText("")
+        self._pokaz_zrodlo_wyszukiwania()
+        self.wpis_log(_("Źródło wyszukiwania w internecie: {zrodlo}.").format(
+            zrodlo=self.combo_zrodlo_wyszukiwania.currentText()))
+
+    def _odswiez_wyszukiwanie(self, stan):
+        # WHAT: stan SearXNG na tym komputerze -> opis i przyciski karty.
+        zainstalowane, dziala = stan["searxng"], stan["searxng_dziala"]
+        w_toku = self._w_toku("searxng")
+        if w_toku:
+            opis = _("trwa instalacja albo aktualizacja - to może potrwać kilka minut...")
+        elif not zainstalowane:
+            opis = _("nie jest zainstalowany - instalacja dla bieżącego użytkownika, bez hasła "
+                     "(wymaga internetu)")
+        elif dziala:
+            opis = _("działa - {adres}").format(adres=SEARXNG_URL)
+        else:
+            opis = _("zainstalowany, zatrzymany")
+        self.lbl_stan_searxng.setText(opis)
+        self.btn_searxng_zainstaluj.setVisible(not zainstalowane)
+        self.btn_searxng_zainstaluj.setEnabled(not w_toku)
+        self.btn_searxng_start.setVisible(zainstalowane)
+        self.btn_searxng_start.setText(_("Zatrzymaj") if dziala else _("Uruchom"))
+        self.btn_searxng_otworz.setVisible(zainstalowane and dziala)
+        self.btn_searxng_usun.setVisible(zainstalowane)
+        for btn in (self.btn_searxng_start, self.btn_searxng_usun):
+            btn.setEnabled(not w_toku)
+        self.sw_searxng_autostart.parentWidget().setVisible(zainstalowane)
+        self.sw_searxng_autostart.ustaw_cicho(stan["searxng_autostart"])
+
+    def zainstaluj_searxng(self):
+        odp = QMessageBox.question(
+            self, _("Zainstaluj SearXNG"),
+            _("Zainstalować SearXNG teraz?\n\n"
+              "Pobierze go z GitHuba i zainstaluje dla bieżącego użytkownika w katalogu domowym "
+              "(bez Dockera, bez uprawnień administratora). Potrwa kilka minut.\n\n"
+              "SearXNG będzie działał tylko na tym komputerze ({adres}).").format(adres=SEARXNG_URL))
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        self.wpis_log(_("Instaluję SearXNG - to może potrwać kilka minut..."))
+
+        def _po(sukces):
+            if sukces:
+                self.przelacz_searxng(uruchom=True)
+
+        self._watki["searxng"] = self._uruchom_akcje(searxng_zainstaluj, _("Instalacja SearXNG"), _po, powiadom=True)
+        if self._stan:
+            self._odswiez_wyszukiwanie(self._stan)
+
+    def przelacz_searxng(self, _klik=False, uruchom=None):
+        if uruchom is None:
+            uruchom = not (self._stan and self._stan["searxng_dziala"])
+        if uruchom:
+            self.wpis_log(_("Uruchamiam SearXNG..."))
+            self._uruchom_akcje(searxng_uruchom, _("Uruchomienie SearXNG"))
+        else:
+            self._uruchom_akcje(searxng_zatrzymaj, _("Zatrzymanie SearXNG"))
+
+    def otworz_searxng(self):
+        QDesktopServices.openUrl(QUrl(SEARXNG_URL))
+
+    def usun_searxng(self):
+        odp = QMessageBox.question(
+            self, _("Usuń SearXNG"),
+            _("Usunąć SearXNG z tego komputera?\n\nZniknie usługa, program i jego ustawienia. "
+              "Możesz go później zainstalować ponownie."))
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        self._watki["searxng"] = self._uruchom_akcje(searxng_usun, _("Usunięcie SearXNG"))
+
+    def przelacz_searxng_autostart(self, wlacz):
+        opis = _("Włączenie autostartu SearXNG") if wlacz else _("Wyłączenie autostartu SearXNG")
+        self.wpis_log(opis + "...")
+        self._uruchom_akcje(lambda: searxng_autostart(wlacz), opis)
+
+    def _zapisz_adres_searxng(self):
+        tekst = self.pole_searxng_adres.text().strip().rstrip("/")
+        # WHY: jak przy hostach Ollamy - nie każemy pamiętać o "http://"
+        if tekst and not re.match(r"^https?://", tekst):
+            tekst = "http://" + tekst
+            self.pole_searxng_adres.setText(tekst)
+        if tekst != wyszukiwanie_ustawienie("searxng_adres", ""):
+            wyszukiwanie_zapisz("searxng_adres", tekst)
+            self.lbl_test_wyszukiwania.setText("")
+
+    def _zapisz_klucz_ollama(self):
+        tekst = self.pole_klucz_ollama.text().strip()
+        if tekst != wyszukiwanie_ustawienie("klucz_ollama", ""):
+            wyszukiwanie_zapisz("klucz_ollama", tekst)
+            self.lbl_test_wyszukiwania.setText("")
+
+    def sprawdz_wyszukiwanie(self):
+        # WHAT: jedno próbne zapytanie do wybranego źródła - wynik pod kartą.
+        self._zapisz_adres_searxng()
+        self._zapisz_klucz_ollama()
+        zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
+        self.btn_test_wyszukiwania.setEnabled(False)
+        self.lbl_test_wyszukiwania.setText(_("Szukam..."))
+        worker = FunkcjaWorker(lambda: wyszukaj_w_internecie("Ollama", 5, zrodlo))
+
+        def _po(sukces, wynik):
+            self.btn_test_wyszukiwania.setEnabled(True)
+            if not sukces:
+                self.lbl_test_wyszukiwania.setText(_("Błąd: {blad}").format(blad=wynik))
+            elif not wynik:
+                self.lbl_test_wyszukiwania.setText(_("Działa, ale nie zwrócił żadnych wyników."))
+            else:
+                self.lbl_test_wyszukiwania.setText(_("Działa - wyniki: {n}, pierwszy: {tytul}").format(
+                    n=len(wynik), tytul=wynik[0]["tytul"] or wynik[0]["url"]))
+
+        self._uruchom_watek("test_wyszukiwania", worker, worker.zakonczono, _po)
+
+    def sprawdz_aktualizacje_searxng(self):
+        # WHY: SearXNG nie ma wydań - "aktualizacja" to instalacja najnowszego stanu z GitHuba
+        self._sprawdz_aktualizacje(
+            "aktualizacja_searxng", "SearXNG", searxng_wersja_lokalna, searxng_wersja_najnowsza,
+            self.btn_aktualizacje_searxng, searxng_aktualizuj,
+            _("Pobierze najnowszy SearXNG z GitHuba i zainstaluje go od nowa\n"
+              "(bez uprawnień administratora - wymaga internetu; ustawienia zostają)."))
 
     def _ustaw_kontekst(self, wartosc):
         # WHY: wartość spoza listy (np. 24576) wpisujemy jako tekst, nie przeskakujemy na "domyślne".

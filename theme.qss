@@ -490,6 +490,7 @@ QLabel#logService { font-size: 9pt; font-weight: 600; color: #c9cfd6; }
 QLabel#logService[usluga="Ollama"]     { color: #9fd6f3; }
 QLabel#logService[usluga="LiteLLM"]    { color: #d9b8f0; }
 QLabel#logService[usluga="Open WebUI"] { color: #a6e6bf; }
+QLabel#logService[usluga="SearXNG"]    { color: #f3d29f; }
 QFrame#logRow QLabel#logLevel { font-size: 8pt; font-weight: 700; padding: 2px 0; border-radius: 4px; background: #2c3138; color: #c9cfd6; }
 QFrame#logRow QLabel#logLevel[poziom="warn"]  { background: #3a3020; color: #f0d29a; }
 QFrame#logRow QLabel#logLevel[poziom="error"] { background: #3a2326; color: #f6a5ab; }
