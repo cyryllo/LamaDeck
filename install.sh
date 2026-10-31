@@ -221,7 +221,7 @@ install_python_deps() {
 
     echo "Installing PyQt6 and requests for the current user..."
     local pip_output
-    if pip_output="$(python3 -m pip install --user --upgrade PyQt6 requests 2>&1)"; then
+    if pip_output="$(python3 -m pip install --user --upgrade "${PIP_PACKAGES[@]}" 2>&1)"; then
         return
     fi
 
@@ -232,7 +232,7 @@ install_python_deps() {
     #      ~/.local is touched and no apt-managed package is overwritten.
     if printf '%s\n' "$pip_output" | grep -q "externally-managed-environment"; then
         echo "System Python is externally managed (PEP 668) - retrying with --break-system-packages (user-level install only)..."
-        python3 -m pip install --user --upgrade --break-system-packages PyQt6 requests
+        python3 -m pip install --user --upgrade --break-system-packages "${PIP_PACKAGES[@]}"
     else
         printf '%s\n' "$pip_output" >&2
         exit 1
@@ -265,10 +265,13 @@ command -v pkexec >/dev/null 2>&1 || {
         || echo "Skipping pkexec - those actions won't work until it's installed."
 }
 
+# WHY: PyQt6 below 6.12 - 6.12 (October 2026) dropped the QtPdf module from the pip
+#      wheel, and the chat needs it to read PDF attachments (same pin as build-appimage.sh)
+PIP_PACKAGES=("PyQt6<6.12" "PyQt6-Qt6<6.12" requests)
 install_python_deps
 
 # WHAT: PDF attachments in the chat need the QtPdf module.
-# WHY:  the pip PyQt6 wheel already contains it, but Debian/Ubuntu ship it as a separate
+# WHY:  the pip PyQt6 wheel (below 6.12) already contains it, but Debian/Ubuntu ship it as a separate
 #       package - so when PyQt6 came from apt, offer it here. Optional: without it
 #       everything works except reading PDFs.
 python3 -c "import PyQt6.QtPdf" >/dev/null 2>&1 || {
