@@ -16,6 +16,9 @@ wszystko działa lokalnie, w Twoim LAN.
 > projekt dostaje już tylko poprawki błędów (patrz [Plan](#plan)). [Zgłoszenia błędów i
 > uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
+**Pierwszy raz? [Instrukcja](docs/PRZEWODNIK.md) pokazuje każdy ekran na zrzutach — co robi każda
+funkcja i jak ją włączyć** (także na [stronie projektu](https://cyryllo.github.io/LamaDeck/pl/guide/)).
+
 ![LamaDeck — panel główny](screenshots/lamadeck-dashboard_pl.png)
 
 ## Wymagania

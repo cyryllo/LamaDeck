@@ -36,7 +36,9 @@ a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset:
 a:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 img { max-width: 100%; height: auto; display: block; }
 code, pre { font-family: var(--font-mono); font-size: 0.9em; }
-code { background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; }
+code { background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; font-variant-ligatures: none; }
+/* WHY: code inside a block takes the block's background - otherwise every line got its own box */
+pre code { background: none; padding: 0; border-radius: 0; }
 
 h1, h2, h3 { line-height: 1.2; text-wrap: balance; margin: 0; }
 h2 { font-size: 1.75rem; font-weight: 700; }
@@ -110,3 +112,25 @@ pre .c { color: var(--muted); }
 
 footer { margin-top: 5rem; border-top: 1px solid var(--line); padding-block: 2rem; color: var(--muted); font-size: 0.9rem; }
 footer .wrap-wide { display: flex; gap: 1rem 2rem; flex-wrap: wrap; justify-content: space-between; }
+
+/* User guide (generated from docs/*.md by site/guide.py) - the same reading column as the home page */
+.guide { padding-block: 3rem 0; }
+.guide .wrap { display: block; }
+.guide h1 { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1.5rem; }
+.guide h2 { margin: 3rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.guide h3 { margin: 1.5rem 0 0.5rem; }
+.guide p, .guide li { color: var(--text); }
+.guide p { margin: 0 0 1rem; }
+.guide ul, .guide ol { margin: 0 0 1rem; padding-left: 1.3rem; display: grid; gap: 0.4rem; }
+.guide pre { margin: 0 0 1rem; }
+/* WHY: screenshots wider than the text column - in 46rem the app's text was too small to read */
+.guide .shot { margin: 0 0 1.5rem; width: min(100vw - 2rem, 64rem); position: relative; left: 50%; transform: translateX(-50%); }
+.guide .shot a { display: block; }
+.guide .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; color: var(--muted); }
+.guide .toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.guide .toc h2 { margin: 0 0 0.5rem; padding: 0; border: 0; font-size: 1rem; }
+.guide .toc ol { margin: 0; gap: 0.2rem; }
+.guide .table-wrap { overflow-x: auto; margin: 0 0 1rem; }
+.guide table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+.guide th, .guide td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.guide th { color: var(--muted); font-weight: 600; }

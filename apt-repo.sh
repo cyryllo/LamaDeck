@@ -150,6 +150,12 @@ _assemble_pages() {
     cp screenshots/*.png logo.png "$out/img/"
     cp fonts/Inter-Regular.ttf fonts/Inter-SemiBold.ttf fonts/Inter-Bold.ttf \
        fonts/JetBrainsMono-Regular.ttf fonts/*-LICENSE.txt "$out/fonts/"
+    # WHAT: the user guide - written once in docs/*.md, turned into site pages here
+    mkdir -p "$out/img/guide" "$out/guide" "$out/pl/guide"
+    cp -r docs/img/. "$out/img/guide/"
+    python3 site/guide.py docs/GUIDE.md "$out/guide/index.html" en "../img/guide/" "../"
+    python3 site/guide.py docs/PRZEWODNIK.md "$out/pl/guide/index.html" pl "../../img/guide/" "../../"
+    rm -f "$out/guide.py"   # WHY: the converter is part of site/, but not of the published page
     if [ -d "$REPO_DIR" ]; then
         mkdir -p "$out/apt"
         cp -r "$REPO_DIR"/. "$out/apt/"

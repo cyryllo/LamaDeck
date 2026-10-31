@@ -13,6 +13,9 @@ everything runs on your LAN.
 
 *(Polska wersja tego pliku: [README_PL.md](README_PL.md))*
 
+**New here? The [user guide](docs/GUIDE.md) shows every screen with screenshots — what each feature
+does and how to turn it on** (also on the [project page](https://cyryllo.github.io/LamaDeck/guide/)).
+
 > **Status: 1.0 — feature-complete.** Daily driver on my own setup. From here on the project
 > gets bug fixes only (see [Roadmap](#roadmap)). [Bug reports and feedback](../../issues) are
 > welcome. Project page: https://cyryllo.github.io/LamaDeck/
