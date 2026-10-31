@@ -34,7 +34,34 @@ wszystko działa lokalnie, w Twoim LAN.
 
 ## Instalacja i uruchomienie
 
-Najpierw sklonuj repozytorium i wejdź do jego katalogu — poniższe skrypty
+**Debian / Ubuntu: z repozytorium APT (zalecane)** — dodajesz je raz, potem LamaDeck
+aktualizuje się razem z resztą systemu:
+
+```
+sudo curl -fsSLo /usr/share/keyrings/lamadeck-archive-keyring.gpg \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck-archive-keyring.gpg
+sudo curl -fsSLo /etc/apt/sources.list.d/lamadeck.sources \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck.sources
+sudo apt update
+sudo apt install lamadeck
+```
+
+Działa też `.deb` ze [strony wydań](../../releases) (`sudo apt install ./lamadeck_*_all.deb`) —
+dodaje to samo repozytorium, więc aktualizacje przychodzą tą samą drogą.
+
+**Każda dystrybucja: AppImage** — jeden plik ze wszystkim w środku (Fedora, Arch, openSUSE,
+Ubuntu…). Pobierz `LamaDeck-<wersja>-x86_64.AppImage` ze [strony wydań](../../releases), potem:
+
+```
+chmod +x LamaDeck-*-x86_64.AppImage
+./LamaDeck-*-x86_64.AppImage
+```
+
+Przy pierwszym uruchomieniu proponuje dodanie do menu aplikacji (jest też przełącznik
+w Ustawieniach); wpis w menu i autostart same się poprawiają po przeniesieniu pliku. Wymaga
+glibc 2.34 lub nowszej (Ubuntu 22.04, Debian 12, Fedora 35 i nowsze).
+
+**Z kodu źródłowego** — najpierw sklonuj repozytorium i wejdź do jego katalogu — poniższe skrypty
 instalacyjne trzeba uruchamiać stamtąd (szukają `lamadeck.py` obok siebie):
 
 ```
@@ -52,17 +79,17 @@ Narzędzia). Wykrywa istniejącą instalację i proponuje aktualizację/reinstal
 
 Odinstalowanie: `./install.sh --uninstall` (komunikaty skryptu są po angielsku).
 
-**Jako pakiet `.deb` (Debian/Ubuntu)** — zależności z `apt`, łatwe odinstalowanie:
+**Samodzielne zbudowanie pakietów** — `.deb` (zależności z `apt`) albo AppImage:
 
 ```
-./build-deb.sh
-sudo apt install ./lamadeck_*_all.deb
+./build-deb.sh && sudo apt install ./lamadeck_*_all.deb
+./build-appimage.sh
 ```
 
 **Ręcznie, do dewelopowania** — bez kopiowania i wpisu w menu:
 
 ```
-pip install PyQt6 requests
+pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" requests
 python3 lamadeck.py
 ```
 
@@ -219,9 +246,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] Czat: **kopiowanie całej odpowiedzi** i **eksport** rozmowy do Markdown, do tego **zmiana
   nazwy** rozmów
 - [x] `install.sh`: ostrzeżenie, gdy program jest już zainstalowany z pakietu `.deb`
-- [ ] **Własne repozytorium APT** — dodajesz je raz, potem `sudo apt install lamadeck`,
+- [x] **Własne repozytorium APT** — dodajesz je raz, potem `sudo apt install lamadeck`,
   a aktualizacje przychodzą razem z systemem
-- [ ] **AppImage** — jeden plik działający na każdej dystrybucji (Fedora, Arch, openSUSE…)
+- [x] **AppImage** — jeden plik działający na każdej dystrybucji (Fedora, Arch, openSUSE…)
 - [x] Czat: **linki w pytaniu** — program sam pobiera stronę (lokalnie, bez konta) i dołącza
   jej tekst do pytania
 

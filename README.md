@@ -36,7 +36,36 @@ a built-in chat. No terminal, no Docker, no cloud — everything runs on your LA
 
 ## Installation and running
 
-First, clone the repository and enter its directory — the install scripts below
+**Debian / Ubuntu: from the APT repository (recommended)** — add it once, then LamaDeck updates
+together with the rest of the system:
+
+```
+sudo curl -fsSLo /usr/share/keyrings/lamadeck-archive-keyring.gpg \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck-archive-keyring.gpg
+sudo curl -fsSLo /etc/apt/sources.list.d/lamadeck.sources \
+  https://cyryllo.github.io/LamaDeck/apt/lamadeck.sources
+sudo apt update
+sudo apt install lamadeck
+```
+
+The `.deb` from the [releases page](../../releases) works too
+(`sudo apt install ./lamadeck_*_all.deb`) — it adds the same repository, so updates arrive the
+same way.
+
+**Any distribution: AppImage** — one file with everything inside (Fedora, Arch, openSUSE,
+Ubuntu…). Download `LamaDeck-<version>-x86_64.AppImage` from the [releases page](../../releases),
+then:
+
+```
+chmod +x LamaDeck-*-x86_64.AppImage
+./LamaDeck-*-x86_64.AppImage
+```
+
+On the first start it offers to add itself to the applications menu (also a switch in
+Settings); the menu entry and autostart follow the file if you move it. Needs glibc 2.34 or
+newer (Ubuntu 22.04, Debian 12, Fedora 35 and later).
+
+**From the source code** — clone the repository and enter its directory — the install scripts below
 expect to be run from there (they look for `lamadeck.py` next to themselves):
 
 ```
@@ -54,17 +83,17 @@ install and offers to update/reinstall accordingly:
 
 Uninstall with `./install.sh --uninstall`.
 
-**As a `.deb` package (Debian/Ubuntu)** — dependencies come from `apt`, easy to uninstall:
+**Build the packages yourself** — `.deb` (dependencies come from `apt`) or the AppImage:
 
 ```
-./build-deb.sh
-sudo apt install ./lamadeck_*_all.deb
+./build-deb.sh && sudo apt install ./lamadeck_*_all.deb
+./build-appimage.sh
 ```
 
 **Manually, for development** — no copying, no menu entry:
 
 ```
-pip install PyQt6 requests
+pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" requests
 python3 lamadeck.py
 ```
 
@@ -220,9 +249,9 @@ fonts are bundled, so it looks the same everywhere).
 - [x] Chat: **copy the whole answer** and **export** a conversation to Markdown, plus **renaming**
   conversations
 - [x] `install.sh`: warn when the app is already installed from the `.deb` package
-- [ ] **Own APT repository** — add it once, then `sudo apt install lamadeck` and updates
+- [x] **Own APT repository** — add it once, then `sudo apt install lamadeck` and updates
   come with the system
-- [ ] **AppImage** — one file that runs on any distribution (Fedora, Arch, openSUSE…)
+- [x] **AppImage** — one file that runs on any distribution (Fedora, Arch, openSUSE…)
 - [x] Chat: **links in a question** — the app fetches the page itself (locally, no account) and
   adds its text to the question
 

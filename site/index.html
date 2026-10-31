@@ -133,8 +133,9 @@
   <section id="install">
     <div class="wrap">
       <h2>Install</h2>
-      <p class="section-lead">For Debian 13, Ubuntu 24.04 and newer, on KDE Plasma (other desktops
-        work too). Ollama itself can be installed from inside the app.</p>
+      <p class="section-lead">Made for KDE Plasma (other desktops work too): a repository for
+        Debian and Ubuntu, an AppImage for every other distribution. Ollama itself can be
+        installed from inside the app.</p>
       <div class="steps">
         <div class="step recommended">
           <span class="tag">Recommended</span>
@@ -156,6 +157,15 @@ sudo apt install lamadeck</code></pre>
 <pre><code>sudo apt install ./lamadeck_*_all.deb</code></pre>
         </div>
         <div class="step">
+          <h3>Any distribution: AppImage</h3>
+          <p>One file with everything inside, for Fedora, Arch, openSUSE and others. Download
+            <code>LamaDeck-…-x86_64.AppImage</code> from the
+            <a href="https://github.com/cyryllo/LamaDeck/releases">releases page</a> and run it.
+            On the first start it offers to add itself to the applications menu.</p>
+<pre><code>chmod +x LamaDeck-*-x86_64.AppImage
+./LamaDeck-*-x86_64.AppImage</code></pre>
+        </div>
+        <div class="step">
           <h3>Without admin rights</h3>
           <p>Copies the app into your home folder and adds it to the menu. Run the same script
             again to update.</p>
@@ -164,8 +174,8 @@ cd LamaDeck
 ./install.sh</code></pre>
         </div>
       </div>
-      <p class="note">Coming in 0.9.x: an AppImage, one file for Fedora, Arch, openSUSE and other
-        distributions. LamaDeck was called "Ollama Manager" up to version 0.9; installing it
+      <p class="note">The AppImage needs glibc 2.34 or newer (Ubuntu 22.04, Debian 12, Fedora 35
+        and later). LamaDeck was called "Ollama Manager" up to version 0.9; installing it
         replaces the old package and keeps your settings and conversations.</p>
     </div>
   </section>
@@ -179,8 +189,8 @@ cd LamaDeck
           <ul>
             <li><span class="done">Done:</span> saved conversations, context usage, thinking
               on/off, regenerate and edit, Markdown export, links in a question</li>
-            <li><span class="done">Done:</span> own APT repository</li>
-            <li>AppImage for other distributions</li>
+            <li><span class="done">Done:</span> own APT repository and an AppImage for other
+              distributions</li>
           </ul>
         </div>
         <div class="milestone">
