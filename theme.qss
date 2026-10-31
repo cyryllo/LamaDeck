@@ -316,6 +316,9 @@ QCheckBox::indicator:checked { background: #3daee9; border-color: #3daee9; }
 QCheckBox::indicator:disabled { border-color: #353b43; background: #202429; }
 QCheckBox::indicator:checked:disabled { background: #2f4a5c; border-color: #2f4a5c; }
 QCheckBox:disabled { color: #6b737d; }
+/* Modele - filtry wyszukiwarki (MoE, społeczność): dwa jedno nad drugim, mniejsze niż reszta wiersza */
+QCheckBox#searchFilter { font-size: 7pt; spacing: 6px; }
+QCheckBox#searchFilter::indicator { width: 10px; height: 10px; border-radius: 3px; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
 QMenu { background: #262a30; border: 1px solid #353b43; }
 QMenu::item:selected { background: #1d3a4f; }

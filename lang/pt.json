@@ -109,7 +109,6 @@
   "Szukaj": "Procurar",
   "Źródło: Hugging Face (huggingface.co/{repo})": "Origem: Hugging Face (huggingface.co/{repo})",
   "Autor/wydawca kwantyzacji: {uzytkownik}": "Autor/editor da quantização: {uzytkownik}",
-  "Źródło: ollama.com/library/{model}": "Origem: ollama.com/library/{model}",
   "Rodzina modelu: {rodzina}": "Família do modelo: {rodzina}",
   "Parametry: {parametry}": "Parâmetros: {parametry}",
   "Kwantyzacja: {kwantyzacja}": "Quantização: {kwantyzacja}",
@@ -652,5 +651,10 @@
   "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
   "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
   "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama: processos {a:.1f} GB + ficheiros de modelos {p:.1f} GB",
-  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB de RAM normal usada pela placa gráfica (GTT) - vai para lá a parte do modelo que não cabe na VRAM reservada. Contada para toda a placa, por isso inclui também alguma memória do ambiente de trabalho."
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB de RAM normal usada pela placa gráfica (GTT) - vai para lá a parte do modelo que não cabe na VRAM reservada. Contada para toda a placa, por isso inclui também alguma memória do ambiente de trabalho.",
+  "Modele społeczności": "Modelos da comunidade",
+  "Pokazuj też modele, które na ollama.com wrzucili inni autorzy (adres ollama.com/autor/model), a nie tylko oficjalną bibliotekę Ollamy.\nTakich modeli Ollama nie sprawdza - bywają to kopie, eksperymenty albo wersje dostrojone do jednego języka.": "Mostrar também modelos que outros autores publicaram em ollama.com (endereço ollama.com/autor/modelo), não só a biblioteca oficial da Ollama.\nA Ollama não verifica estes modelos - podem ser cópias, experiências ou versões ajustadas a uma só língua.",
+  "(ukryte modele społeczności: {n})": "(modelos da comunidade ocultos: {n})",
+  "Ollama (społeczność)": "Ollama (comunidade)",
+  "Źródło: ollama.com/{sciezka}": "Fonte: ollama.com/{sciezka}"
 }

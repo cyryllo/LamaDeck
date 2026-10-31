@@ -1825,7 +1825,9 @@ def _zbuduj_tooltip_modelu(m):
             linie.append(_("Autor/wydawca kwantyzacji: {uzytkownik}").format(uzytkownik=uzytkownik))
     else:
         rodzina_z_nazwy = nazwa.split(":", 1)[0]
-        linie.append(_("Źródło: ollama.com/library/{model}").format(model=rodzina_z_nazwy))
+        # WHY: model społeczności ("autor/model") nie leży w /library/
+        sciezka = rodzina_z_nazwy if "/" in rodzina_z_nazwy else f"library/{rodzina_z_nazwy}"
+        linie.append(_("Źródło: ollama.com/{sciezka}").format(sciezka=sciezka))
 
     rodzina = m.get("family")
     if rodzina:
@@ -2024,9 +2026,12 @@ def ollama_wyszukaj_modele(zapytanie):
     #      wyniku od innych linków na stronie). Liczbę pobrań bierzemy najpierw
     #      z atrybutu title="22,347,504 downloads" (dokładna liczba), a gdy go
     #      nie ma - ze starego formatu "...&nbsp;Pulls".
+    # WHY: także modele społeczności (/<autor>/<model>, np. jobautomation/OpenEuroLLM-Polish -
+    #      zgłoszenie użytkownika: wcześniej parser brał tylko /library/ i ich nie widział).
+    #      Inne linki dwuczłonowe na stronie odpadają, bo nie mają w środku <h2>.
     r = requests.get("https://ollama.com/search", params={"q": zapytanie}, timeout=10)
     r.raise_for_status()
-    czesci = re.split(r'<a href="/library/([^"/:?#]+)"[^>]*>', r.text)
+    czesci = re.split(r'<a href="/(library/[^"/:?#]+|[^"/:?#]+/[^"/:?#]+)"[^>]*>', r.text)
     wyniki = []
     for i in range(1, len(czesci), 2):
         blok = czesci[i + 1].split("</a>", 1)[0]
@@ -2049,7 +2054,7 @@ def ollama_wyszukaj_modele(zapytanie):
             pobrania = stary.group(1) if stary else ""
         wyniki.append({
             "zrodlo": "ollama",
-            "id": czesci[i],
+            "id": czesci[i].removeprefix("library/"),
             "opis": html.unescape(re.sub(r"<[^>]+>|\s+", " ", opis.group(1))).strip() if opis else "",
             "mozliwosci": re.findall(r'bg-indigo-50[^>]*>\s*([^<]+?)\s*<', blok),
             "rozmiary": rozmiary,
@@ -2061,6 +2066,11 @@ def ollama_wyszukaj_modele(zapytanie):
     if not wyniki and "<h2" in r.text and 'href="/library/' in r.text and ">cloud<" not in r.text.replace(" ", ""):
         raise ValueError(_("Nie udało się odczytać wyników z ollama.com - strona mogła zmienić wygląd."))
     return wyniki
+
+
+def _model_spolecznosci(wynik):
+    # WHAT: wynik wyszukiwania z ollama.com spoza oficjalnej biblioteki ("autor/model").
+    return wynik.get("zrodlo") == "ollama" and "/" in wynik.get("id", "")
 
 
 def ollama_warianty_modelu(model):
@@ -2075,12 +2085,14 @@ def ollama_warianty_modelu(model):
     #       uruchomią) i tagi "cloud"/bez rozmiaru (liczone na serwerach Ollamy,
     #       nie do pobrania lokalnie).
     # UWAGA: ta sama kruchość co ollama_wyszukaj_modele - odczyt HTML, nie API.
-    r = requests.get(f"https://ollama.com/library/{model}/tags", timeout=10)
+    # WHY: model społeczności ("autor/model") ma stronę pod ollama.com/<autor>/<model>
+    sciezka = model if "/" in model else f"library/{model}"
+    r = requests.get(f"https://ollama.com/{sciezka}/tags", timeout=10)
     if r.status_code == 404:
         raise ValueError(_("Nie znaleziono takiego modelu w bibliotece Ollamy."))
     r.raise_for_status()
     wiersze = re.findall(
-        r'<a href="/library/' + re.escape(model) + r':([^"]+)" class="md:hidden[^"]*">(.*?)</a>',
+        r'<a href="/' + re.escape(sciezka) + r':([^"]+)" class="md:hidden[^"]*">(.*?)</a>',
         r.text, re.S,
     )
     warianty = []
@@ -5851,6 +5863,7 @@ class MainWindow(QMainWindow):
         self.hosty_online_modeli = []
         self._filtr_modeli = "all"
         self._tylko_moe = False         # WHY: pole "Tylko modele MoE" w wyszukiwarce; przeżywa przebudowę UI
+        self._spolecznosc = False       # WHY: pole "Modele społeczności" - domyślnie tylko oficjalna biblioteka
         self._wyniki_szukania = []      # WHY: pełne wyniki - pole MoE filtruje je bez ponownego szukania
         self._pobieranie = None         # WHY: jedno pobieranie naraz - {"worker", "model", "host", ...}
         self._warianty_dla = None       # WHY: (źródło, id) modelu, którego warianty CHCEMY pokazać
@@ -7633,13 +7646,30 @@ class MainWindow(QMainWindow):
         kol.addWidget(self.combo_host_pobierz)
         wiersz.addLayout(kol)
         self.chk_moe = QCheckBox(_("Tylko modele MoE"))
+        self.chk_moe.setObjectName("searchFilter")
         self.chk_moe.setChecked(self._tylko_moe)
         self.chk_moe.setToolTip(_(
             "MoE (mixture of experts) to modele, które przy każdym zapytaniu liczą tylko część "
             "parametrów - działają szybciej na APU i komputerach bez mocnej karty graficznej.\n"
             "Rozpoznawane po opisie, nazwie i tagach - część modeli MoE może zostać pominięta."))
         self.chk_moe.toggled.connect(self._przelacz_moe)
-        wiersz.addWidget(self.chk_moe, alignment=Qt.AlignmentFlag.AlignBottom)
+        # WHAT: pola wyboru jedno nad drugim - wiersz z polem nazwy i listą hostów zostaje szeroki
+        filtry = QVBoxLayout()
+        filtry.setSpacing(4)
+        filtry.addWidget(self.chk_moe)
+        # WHAT: modele autorów spoza oficjalnej biblioteki Ollamy (ollama.com/<autor>/<model>).
+        # WHY:  prośba użytkownika - jak pole MoE; domyślnie wyłączone, bo to modele wrzucane
+        #       przez kogokolwiek, bez przeglądu przez Ollamę (często kopie i eksperymenty)
+        self.chk_spolecznosc = QCheckBox(_("Modele społeczności"))
+        self.chk_spolecznosc.setObjectName("searchFilter")
+        self.chk_spolecznosc.setChecked(self._spolecznosc)
+        self.chk_spolecznosc.setToolTip(_(
+            "Pokazuj też modele, które na ollama.com wrzucili inni autorzy (adres ollama.com/autor/model), "
+            "a nie tylko oficjalną bibliotekę Ollamy.\nTakich modeli Ollama nie sprawdza - bywają to kopie, "
+            "eksperymenty albo wersje dostrojone do jednego języka."))
+        self.chk_spolecznosc.toggled.connect(self._przelacz_spolecznosc)
+        filtry.addWidget(self.chk_spolecznosc)
+        wiersz.addLayout(filtry)
         self.btn_szukaj_model = self._przycisk(_("Szukaj"), "szukaj", slot=self.szukaj_modeli)
         wiersz.addWidget(self.btn_szukaj_model, alignment=Qt.AlignmentFlag.AlignBottom)
         self.btn_pull = self._przycisk(_("Pobierz"), "pobierz", "primary", self.pobierz_model)
@@ -7904,12 +7934,25 @@ class MainWindow(QMainWindow):
         if "/" in zapytanie:
             # WHY: tag obcinamy dopiero z GOTOWEGO repo - obcięcie po ":" z całego
             #      tekstu zostawiało z "https://..." samo "https".
+            pusty = {"opis": "", "mozliwosci": [], "rozmiary": [], "pobrania": ""}
+            link_ollamy = re.match(r"^(https?://)?(www\.)?ollama\.com/(library/)?([^/\s]+(/[^/\s:]+)?)", zapytanie)
+            if link_ollamy and not link_ollamy.group(4).startswith("search"):
+                # WHAT: link do ollama.com (biblioteka albo model społeczności) - od razu jego warianty
+                model_id = link_ollamy.group(4).split(":", 1)[0].removesuffix("/tags")
+                self._wypelnij_wyniki([dict(pusty, zrodlo="ollama", id=model_id)])
+                self.lbl_status_szukania.setText("")
+                self.tabela_wynikow.selectRow(0)
+                return
             repo = _hf_repo_z_linku(re.sub(r"^hf\.co/", "", zapytanie))
             if repo:
                 repo = repo.split(":", 1)[0]
-                self._wypelnij_wyniki([{
-                    "zrodlo": "hf", "id": repo, "opis": "", "mozliwosci": [], "rozmiary": [], "pobrania": "",
-                }])
+                wyniki = [dict(pusty, zrodlo="hf", id=repo)]
+                # WHY: samo "autor/model" (bez hf.co/ i bez linku do HF) może być też modelem
+                #      społeczności Ollamy (np. jobautomation/OpenEuroLLM-Polish) - pokazujemy
+                #      obie możliwości, warianty powiedzą, która istnieje
+                if not re.match(r"^(hf\.co/|(https?://)?(www\.)?huggingface\.co/)", zapytanie, re.IGNORECASE):
+                    wyniki.insert(0, dict(pusty, zrodlo="ollama", id=repo))
+                self._wypelnij_wyniki(wyniki)
                 self.lbl_status_szukania.setText("")
                 self.tabela_wynikow.selectRow(0)
                 return
@@ -7929,14 +7972,25 @@ class MainWindow(QMainWindow):
 
     def _pokaz_wyniki_szukania(self):
         # WHAT: wyniki ostatniego szukania - wszystkie albo tylko MoE (pole wyboru).
-        widoczne = [w for w in self._wyniki_szukania if not self._tylko_moe or jest_moe(w)]
+        spolecznosc = [w for w in self._wyniki_szukania if _model_spolecznosci(w)]
+        wyniki = self._wyniki_szukania if self._spolecznosc else [w for w in self._wyniki_szukania
+                                                                   if not _model_spolecznosci(w)]
+        widoczne = [w for w in wyniki if not self._tylko_moe or jest_moe(w)]
         self._wypelnij_wyniki(widoczne)
         if self._tylko_moe:
-            linie = [_("Znalezione modele: {n} (MoE: {m})").format(n=len(self._wyniki_szukania), m=len(widoczne))]
+            linie = [_("Znalezione modele: {n} (MoE: {m})").format(n=len(wyniki), m=len(widoczne))]
         else:
             linie = [_("Znalezione modele: {n}").format(n=len(widoczne))]
+        if spolecznosc and not self._spolecznosc:
+            # WHY: żeby nie wyglądało, że modelu nie ma - jest, tylko ukryty
+            linie[0] += " " + _("(ukryte modele społeczności: {n})").format(n=len(spolecznosc))
         linie += [_("Błąd wyszukiwania - {blad}").format(blad=b) for b in getattr(self, "_bledy_szukania", [])]
         self.lbl_status_szukania.setText("\n".join(linie))
+
+    def _przelacz_spolecznosc(self, wlacz):
+        self._spolecznosc = wlacz
+        if self._wyniki_szukania:
+            self._pokaz_wyniki_szukania()
 
     def _przelacz_moe(self, wlacz):
         self._tylko_moe = wlacz
@@ -7958,6 +8012,8 @@ class MainWindow(QMainWindow):
         self.tabela_wynikow.setRowCount(0)
         for wynik in wyniki:
             zrodlo = "Hugging Face" if wynik["zrodlo"] == "hf" else "Ollama"
+            if _model_spolecznosci(wynik):
+                zrodlo = _("Ollama (społeczność)")
             # WHY: dymek to HTML - tekst ze strony trzeba zabezpieczyć, bo opis
             #      typu "<4GB VRAM" rozbiłby formatowanie.
             linie = [f"<b>{html.escape(wynik['id'])}</b>", _("Źródło: {zrodlo}").format(zrodlo=zrodlo)]

@@ -109,7 +109,6 @@
   "Szukaj": "Rechercher",
   "Źródło: Hugging Face (huggingface.co/{repo})": "Source : Hugging Face (huggingface.co/{repo})",
   "Autor/wydawca kwantyzacji: {uzytkownik}": "Auteur/éditeur de la quantification : {uzytkownik}",
-  "Źródło: ollama.com/library/{model}": "Source : ollama.com/library/{model}",
   "Rodzina modelu: {rodzina}": "Famille du modèle : {rodzina}",
   "Parametry: {parametry}": "Paramètres : {parametry}",
   "Kwantyzacja: {kwantyzacja}": "Quantification : {kwantyzacja}",
@@ -652,5 +651,10 @@
   "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
   "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
   "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama : processus {a:.1f} Go + fichiers de modèles {p:.1f} Go",
-  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU : {g:.1f} Go de RAM ordinaire utilisée par la carte graphique (GTT) - la partie d'un modèle qui ne tient pas dans la VRAM réservée s'y trouve. Comptée pour toute la carte, elle inclut donc aussi un peu de mémoire du bureau."
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU : {g:.1f} Go de RAM ordinaire utilisée par la carte graphique (GTT) - la partie d'un modèle qui ne tient pas dans la VRAM réservée s'y trouve. Comptée pour toute la carte, elle inclut donc aussi un peu de mémoire du bureau.",
+  "Modele społeczności": "Modèles de la communauté",
+  "Pokazuj też modele, które na ollama.com wrzucili inni autorzy (adres ollama.com/autor/model), a nie tylko oficjalną bibliotekę Ollamy.\nTakich modeli Ollama nie sprawdza - bywają to kopie, eksperymenty albo wersje dostrojone do jednego języka.": "Afficher aussi les modèles publiés sur ollama.com par d'autres auteurs (adresse ollama.com/auteur/modèle), pas seulement la bibliothèque officielle d'Ollama.\nOllama ne vérifie pas ces modèles - ce peuvent être des copies, des expériences ou des versions adaptées à une seule langue.",
+  "(ukryte modele społeczności: {n})": "(modèles de la communauté masqués : {n})",
+  "Ollama (społeczność)": "Ollama (communauté)",
+  "Źródło: ollama.com/{sciezka}": "Source : ollama.com/{sciezka}"
 }

@@ -109,7 +109,6 @@
   "Szukaj": "Search",
   "Źródło: Hugging Face (huggingface.co/{repo})": "Source: Hugging Face (huggingface.co/{repo})",
   "Autor/wydawca kwantyzacji: {uzytkownik}": "Quantization author/publisher: {uzytkownik}",
-  "Źródło: ollama.com/library/{model}": "Source: ollama.com/library/{model}",
   "Rodzina modelu: {rodzina}": "Model family: {rodzina}",
   "Parametry: {parametry}": "Parameters: {parametry}",
   "Kwantyzacja: {kwantyzacja}": "Quantization: {kwantyzacja}",
@@ -652,5 +651,10 @@
   "Ollama {o:.1f} GB + APU {g:.1f} GB": "Ollama {o:.1f} GB + APU {g:.1f} GB",
   "Ollama {o:.1f} GB": "Ollama {o:.1f} GB",
   "Ollama: procesy {a:.1f} GB + pliki modeli {p:.1f} GB": "Ollama: processes {a:.1f} GB + model files {p:.1f} GB",
-  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB of ordinary RAM used by the graphics card (GTT) - the part of a model that doesn't fit into the dedicated VRAM goes there. Counted for the whole card, so it also includes a little desktop memory."
+  "APU: {g:.1f} GB zwykłej pamięci RAM używanej przez kartę graficzną (GTT) - tam trafia część modelu, która nie mieści się w wydzielonym VRAM. Liczona dla całej karty, więc obejmuje też trochę pamięci pulpitu.": "APU: {g:.1f} GB of ordinary RAM used by the graphics card (GTT) - the part of a model that doesn't fit into the dedicated VRAM goes there. Counted for the whole card, so it also includes a little desktop memory.",
+  "Modele społeczności": "Community models",
+  "Pokazuj też modele, które na ollama.com wrzucili inni autorzy (adres ollama.com/autor/model), a nie tylko oficjalną bibliotekę Ollamy.\nTakich modeli Ollama nie sprawdza - bywają to kopie, eksperymenty albo wersje dostrojone do jednego języka.": "Also show models that other authors uploaded to ollama.com (address ollama.com/author/model), not only Ollama's official library.\nOllama doesn't review such models - they may be copies, experiments or versions tuned for a single language.",
+  "(ukryte modele społeczności: {n})": "(hidden community models: {n})",
+  "Ollama (społeczność)": "Ollama (community)",
+  "Źródło: ollama.com/{sciezka}": "Source: ollama.com/{sciezka}"
 }
