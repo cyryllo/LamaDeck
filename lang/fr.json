@@ -641,5 +641,13 @@
   "SearXNG pod adresem {adres} nie odpowiada.": "SearXNG à l'adresse {adres} ne répond pas.",
   "działa - {adres}": "en marche - {adres}",
   "Błąd: {blad}": "Erreur : {blad}",
-  "Działa - wyniki: {n}, pierwszy: {tytul}": "Fonctionne - résultats : {n}, premier : {tytul}"
+  "Działa - wyniki: {n}, pierwszy: {tytul}": "Fonctionne - résultats : {n}, premier : {tytul}",
+  "Układam zapytania do wyszukiwarki...": "Rédaction des requêtes de recherche...",
+  "Szukam w internecie: {zapytania}": "Recherche sur le web : {zapytania}",
+  "Czytam strony ({n})...": "Lecture des pages ({n})...",
+  "Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli wyniki nie wystarczają, powiedz to wprost.": "Résultats de la recherche web (nous sommes le {data}). Réponds en t'appuyant dessus. Pour les informations tirées des résultats, indique le numéro de la source entre crochets, p. ex. [1]. Si les résultats ne suffisent pas, dis-le clairement.",
+  "Wybieram z nich pasujące fragmenty...": "Sélection des passages pertinents...",
+  "Źródła:": "Sources :",
+  "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Rechercher sur le web : {stan}\nLe modèle rédige les requêtes, le programme lit les pages trouvées et la réponse cite ses sources. Source des résultats : {zrodlo} (modifiable dans les Paramètres).",
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "La recherche web n'a donné aucun résultat. {blad}"
 }

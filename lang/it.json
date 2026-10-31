@@ -641,5 +641,13 @@
   "SearXNG pod adresem {adres} nie odpowiada.": "SearXNG all'indirizzo {adres} non risponde.",
   "działa - {adres}": "attivo: {adres}",
   "Błąd: {blad}": "Errore: {blad}",
-  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funziona: risultati: {n}, primo: {tytul}"
+  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funziona: risultati: {n}, primo: {tytul}",
+  "Układam zapytania do wyszukiwarki...": "Scrivo le query di ricerca...",
+  "Szukam w internecie: {zapytania}": "Cerco sul web: {zapytania}",
+  "Czytam strony ({n})...": "Leggo le pagine ({n})...",
+  "Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli wyniki nie wystarczają, powiedz to wprost.": "Risultati della ricerca web (oggi è {data}). Rispondi basandoti su di essi. Per le informazioni prese dai risultati indica il numero della fonte tra parentesi quadre, es. [1]. Se i risultati non bastano, dillo chiaramente.",
+  "Wybieram z nich pasujące fragmenty...": "Scelgo i passaggi pertinenti...",
+  "Źródła:": "Fonti:",
+  "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Cerca sul web: {stan}\nIl modello scrive le query, il programma legge le pagine trovate e la risposta indica le fonti. Fonte dei risultati: {zrodlo} (si cambia nelle Impostazioni).",
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "La ricerca web non ha dato risultati. {blad}"
 }

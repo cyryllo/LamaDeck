@@ -594,6 +594,8 @@ QPushButton#attachButton {
     background: #15181b; border: 1px solid #353b43;
 }
 QPushButton#attachButton:hover { border-color: #3daee9; }
+/* "Szukaj w internecie" włączone - ten sam przycisk co spinacz, z tłem akcentu */
+QPushButton#attachButton:checked { background: #1d3a4f; border-color: #3daee9; }
 QFrame#card QFrame#chatChip { background: #2c3138; border: 1px solid #3a4048; border-radius: 8px; }
 QFrame#card QFrame#chatChip QPushButton#iconButton { min-height: 0; min-width: 0; }
 QFrame#card QLabel#chatNotice[state="warn"] { color: #f0b453; }

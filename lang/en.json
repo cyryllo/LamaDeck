@@ -641,5 +641,13 @@
   "SearXNG pod adresem {adres} nie odpowiada.": "SearXNG at {adres} doesn't respond.",
   "działa - {adres}": "running - {adres}",
   "Błąd: {blad}": "Error: {blad}",
-  "Działa - wyniki: {n}, pierwszy: {tytul}": "Works - results: {n}, first: {tytul}"
+  "Działa - wyniki: {n}, pierwszy: {tytul}": "Works - results: {n}, first: {tytul}",
+  "Układam zapytania do wyszukiwarki...": "Writing search queries...",
+  "Szukam w internecie: {zapytania}": "Searching the web: {zapytania}",
+  "Czytam strony ({n})...": "Reading pages ({n})...",
+  "Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli wyniki nie wystarczają, powiedz to wprost.": "Web search results (today is {data}). Answer based on them. For information taken from the results, give the source number in square brackets, e.g. [1]. If the results are not enough, say so plainly.",
+  "Wybieram z nich pasujące fragmenty...": "Picking the matching passages...",
+  "Źródła:": "Sources:",
+  "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Search the web: {stan}\nThe model writes the queries, the app reads the pages it finds, and the answer lists its sources. Results source: {zrodlo} (change it in Settings).",
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "The web search returned no results. {blad}"
 }

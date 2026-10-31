@@ -641,5 +641,13 @@
   "SearXNG pod adresem {adres} nie odpowiada.": "O SearXNG em {adres} não responde.",
   "działa - {adres}": "em execução - {adres}",
   "Błąd: {blad}": "Erro: {blad}",
-  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funciona - resultados: {n}, primeiro: {tytul}"
+  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funciona - resultados: {n}, primeiro: {tytul}",
+  "Układam zapytania do wyszukiwarki...": "A escrever as pesquisas...",
+  "Szukam w internecie: {zapytania}": "A pesquisar na web: {zapytania}",
+  "Czytam strony ({n})...": "A ler páginas ({n})...",
+  "Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli wyniki nie wystarczają, powiedz to wprost.": "Resultados da pesquisa na web (hoje é {data}). Responde com base neles. Para informações tiradas dos resultados, indica o número da fonte entre parênteses retos, ex. [1]. Se os resultados não chegarem, di-o claramente.",
+  "Wybieram z nich pasujące fragmenty...": "A escolher os excertos relevantes...",
+  "Źródła:": "Fontes:",
+  "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Pesquisar na web: {stan}\nO modelo escreve as pesquisas, o programa lê as páginas encontradas e a resposta indica as fontes. Fonte dos resultados: {zrodlo} (muda-se nas Definições).",
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "A pesquisa na web não deu resultados. {blad}"
 }

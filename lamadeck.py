@@ -2787,15 +2787,19 @@ class CzatWorker(WatekTla):
     fragment = pyqtSignal(str, str)        # (kawałek odpowiedzi, kawałek rozumowania)
     ladowanie = pyqtSignal()               # model nie jest w pamięci - pierwsze słowo chwilę potrwa
     zrodla = pyqtSignal(object)            # [(plik, [(linia_od, linia_do), ...])] - fragmenty z dużych plików
+    etap = pyqtSignal(str)                 # co się dzieje przed odpowiedzią (wyszukiwanie w internecie)
+    zrodla_www = pyqtSignal(object)        # [{"tytul", "url"}] - strony z wyszukiwania, w kolejności numerów
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
-    def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None):
+    def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None, wyszukiwanie=None):
         super().__init__()
         self.adres = adres
         self.model = model
         self.wiadomosci = wiadomosci
         self.dokumenty = dokumenty or []
         self.myslenie = myslenie  # WHY: "think" do /api/chat; None = nie wysyłać (model nie myśli)
+        # WHY: {"zrodlo", "pytanie", "emb": (model, adres) albo None} - None = bez wyszukiwania
+        self.wyszukiwanie = wyszukiwanie
         self._anuluj = False
         self._odpowiedz = None
 
@@ -2841,6 +2845,128 @@ class CzatWorker(WatekTla):
         except (requests.RequestException, ValueError):
             return None
 
+    def _parametr_myslenia_pomocniczy(self):
+        # WHY: zapytania do wyszukiwarki to krótka praca pomocnicza - bez myślenia (sekundy
+        #      zamiast kilkunastu); gpt-oss nie umie wyłączyć myślenia, zna tylko poziomy
+        if self.myslenie is None:
+            return None
+        return "low" if isinstance(self.myslenie, str) else False
+
+    def _zapytania_wyszukiwania(self, pytanie):
+        # WHAT: 1-3 zapytania do wyszukiwarki ułożone przez model czatu z pytania i rozmowy.
+        # WHY:  jak w Open WebUI (DEFAULT_QUERY_GENERATION_PROMPT_TEMPLATE): pytanie w rozmowie
+        #       bywa niepełne ("a ile kosztuje?") - model zna kontekst i pisze pełne zapytania.
+        #       Wymuszony JSON ("format" ze schematem, Ollama 0.5+) działa z każdym modelem,
+        #       bez wywoływania narzędzi. Przy jakimkolwiek kłopocie - samo pytanie.
+        historia = [m for m in self.wiadomosci[:-1] if m.get("content")][-4:]
+        rozmowa = "\n".join(f"{m['role']}: {m['content'][:600]}" for m in historia) or "-"
+        polecenie = (
+            "### Task\n"
+            "Write web search queries that will find up-to-date information to answer the user's "
+            f"latest question. Today's date: {time.strftime('%Y-%m-%d')}.\n"
+            "### Guidelines\n"
+            "- Return 1 to 3 short, specific queries (keywords, names, versions, dates).\n"
+            "- Write them in the language of the question; add one English query when English "
+            "sources are likely better.\n"
+            "- Use the conversation to complete a question that refers to earlier messages.\n"
+            "- Respond only with JSON: {\"queries\": [\"...\"]}\n"
+            f"### Conversation\n{rozmowa}\n"
+            f"### Latest question\n{pytanie[:2000]}")
+        dane = {"model": self.model, "stream": False, "messages": [{"role": "user", "content": polecenie}],
+                "format": {"type": "object", "properties": {"queries": {"type": "array", "items": {"type": "string"}}},
+                           "required": ["queries"]},
+                "options": {"temperature": 0}}
+        mysl = self._parametr_myslenia_pomocniczy()
+        if mysl is not None:
+            dane["think"] = mysl
+        try:
+            odp = requests.post(f"{self.adres}/api/chat", json=dane, timeout=(10, 600))
+            odp.raise_for_status()
+            zapytania = json.loads(odp.json()["message"]["content"]).get("queries", [])
+            zapytania = [str(z).strip() for z in zapytania if str(z).strip()][:_MAKS_ZAPYTAN_WWW]
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
+            zapytania = []
+        return zapytania or [pytanie.strip()[:200]]
+
+    def _szukaj_w_internecie(self):
+        # WHAT: zapytania -> wyszukiwarka -> strony -> pasujące fragmenty; całość doklejona
+        #       do OSTATNIEGO pytania (jak fragmenty dużych plików), źródła sygnałem.
+        w = self.wyszukiwanie
+        pytanie = w["pytanie"] or " "
+        self.etap.emit(_("Układam zapytania do wyszukiwarki..."))
+        zapytania = self._zapytania_wyszukiwania(pytanie)
+        if self._anuluj:
+            return
+        self.etap.emit(_("Szukam w internecie: {zapytania}").format(zapytania=" · ".join(zapytania)))
+        listy, bledy = [], []
+        for zapytanie in zapytania:
+            try:
+                listy.append(wyszukaj_w_internecie(zapytanie, 5, w["zrodlo"]))
+            except Exception as e:
+                bledy.append(str(e))
+        if not any(listy):
+            raise RuntimeError(_("Wyszukiwanie w internecie nie dało wyników. {blad}").format(
+                blad=bledy[0] if bledy else ""))
+        # WHY: na zmianę z każdego zapytania (pierwszy z 1., pierwszy z 2., ...) - różne
+        #      strony zamiast pięciu wyników jednego zapytania; bez powtórzeń adresów
+        wyniki, adresy = [], set()
+        for poziom in range(max(len(l) for l in listy)):
+            for lista in listy:
+                if poziom < len(lista) and lista[poziom]["url"] not in adresy and len(wyniki) < _MAKS_STRON_WWW:
+                    adresy.add(lista[poziom]["url"])
+                    wyniki.append(dict(lista[poziom]))
+        if self._anuluj:
+            return
+        self.etap.emit(_("Czytam strony ({n})...").format(n=len(wyniki)))
+
+        def _tekst_strony(wynik):
+            try:
+                return pobierz_strone(wynik["url"])["tekst"][:_ZNAKOW_ZE_STRONY]
+            except Exception:
+                return ""  # WHY: strona niedostępna albo w JavaScripcie - zostaje opis z wyszukiwarki
+
+        with ThreadPoolExecutor(max_workers=len(wyniki)) as pula:
+            teksty = list(pula.map(_tekst_strony, wyniki))
+        if self._anuluj:
+            return
+        tresci = self._wybierz_z_stron(pytanie, wyniki, teksty)
+        czesci = [_("Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy "
+                    "informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli "
+                    "wyniki nie wystarczają, powiedz to wprost.").format(data=time.strftime("%Y-%m-%d"))]
+        for nr, (wynik, tresc) in enumerate(zip(wyniki, tresci), 1):
+            czesci.append(f"[{nr}] {wynik['tytul']}\n{wynik['url']}\n```\n{tresc}\n```")
+        self.wiadomosci[-1] = dict(self.wiadomosci[-1], content="\n\n".join(czesci + [self.wiadomosci[-1]["content"]]))
+        self.zrodla_www.emit([{"tytul": wynik["tytul"] or _nazwa_strony(wynik["url"]), "url": wynik["url"]}
+                              for wynik in wyniki])
+
+    def _wybierz_z_stron(self, pytanie, wyniki, teksty):
+        # WHAT: tekst dla modelu z każdej strony: najlepiej pasujące fragmenty (model
+        #       embeddingów), a bez niego - początek strony; bez strony - opis z wyszukiwarki.
+        # WHY:  całe strony zapchałyby okno kontekstu (menu, komentarze, stopki), a pytanie
+        #       dotyczy zwykle kilku akapitów.
+        emb = self.wyszukiwanie.get("emb")
+        if emb and any(teksty):
+            try:
+                self.etap.emit(_("Wybieram z nich pasujące fragmenty..."))
+                fragmenty = [(i, f[0]) for i, t in enumerate(teksty) if t for f in _podziel_na_fragmenty(t)]
+                model, adres = emb
+                wektory = []
+                for i in range(0, len(fragmenty), 32):
+                    if self._anuluj:
+                        return [w["tresc"] for w in wyniki]
+                    wektory += ollama_embeddingi(adres, model, [f[1] for f in fragmenty[i:i + 32]])
+                wektor = ollama_embeddingi(adres, model, [pytanie], pytanie=True)[0]
+                najlepsze = heapq.nlargest(_FRAGMENTOW_WWW, range(len(wektory)),
+                                           key=lambda k: sum(map(operator.mul, wektory[k], wektor)))
+                wybrane = {}
+                for k in sorted(najlepsze):  # WHY: w kolejności ze strony - czyta się jak tekst
+                    wybrane.setdefault(fragmenty[k][0], []).append(fragmenty[k][1])
+                return ["\n[...]\n".join(wybrane[i]) if i in wybrane else wynik["tresc"]
+                        for i, wynik in enumerate(wyniki)]
+            except Exception:
+                pass  # WHY: model embeddingów niedostępny - jak bez niego
+        return [t[:_ZNAKOW_BEZ_EMBEDDINGOW] if t else wynik["tresc"] for wynik, t in zip(wyniki, teksty)]
+
     def _dolacz_fragmenty(self):
         # WHAT: do OSTATNIEGO pytania dokleja fragmenty dużych plików pasujące do niego.
         # WHY:  tylko do bieżącego pytania - starsze pytania zostają bez fragmentów,
@@ -2865,6 +2991,11 @@ class CzatWorker(WatekTla):
     def run(self):
         statystyki = {}
         try:
+            if self.wyszukiwanie:
+                self._szukaj_w_internecie()
+                if self._anuluj:
+                    self.zakonczono.emit(True, {"anulowano": True})
+                    return
             if self.dokumenty:
                 self._dolacz_fragmenty()
             if self._model_w_pamieci() is False:
@@ -3502,6 +3633,15 @@ _DUZY_PLIK_TEKSTOWY = 100 * 1024        # WHY: powyżej - tryb wyszukiwania (RAG
 _FRAGMENT_ZNAKOW = 900                  # WHY: modele embeddingów mają małe okno (nomic: 512 tokenów)
 _FRAGMENT_ZAKLADKA = 150                # WHY: zdanie przecięte na granicy fragmentów trafia do obu
 _FRAGMENTOW_NA_PYTANIE = 6
+# WHAT: wyszukiwanie w internecie w czacie - ile zapytań, stron i tekstu trafia do modelu.
+# WHY:  5 stron po 8 fragmentów (ok. 7 tys. znaków) mieści się nawet w domyślnym oknie
+#       kontekstu; 30 tys. znaków ze strony = do ok. 35 fragmentów do wektorów na stronę
+#       (u użytkownika ok. 20 fragmentów/s, więc kilka sekund, nie minuty).
+_MAKS_ZAPYTAN_WWW = 3
+_MAKS_STRON_WWW = 5
+_ZNAKOW_ZE_STRONY = 30000
+_FRAGMENTOW_WWW = 8
+_ZNAKOW_BEZ_EMBEDDINGOW = 2500
 _MAKS_BOK_OBRAZU = 2048                 # WHY: modele i tak zmniejszają obraz - nie wysyłamy zbędnych MB
 
 
@@ -4015,7 +4155,7 @@ def _tresc_dla_modelu(wiadomosc):
 #       Ollama sama niczego nie zapamiętuje - historię zawsze trzyma program.
 _WERSJA_PLIKU_ROZMOWY = 1
 # WHY: klucze potrzebne tylko w trakcie pracy okna - do pliku nie trafiają
-_KLUCZE_ROBOCZE_WIADOMOSCI = {"trwa", "start", "laduje", "szuka"}
+_KLUCZE_ROBOCZE_WIADOMOSCI = {"trwa", "start", "laduje", "szuka", "etap"}
 _KLUCZE_ROBOCZE_ZALACZNIKA = {"fragmenty", "wektory", "gotowy", "procent", "eta", "sciezka", "tekst_pelny"}
 
 
@@ -4118,6 +4258,9 @@ def rozmowa_do_markdown(dane):
                     linie.append(f"- {_('Zdjęcie') if z['typ'] == 'obraz' else _('Plik')}: {z['nazwa']}")
         elif w["rola"] == "assistant":
             linie += [f"## {w.get('kto', '')}", "", _rozdziel_myslenie(w.get("tresc", ""))[1]]
+            if w.get("zrodla_www"):
+                linie += ["", f"**{_('Źródła:')}**"]
+                linie += [f"{nr}. [{z['tytul']}]({z['url']})" for nr, z in enumerate(w["zrodla_www"], 1)]
             if w.get("stat"):
                 linie += ["", f"*{w['stat']}*"]
         else:
@@ -4379,13 +4522,30 @@ class WidokCzatu(QTextBrowser):
             c.insertText(myslenie + "\n\n", self._znaki(self.kolorWyciszony, kursywa=True))
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
+            # WHAT: pod odpowiedzią - klikalne źródła z wyszukiwania (numery jak w odpowiedzi)
+            if w.get("zrodla_www"):
+                # WHY: osobny akapit z odstępem - inaczej lista przylegała do ostatniego zdania
+                odstep = QTextBlockFormat()
+                odstep.setTopMargin(10)
+                c.insertBlock(odstep)
+                c.insertText(_("Źródła:"), self._znaki(self.kolorWyciszony, gruby=True))
+                for nr, z in enumerate(w["zrodla_www"], 1):
+                    c.insertBlock(QTextBlockFormat())  # WHY: bez odstępu z nagłówka "Źródła:"
+                    c.insertText(f"[{nr}] ", self._znaki(self.kolorWyciszony))
+                    link = self._znaki(self.kolorLinku)
+                    link.setAnchor(True)
+                    link.setAnchorHref(z["url"])
+                    link.setToolTip(z["url"])
+                    c.insertText(z["tytul"], link)
             # WHAT: pod odpowiedzią - z których linii dużych plików wzięto fragmenty
             for nazwa, zakresy in w.get("zrodla") or []:
                 linie = ", ".join(f"{od}-{do}" if od != do else str(od) for od, do in zakresy)
                 c.insertText("\n" + _("Na podstawie fragmentów: {nazwa}, linie {linie}").format(nazwa=nazwa, linie=linie),
                              self._znaki(self.kolorWyciszony, kursywa=True))
         elif w.get("trwa"):
-            if myslenie:
+            if w.get("etap"):
+                tekst = w["etap"]
+            elif myslenie:
                 tekst = _("model myśli...")
             elif w.get("szuka"):
                 tekst = _("Szukam pasujących fragmentów w pliku...")
@@ -4527,6 +4687,7 @@ _IKONY_SVG = {
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
     "edytuj": '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    "internet": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     "spinacz": '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
     # WHAT: stan modelu w tabeli hosta - kość RAM (wczytany do pamięci) i dysk (tylko na dysku)
@@ -5663,6 +5824,7 @@ class MainWindow(QMainWindow):
         self._czat_worker = None        # WHY: odpowiedź, która właśnie się pisze (CzatWorker)
         self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
         self._linki_nieudane = set()    # WHY: linki z pytania, których strony nie dało się pobrać
+        self._szukaj_w_internecie = False  # WHY: przycisk z globusem w czacie - przeżywa przebudowę okna
         self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
         self._czat_utworzono = None
@@ -8073,6 +8235,19 @@ class MainWindow(QMainWindow):
                                           "do okna albo wkleić zrzut ekranu (Ctrl+V)."))
         self.btn_czat_zalacz.clicked.connect(self._wybierz_zalaczniki)
         wpis.addWidget(self.btn_czat_zalacz)
+        # WHAT: przełącznik "szukaj w internecie" - widoczny tylko, gdy w Ustawieniach wybrano źródło.
+        # WHY:  włączony zostaje do wyłączenia (kolejne pytania też szukają), ale po ponownym
+        #       uruchomieniu programu jest wyłączony - zapytania wychodzą do internetu tylko świadomie
+        self.btn_czat_internet = QPushButton()
+        self.btn_czat_internet.setObjectName("attachButton")
+        self.btn_czat_internet.setCheckable(True)
+        self.btn_czat_internet.setChecked(self._szukaj_w_internecie)
+        self.btn_czat_internet.setIcon(ikona("internet", PALETA.tekst, rozmiar=20, grubosc=1.8))
+        self.btn_czat_internet.setIconSize(QSize(20, 20))
+        self.btn_czat_internet.setFixedSize(48, 76)
+        self.btn_czat_internet.toggled.connect(self._przelacz_szukanie_w_internecie)
+        wpis.addWidget(self.btn_czat_internet)
+        self._odswiez_przycisk_internetu()
         self.pole_czat = QPlainTextEdit()
         self.pole_czat.setObjectName("chatInput")
         self.pole_czat.setPlaceholderText(_("Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)"))
@@ -8854,9 +9029,16 @@ class MainWindow(QMainWindow):
                 historia.append(wpis)
             elif w["rola"] == "assistant" and not w.get("przerwano"):
                 historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
+        wyszukiwanie = None
+        if self._szukanie_aktywne():
+            # WHY: do zapytań sam tekst pytania - bez treści dołączonych plików
+            wyszukiwanie = {"zrodlo": wyszukiwanie_ustawienie("zrodlo", "wylaczone"),
+                            "pytanie": self._czat[-1].get("tresc", ""), "emb": self._model_embeddingow()}
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
                            "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
                            "gb": model["rozmiar"] / 1024 ** 3})
+        if wyszukiwanie:
+            self._czat[-1]["etap"] = _("Układam zapytania do wyszukiwarki...")
         self._pokaz_czat(do_dolu=True)
         # WHY: duże pliki z CAŁEJ rozmowy - można dopytywać o dokument dołączony wcześniej
         dokumenty = [{"nazwa": z["nazwa"], "fragmenty": z["fragmenty"], "wektory": z["wektory"],
@@ -8865,12 +9047,15 @@ class MainWindow(QMainWindow):
                      for z in w.get("zalaczniki", []) if z["typ"] == "dokument" and z.get("gotowy")]
         if dokumenty:
             self._czat[-1]["szuka"] = True
-        worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model))
+        worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model),
+                            wyszukiwanie)
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
         worker.ladowanie.connect(self._czat_ladowanie)
         worker.zrodla.connect(self._czat_zrodla)
+        worker.etap.connect(self._czat_etap)
+        worker.zrodla_www.connect(self._czat_zrodla_www)
         worker.zakonczono.connect(self._czat_koniec)
         # WHY: co sekundę odświeżamy licznik czekania, dopóki nie przyjdzie pierwsze słowo
         if not hasattr(self, "_czat_zegar"):
@@ -8967,6 +9152,37 @@ class MainWindow(QMainWindow):
             self._czat[-1]["zrodla"] = zrodla
             self._czat_odswiez_ostatnia()
 
+    def _czat_etap(self, tekst):
+        if self.sender() is self._czat_worker and self._czat:
+            self._czat[-1]["etap"] = tekst
+            self._czat_odswiez_ostatnia()
+
+    def _czat_zrodla_www(self, zrodla):
+        if self.sender() is self._czat_worker and self._czat:
+            self._czat[-1].pop("etap", None)
+            self._czat[-1]["zrodla_www"] = zrodla
+            self._czat_odswiez_ostatnia()
+
+    def _szukanie_aktywne(self):
+        return self._szukaj_w_internecie and wyszukiwanie_ustawienie("zrodlo", "wylaczone") != "wylaczone"
+
+    def _przelacz_szukanie_w_internecie(self, wlacz):
+        self._szukaj_w_internecie = wlacz
+        self._odswiez_przycisk_internetu()
+
+    def _odswiez_przycisk_internetu(self):
+        # WHAT: przycisk widać tylko przy wybranym źródle; dymek mówi, dokąd idą zapytania.
+        if not hasattr(self, "btn_czat_internet"):
+            return
+        zrodlo = wyszukiwanie_ustawienie("zrodlo", "wylaczone")
+        self.btn_czat_internet.setVisible(zrodlo != "wylaczone")
+        dokad = {"searxng": _("SearXNG na tym komputerze"), "searxng_adres": _("SearXNG pod innym adresem"),
+                 "ollama": _("Ollama (konto na ollama.com)")}.get(zrodlo, "")
+        stan = _("włączone") if self._szukaj_w_internecie else _("wyłączone")
+        self.btn_czat_internet.setToolTip(
+            _("Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź "
+              "poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).").format(stan=stan, zrodlo=dokad))
+
     def _czat_ladowanie(self):
         if self.sender() is self._czat_worker and self._czat:
             self._czat[-1]["laduje"] = True
@@ -8993,7 +9209,10 @@ class MainWindow(QMainWindow):
 
     def _czat_odswiez_ostatnia(self):
         self._czat_odswiezenie_zaplanowane = False
-        if self._czat and hasattr(self, "widok_czatu"):
+        # WHY: tylko odpowiedź w trakcie pisania - gotową narysował już _czat_koniec, razem
+        #      z ikonami "ponów"/"popraw"; spóźnione odświeżenie (zaplanowane 80 ms po ostatnim
+        #      kawałku) rysowało ją od nowa bez ikon i te losowo znikały
+        if self._czat and hasattr(self, "widok_czatu") and self._czat[-1].get("trwa"):
             self.widok_czatu.odswiez_ostatnia(self._czat[-1])
 
     def _czat_koniec(self, sukces, wynik):
@@ -10029,6 +10248,7 @@ class MainWindow(QMainWindow):
         wyszukiwanie_zapisz("zrodlo", zrodlo)
         self.lbl_test_wyszukiwania.setText("")
         self._pokaz_zrodlo_wyszukiwania()
+        self._odswiez_przycisk_internetu()
         self.wpis_log(_("Źródło wyszukiwania w internecie: {zrodlo}.").format(
             zrodlo=self.combo_zrodlo_wyszukiwania.currentText()))
 

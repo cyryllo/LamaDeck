@@ -641,5 +641,13 @@
   "SearXNG pod adresem {adres} nie odpowiada.": "SearXNG unter {adres} antwortet nicht.",
   "działa - {adres}": "läuft - {adres}",
   "Błąd: {blad}": "Fehler: {blad}",
-  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funktioniert - Ergebnisse: {n}, erstes: {tytul}"
+  "Działa - wyniki: {n}, pierwszy: {tytul}": "Funktioniert - Ergebnisse: {n}, erstes: {tytul}",
+  "Układam zapytania do wyszukiwarki...": "Formuliere Suchanfragen...",
+  "Szukam w internecie: {zapytania}": "Suche im Internet: {zapytania}",
+  "Czytam strony ({n})...": "Lese Seiten ({n})...",
+  "Wyniki wyszukiwania w internecie (dziś jest {data}). Odpowiedz na ich podstawie. Przy informacjach z wyników podawaj numer źródła w nawiasie kwadratowym, np. [1]. Jeśli wyniki nie wystarczają, powiedz to wprost.": "Ergebnisse der Websuche (heute ist {data}). Antworte auf ihrer Grundlage. Gib bei Informationen aus den Ergebnissen die Nummer der Quelle in eckigen Klammern an, z. B. [1]. Reichen die Ergebnisse nicht aus, sag das deutlich.",
+  "Wybieram z nich pasujące fragmenty...": "Wähle passende Abschnitte aus...",
+  "Źródła:": "Quellen:",
+  "Szukaj w internecie: {stan}\nModel ułoży zapytania, program przeczyta znalezione strony, a odpowiedź poda źródła. Źródło wyników: {zrodlo} (zmienisz w Ustawieniach).": "Im Internet suchen: {stan}\nDas Modell formuliert die Anfragen, das Programm liest die gefundenen Seiten, und die Antwort nennt ihre Quellen. Quelle der Ergebnisse: {zrodlo} (änderbar in den Einstellungen).",
+  "Wyszukiwanie w internecie nie dało wyników. {blad}": "Die Websuche hat keine Ergebnisse geliefert. {blad}"
 }
