@@ -22,6 +22,11 @@ CLAUDE.md
 # Wynik build-deb.sh - build artefakt, nie kod źródłowy
 *.deb
 
+# Repozytorium APT (apt-repo.sh build) i AppImage (build-appimage.sh) - artefakty
+apt-repo/
+build/
+*.AppImage
+
 # Makiety interfejsu (Claude Design) - tylko lokalnie, nie trafiają do repozytorium
 Wyglad/
 

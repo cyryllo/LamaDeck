@@ -17,6 +17,9 @@
 #  Installing the result: sudo apt install ./lamadeck_<version>_all.deb
 # =============================================================================
 set -euo pipefail
+# WHY: files in the package must be 644/755 (root-owned, not group-writable) - without this
+#      a user umask of 002 leaked into the .deb as rw-rw-r--
+umask 022
 
 PACKAGE_NAME="lamadeck"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -63,6 +66,26 @@ cp -r fonts "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 # WHY: app icon next to the script (window icon) and in the system icon theme (menu)
 cp logo.png "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp logo.png "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"
+
+# WHAT: the package also adds the LamaDeck APT repository (see apt-repo.sh), like Chrome or
+#       VS Code do - one .deb from GitHub is enough, later versions come with "apt upgrade".
+# WHY:  only when the repository's public key is in the source tree (packaging/), i.e. after
+#       "./apt-repo.sh init-key"; the source entry is a conffile - a user's edit survives updates.
+KEYRING="packaging/lamadeck-archive-keyring.gpg"
+if [ -f "$KEYRING" ]; then
+    mkdir -p "$BUILD_DIR/usr/share/keyrings" "$BUILD_DIR/etc/apt/sources.list.d"
+    cp "$KEYRING" "$BUILD_DIR/usr/share/keyrings/lamadeck-archive-keyring.gpg"
+    cat > "$BUILD_DIR/etc/apt/sources.list.d/lamadeck.sources" <<EOF
+Types: deb
+URIs: https://cyryllo.github.io/LamaDeck/apt
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/lamadeck-archive-keyring.gpg
+EOF
+    echo "/etc/apt/sources.list.d/lamadeck.sources" > "$BUILD_DIR/DEBIAN/conffiles"
+else
+    echo "Note: $KEYRING not found - the package won't add the APT repository (run ./apt-repo.sh init-key)."
+fi
 
 # WHY: a small wrapper instead of calling the full path straight from
 #      .desktop - this also lets `lamadeck` be run from a terminal.
