@@ -6486,11 +6486,9 @@ class MainWindow(QMainWindow):
             if stan is None:
                 info = _etykieta(_("sprawdzam..."), "muted")
             elif stan["online"]:
-                gib = 1024 ** 3
-                opis = (_("ten komputer") if stan["lokalny"] else _("zdalny"))
-                if stan["vram_calkowite"]:
-                    opis += f" · {stan['vram_calkowite'] / gib:.0f} GB"
-                info = _etykieta(opis, "muted")
+                # WHY: bez rozmiaru VRAM (prośba użytkownika) - zdalnym hostom i tak go nie odczytamy,
+                #      a na APU sama liczba VRAM myli; pamięć szczegółowo na ekranie Hosty
+                info = _etykieta(_("ten komputer") if stan["lokalny"] else _("zdalny"), "muted")
             else:
                 info = _etykieta(_("brak połączenia"), state="warn")
             h.addWidget(info)
@@ -10142,7 +10140,8 @@ class MainWindow(QMainWindow):
         # WHAT: zainstalowane wersje Ollamy, LiteLLM i Open WebUI - bez sprawdzania internetu.
         worker = FunkcjaWorker(lambda: {"aktualizacja_ollamy": ollama_wersja_lokalna(),
                                         "aktualizacja_litellm": litellm_wersja_lokalna(),
-                                        "aktualizacja_webui": webui_wersja_lokalna()})
+                                        "aktualizacja_webui": webui_wersja_lokalna(),
+                                        "aktualizacja_searxng": searxng_wersja_lokalna()})
 
         def _po(sukces, wynik):
             if sukces:
