@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic droit sur une conversation : renommer, exporter, supprimer. Enregistrées automatiquement, uniquement sur cet ordinateur : {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Régénérer - avec le modèle choisi maintenant à droite",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Modifier la question - elle revient dans le champ, et elle et sa réponse quittent la conversation",
-  "{nazwa} - lokalny stos AI": "{nazwa} - pile d'IA locale"
+  "{nazwa} - lokalny stos AI": "{nazwa} - pile d'IA locale",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "Pour la transcription audio et l'import de documents (PDF/Word) dans le RAG, Open WebUI a aussi besoin de : {pakiety}.\n\nInstallez-les avec le gestionnaire de paquets de votre système. Sans eux, WebUI fonctionne normalement, simplement sans ces deux fonctions.",
+  "Program w menu aplikacji": "Programme dans le menu des applications",
+  "program jest już w menu (zainstalowany w inny sposób)": "le programme est déjà dans le menu (installé autrement)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "l'entrée pointe vers ce fichier AppImage - si vous déplacez le fichier, elle se met à jour seule",
+  "Nie udało się zmienić wpisu w menu: {blad}": "Impossible de modifier l'entrée du menu : {blad}",
+  "Program w menu aplikacji: {stan}.": "Programme dans le menu des applications : {stan}.",
+  "dodany": "ajouté",
+  "usunięty": "supprimé",
+  "Dodać do menu?": "Ajouter au menu ?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "Ajouter {nazwa} au menu des applications ?\n\nL'entrée pointera vers ce fichier AppImage :\n{plik}\n\nVous pourrez changer cela plus tard dans les Paramètres."
 }

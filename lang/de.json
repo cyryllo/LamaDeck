@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Rechtsklick auf ein Gespräch: umbenennen, exportieren, löschen. Automatisch gespeichert, nur auf diesem Computer: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Neu erzeugen - mit dem rechts gewählten Modell",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Frage bearbeiten - sie kommt zurück ins Eingabefeld, sie und die Antwort verschwinden aus dem Gespräch",
-  "{nazwa} - lokalny stos AI": "{nazwa} - lokaler KI-Stack"
+  "{nazwa} - lokalny stos AI": "{nazwa} - lokaler KI-Stack",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "Für Audio-Transkription und den Import von Dokumenten (PDF/Word) in RAG braucht Open WebUI außerdem: {pakiety}.\n\nInstalliere sie mit der Paketverwaltung deines Systems. Ohne sie funktioniert WebUI normal, nur ohne diese zwei Funktionen.",
+  "Program w menu aplikacji": "Programm im Anwendungsmenü",
+  "program jest już w menu (zainstalowany w inny sposób)": "das Programm ist bereits im Menü (auf andere Weise installiert)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "der Eintrag zeigt auf diese AppImage-Datei - wird die Datei verschoben, passt er sich selbst an",
+  "Nie udało się zmienić wpisu w menu: {blad}": "Menüeintrag konnte nicht geändert werden: {blad}",
+  "Program w menu aplikacji: {stan}.": "Programm im Anwendungsmenü: {stan}.",
+  "dodany": "hinzugefügt",
+  "usunięty": "entfernt",
+  "Dodać do menu?": "Zum Menü hinzufügen?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "{nazwa} zum Anwendungsmenü hinzufügen?\n\nDer Eintrag zeigt auf diese AppImage-Datei:\n{plik}\n\nDas lässt sich später in den Einstellungen ändern."
 }

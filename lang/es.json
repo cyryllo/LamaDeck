@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic derecho en una conversación: cambiar nombre, exportar, eliminar. Se guardan automáticamente, solo en este ordenador: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Volver a generar, con el modelo elegido ahora a la derecha",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corregir la pregunta: vuelve al campo de texto y ella y su respuesta salen de la conversación",
-  "{nazwa} - lokalny stos AI": "{nazwa} - pila de IA local"
+  "{nazwa} - lokalny stos AI": "{nazwa} - pila de IA local",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "Para transcribir audio e importar documentos (PDF/Word) al RAG, Open WebUI también necesita: {pakiety}.\n\nInstálalos con el gestor de paquetes de tu sistema. Sin ellos WebUI funciona con normalidad, solo que sin estas dos funciones.",
+  "Program w menu aplikacji": "Programa en el menú de aplicaciones",
+  "program jest już w menu (zainstalowany w inny sposób)": "el programa ya está en el menú (instalado de otra forma)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "la entrada apunta a este archivo AppImage; si mueves el archivo, se corrige sola",
+  "Nie udało się zmienić wpisu w menu: {blad}": "No se pudo cambiar la entrada del menú: {blad}",
+  "Program w menu aplikacji: {stan}.": "Programa en el menú de aplicaciones: {stan}.",
+  "dodany": "añadido",
+  "usunięty": "eliminado",
+  "Dodać do menu?": "¿Añadir al menú?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "¿Añadir {nazwa} al menú de aplicaciones?\n\nLa entrada apuntará a este archivo AppImage:\n{plik}\n\nPuedes cambiarlo más tarde en Ajustes."
 }

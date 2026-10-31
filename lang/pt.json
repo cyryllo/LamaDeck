@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clique direito numa conversa: mudar o nome, exportar, eliminar. Guardadas automaticamente, só neste computador: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Gerar de novo - com o modelo agora escolhido à direita",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Corrigir a pergunta - volta ao campo de texto, e ela e a resposta saem da conversa",
-  "{nazwa} - lokalny stos AI": "{nazwa} - stack de IA local"
+  "{nazwa} - lokalny stos AI": "{nazwa} - stack de IA local",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "Para transcrição de áudio e importação de documentos (PDF/Word) para o RAG, o Open WebUI também precisa de: {pakiety}.\n\nInstale-os com o gestor de pacotes do seu sistema. Sem eles o WebUI funciona normalmente, apenas sem estas duas funções.",
+  "Program w menu aplikacji": "Programa no menu de aplicações",
+  "program jest już w menu (zainstalowany w inny sposób)": "o programa já está no menu (instalado de outra forma)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "a entrada aponta para este ficheiro AppImage - se mover o ficheiro, corrige-se sozinha",
+  "Nie udało się zmienić wpisu w menu: {blad}": "Não foi possível alterar a entrada do menu: {blad}",
+  "Program w menu aplikacji: {stan}.": "Programa no menu de aplicações: {stan}.",
+  "dodany": "adicionado",
+  "usunięty": "removido",
+  "Dodać do menu?": "Adicionar ao menu?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "Adicionar {nazwa} ao menu de aplicações?\n\nA entrada apontará para este ficheiro AppImage:\n{plik}\n\nPode alterar isto mais tarde nas Definições."
 }

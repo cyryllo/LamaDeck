@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Right-click a conversation to rename, export or delete it. Saved automatically, only on this computer: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Regenerate - with the model now selected on the right",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Edit the question - it goes back to the input, and it and its answer leave the conversation",
-  "{nazwa} - lokalny stos AI": "{nazwa} - local AI stack"
+  "{nazwa} - lokalny stos AI": "{nazwa} - local AI stack",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "For audio transcription and importing documents (PDF/Word) into RAG, Open WebUI also needs: {pakiety}.\n\nInstall them with your system's package manager. Without them WebUI works normally, just without these two features.",
+  "Program w menu aplikacji": "App in the applications menu",
+  "program jest już w menu (zainstalowany w inny sposób)": "the app is already in the menu (installed another way)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "the entry points to this AppImage file - it updates itself if you move the file",
+  "Nie udało się zmienić wpisu w menu: {blad}": "Couldn't change the menu entry: {blad}",
+  "Program w menu aplikacji: {stan}.": "App in the applications menu: {stan}.",
+  "dodany": "added",
+  "usunięty": "removed",
+  "Dodać do menu?": "Add to the menu?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "Add {nazwa} to the applications menu?\n\nThe entry will point to this AppImage file:\n{plik}\n\nYou can change this later in Settings."
 }

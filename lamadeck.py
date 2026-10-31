@@ -804,6 +804,9 @@ def webui_aktualizuj():
         raise RuntimeError(wynik.stderr.strip() or _("uv tool upgrade: nieznany błąd"))
 
 
+PAKIETY_OPCJONALNE_WEBUI = ["ffmpeg", "pandoc", "zstd"]
+
+
 def webui_zainstaluj_opcjonalne():
     # WHAT: instaluje pakiety systemowe potrzebne do PEŁNEJ funkcjonalności WebUI
     #       (transkrypcja audio, import PDF/Word do RAG) - ffmpeg, pandoc, zstd.
@@ -812,7 +815,7 @@ def webui_zainstaluj_opcjonalne():
     #       przez ten sam pkexec (dialog polkit KDE) co start/stop usługi Ollama, ale
     #       TYLKO na wyraźne życzenie użytkownika (patrz klik_webui) - te pakiety są
     #       opcjonalne, WebUI działa i bez nich, tylko bez tych dwóch funkcji.
-    _pkexec(["apt-get", "install", "-y", "ffmpeg", "pandoc", "zstd"])
+    _pkexec(["apt-get", "install", "-y", *PAKIETY_OPCJONALNE_WEBUI])
 
 
 def _webui_port():
@@ -4834,12 +4837,92 @@ def autostart_programu_wlaczony():
     return _PLIK_AUTOSTARTU.exists()
 
 
+# WHAT: ścieżka do pliku .AppImage, gdy program działa z AppImage (ustawia ją jego środowisko).
+# WHY:  z AppImage skrypt i Python leżą w katalogu zamontowanym na czas działania
+#       (/tmp/.mount_...) - inny przy każdym uruchomieniu, więc autostart i wpis w menu
+#       muszą wskazywać sam plik .AppImage.
+_APPIMAGE = os.environ.get("APPIMAGE") or None
+
+_PLIK_MENU = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") \
+    / "applications" / f"{ID_PROGRAMU}.desktop"
+_PLIK_IKONY_MENU = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") \
+    / "icons" / "hicolor" / "256x256" / "apps" / f"{ID_PROGRAMU}.png"
+_ZNACZNIK_APPIMAGE = "X-LamaDeck-AppImage=true"  # WHY: odróżnia nasz wpis od wpisu z install.sh
+
+
+def _polecenie_programu():
+    # WHAT: linia Exec= uruchamiająca ten program (bez argumentów).
+    if _APPIMAGE:
+        return f'"{_APPIMAGE}"'
+    return f'"{sys.executable}" "{Path(__file__).resolve()}"'
+
+
+def wpis_menu_appimage():
+    # WHAT: stan wpisu w menu dla AppImage: "nasz" (dodany przez program), "inny"
+    #       (program jest w menu z install.sh albo .deb) albo None (brak).
+    if _PLIK_MENU.exists():
+        try:
+            return "nasz" if _ZNACZNIK_APPIMAGE in _PLIK_MENU.read_text(encoding="utf-8") else "inny"
+        except OSError:
+            return "inny"
+    if Path(f"/usr/share/applications/{ID_PROGRAMU}.desktop").exists():
+        return "inny"
+    return None
+
+
+def ustaw_wpis_menu_appimage(wlacz):
+    # WHAT: dodaje/usuwa wpis w menu aplikacji wskazujący plik .AppImage, z ikoną.
+    # WHY:  AppImage to sam plik - bez tego program nie pojawia się w menu KDE ani nie
+    #       ma ikony na pasku zadań (KDE łączy okno z wpisem po nazwie lamadeck).
+    #       Wpisu z install.sh / .deb nie ruszamy (brak znacznika).
+    if wpis_menu_appimage() == "inny":
+        return
+    if not wlacz:
+        _PLIK_MENU.unlink(missing_ok=True)
+        _PLIK_IKONY_MENU.unlink(missing_ok=True)
+    else:
+        _PLIK_IKONY_MENU.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_PLIK_IKONY, _PLIK_IKONY_MENU)
+        _PLIK_MENU.parent.mkdir(parents=True, exist_ok=True)
+        _PLIK_MENU.write_text(
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            f"Name={NAZWA_PROGRAMU}\n"
+            "Comment=Control panel for your local AI stack (Ollama, LiteLLM, Open WebUI)\n"
+            "Comment[pl]=Panel sterowania lokalnym stosem AI (Ollama, LiteLLM, Open WebUI)\n"
+            f"Exec={_polecenie_programu()}\n"
+            f"Icon={ID_PROGRAMU}\n"
+            "Categories=Utility;\n"
+            "Terminal=false\n"
+            f"{_ZNACZNIK_APPIMAGE}\n",
+            encoding="utf-8")
+    if shutil.which("update-desktop-database"):
+        subprocess.run(["update-desktop-database", str(_PLIK_MENU.parent)],
+                       capture_output=True, timeout=30)
+
+
+def _odswiez_sciezke_appimage():
+    # WHAT: po przeniesieniu pliku .AppImage poprawia ścieżkę w autostarcie i w menu.
+    # WHY:  ktoś pobiera plik do Pobranych, a potem przenosi np. do ~/Programy - stare
+    #       wpisy wskazywałyby nieistniejący plik.
+    if not _APPIMAGE:
+        return
+    try:
+        if wpis_menu_appimage() == "nasz" and _polecenie_programu() not in _PLIK_MENU.read_text(encoding="utf-8"):
+            ustaw_wpis_menu_appimage(True)
+        if _PLIK_AUTOSTARTU.exists() and _polecenie_programu() not in _PLIK_AUTOSTARTU.read_text(encoding="utf-8"):
+            ustaw_autostart_programu(True)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def ustaw_autostart_programu(wlacz):
     # WHAT: wpis w ~/.config/autostart - KDE uruchamia program po zalogowaniu,
     #       od razu schowany w zasobniku (--w-zasobniku).
     # WHY:  bez roota i bez systemd - to standardowy autostart programów pulpitu.
-    #       Wskazuje dokładnie ten skrypt i ten Python, które teraz działają, więc
-    #       działa tak samo dla install.sh, .deb i uruchomienia z klonu repo.
+    #       Wskazuje dokładnie ten skrypt i ten Python, które teraz działają (albo
+    #       plik .AppImage), więc działa tak samo dla install.sh, .deb, AppImage
+    #       i uruchomienia z klonu repo.
     if not wlacz:
         _PLIK_AUTOSTARTU.unlink(missing_ok=True)
         return
@@ -4848,7 +4931,7 @@ def ustaw_autostart_programu(wlacz):
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={NAZWA_PROGRAMU}\n"
-        f'Exec="{sys.executable}" "{Path(__file__).resolve()}" --w-zasobniku\n'
+        f"Exec={_polecenie_programu()} --w-zasobniku\n"
         f"Icon={ID_PROGRAMU}\n"
         "X-KDE-autostart-after=panel\n"
         "Terminal=false\n"
@@ -6187,6 +6270,17 @@ class MainWindow(QMainWindow):
         # WHY: Docker image WebUI ma ffmpeg/pandoc/zstd w środku, goły 'uv tool
         #      install' - nie; to jedyny krok instalacji WebUI wymagający roota,
         #      więc pytamy osobno i tylko za wyraźną zgodą.
+        if not shutil.which("apt-get"):
+            # WHY: poza Debianem/Ubuntu (np. AppImage na Fedorze) pakiety nazywają się
+            #      różnie i są w różnych repozytoriach (ffmpeg na Fedorze to RPM Fusion) -
+            #      zamiast zgadywać, mówimy, czego szukać w menedżerze pakietów systemu.
+            QMessageBox.information(
+                self, _("Opcjonalne pakiety WebUI"),
+                _("Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje "
+                  "też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. "
+                  "Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.").format(
+                    pakiety=", ".join(PAKIETY_OPCJONALNE_WEBUI)))
+            return
         odp = QMessageBox.question(
             self, _("Opcjonalne pakiety WebUI"),
             _("Zainstalować też opcjonalne pakiety systemowe (ffmpeg, pandoc, zstd)?\n\n"
@@ -9216,6 +9310,17 @@ class MainWindow(QMainWindow):
             self.przelacz_autostart_programu)
         self.sw_autostart_programu.setChecked(autostart_programu_wlaczony())
         self.sw_autostart_programu.setEnabled(zasobnik_wlaczony())
+        # WHY: tylko z AppImage - install.sh i .deb same dodają program do menu
+        self.sw_wpis_menu = None
+        if _APPIMAGE:
+            wpis = wpis_menu_appimage()
+            self.sw_wpis_menu = self._wiersz_przelacznika(
+                uk, _("Program w menu aplikacji"),
+                _("program jest już w menu (zainstalowany w inny sposób)") if wpis == "inny"
+                else _("wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam"),
+                self.przelacz_wpis_menu)
+            self.sw_wpis_menu.setChecked(wpis is not None)
+            self.sw_wpis_menu.setEnabled(wpis != "inny")
         uk.addStretch(1)
         rzad.addWidget(karta, 1)
 
@@ -9700,6 +9805,35 @@ class MainWindow(QMainWindow):
         self.sw_autostart_programu.setEnabled(wlacz)
         self.wpis_log(_("Ikona w zasobniku: {stan}.").format(stan=_("włączona") if wlacz else _("wyłączona")))
 
+    def przelacz_wpis_menu(self, wlacz):
+        try:
+            ustaw_wpis_menu_appimage(wlacz)
+        except (OSError, subprocess.SubprocessError) as e:
+            self.wpis_log(_("Nie udało się zmienić wpisu w menu: {blad}").format(blad=e), "BŁĄD")
+            if self.sw_wpis_menu is not None:
+                self.sw_wpis_menu.ustaw_cicho(wpis_menu_appimage() is not None)
+            return
+        self.wpis_log(_("Program w menu aplikacji: {stan}.").format(
+            stan=_("dodany") if wlacz else _("usunięty")))
+
+    def zapytaj_o_wpis_menu(self):
+        # WHAT: przy pierwszym uruchomieniu z AppImage - pytanie o dodanie do menu.
+        # WHY:  jedno pytanie, raz (QSettings appimage/zapytano); później to samo
+        #       zmienia przełącznik w Ustawieniach.
+        ustawienia = _ustawienia()
+        if not _APPIMAGE or wpis_menu_appimage() is not None or ustawienia.value("appimage/zapytano", False, type=bool):
+            return
+        ustawienia.setValue("appimage/zapytano", True)
+        odp = QMessageBox.question(
+            self, _("Dodać do menu?"),
+            _("Dodać {nazwa} do menu aplikacji?\n\n"
+              "Wpis wskaże ten plik AppImage:\n{plik}\n\n"
+              "Możesz to zmienić później w Ustawieniach.").format(nazwa=NAZWA_PROGRAMU, plik=_APPIMAGE))
+        if odp == QMessageBox.StandardButton.Yes:
+            self.przelacz_wpis_menu(True)
+            if self.sw_wpis_menu is not None:
+                self.sw_wpis_menu.ustaw_cicho(True)
+
     def przelacz_autostart_programu(self, wlacz):
         try:
             ustaw_autostart_programu(wlacz)
@@ -9770,6 +9904,7 @@ def _wczytaj_motyw(app):
 
 def main():
     _przenies_dane_ollama_manager()  # WHY: przed pierwszym użyciem QSettings
+    _odswiez_sciezke_appimage()
     app = QApplication(sys.argv)
     app.setApplicationName(NAZWA_PROGRAMU)
     app.setWindowIcon(_ikona_programu())
@@ -9806,6 +9941,7 @@ def main():
     # WHY: z autostartu (--w-zasobniku) tylko ikona - o ile zasobnik naprawdę działa
     if not (w_zasobniku and okno.zasobnik is not None and okno.zasobnik.isVisible()):
         okno.show()
+        QTimer.singleShot(500, okno.zapytaj_o_wpis_menu)
     sys.exit(app.exec())
 
 

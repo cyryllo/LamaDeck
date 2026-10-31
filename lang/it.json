@@ -585,5 +585,15 @@
   "Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, tylko na tym komputerze: {sciezka}": "Clic destro su una conversazione: rinomina, esporta, elimina. Salvate automaticamente, solo su questo computer: {sciezka}",
   "Wygeneruj ponownie - modelem wybranym teraz po prawej": "Rigenera, con il modello scelto ora a destra",
   "Popraw pytanie - wróci do pola, a ono i odpowiedź znikną z rozmowy": "Correggi la domanda: torna nel campo di testo e lei e la risposta escono dalla conversazione",
-  "{nazwa} - lokalny stos AI": "{nazwa} - stack di IA locale"
+  "{nazwa} - lokalny stos AI": "{nazwa} - stack di IA locale",
+  "Do transkrypcji audio i importu dokumentów (PDF/Word) do RAG Open WebUI potrzebuje też programów: {pakiety}.\n\nZainstaluj je menedżerem pakietów swojego systemu. Bez nich WebUI działa normalnie, tylko bez tych dwóch funkcji.": "Per la trascrizione audio e l'importazione di documenti (PDF/Word) nel RAG, Open WebUI richiede anche: {pakiety}.\n\nInstallali con il gestore di pacchetti del tuo sistema. Senza di essi WebUI funziona normalmente, solo senza queste due funzioni.",
+  "Program w menu aplikacji": "Programma nel menu delle applicazioni",
+  "program jest już w menu (zainstalowany w inny sposób)": "il programma è già nel menu (installato in altro modo)",
+  "wpis wskazuje ten plik AppImage - po przeniesieniu pliku poprawi się sam": "la voce punta a questo file AppImage - se sposti il file, si aggiorna da sola",
+  "Nie udało się zmienić wpisu w menu: {blad}": "Impossibile modificare la voce del menu: {blad}",
+  "Program w menu aplikacji: {stan}.": "Programma nel menu delle applicazioni: {stan}.",
+  "dodany": "aggiunto",
+  "usunięty": "rimosso",
+  "Dodać do menu?": "Aggiungere al menu?",
+  "Dodać {nazwa} do menu aplikacji?\n\nWpis wskaże ten plik AppImage:\n{plik}\n\nMożesz to zmienić później w Ustawieniach.": "Aggiungere {nazwa} al menu delle applicazioni?\n\nLa voce punterà a questo file AppImage:\n{plik}\n\nPuoi cambiarlo più tardi nelle Impostazioni."
 }
