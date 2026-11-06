@@ -3121,8 +3121,11 @@ class CzatWorker(WatekTla):
             if self._model_w_pamieci() is False:
                 self.ladowanie.emit()
             if self.katalog:
-                # WHY: polecenie systemowe tylko na czas tej odpowiedzi - nie trafia do zapisu rozmowy
+                # WHY: polecenie systemowe i przypomnienie tylko na czas tej odpowiedzi - nie trafiają
+                #      do zapisu rozmowy
                 self.wiadomosci = [{"role": "system", "content": polecenie_katalogu(self.katalog)}] + self.wiadomosci
+                self.wiadomosci[-1] = dict(self.wiadomosci[-1], content=self.wiadomosci[-1]["content"]
+                                           + "\n\n" + _PRZYPOMNIENIE_KATALOGU)
             kroki = 0
             while True:
                 statystyki, tresc, myslenie, wywolania = self._runda()
@@ -4353,15 +4356,27 @@ def polecenie_katalogu(katalog):
     # WHAT: wiadomość systemowa dla modelu, gdy rozmowa ma katalog roboczy.
     # WHY:  docs Ollamy radzą powiedzieć modelowi, że działa w pętli i może wywołać narzędzia
     #       kilka razy; bez tego mniejsze modele zgadują zawartość plików zamiast je czytać.
-    return ("You can work with files in the user's working folder using the tools list_files, read_file, "
-            "search_files, write_file and edit_file. Paths are relative to that folder. You work in a loop: "
-            "call tools as many times as you need, then answer. Read a file before changing it, prefer "
-            "edit_file for small changes, and never guess file contents. When the user asks you to create "
-            "or change something that belongs in files (a program, a game, a web page, a script, a document), "
-            "save it with write_file or edit_file in the working folder instead of only showing it in the chat; "
-            "then say briefly which files you saved and how to use them. If the user rejects a change, "
-            "don't repeat it. Answer in the language of the user's question. "
-            f"Working folder: {katalog}")
+    #       Zapis jest OBOWIĄZKOWY (prośba użytkownika: "napisz/utwórz ma zawsze pisać do pliku") -
+    #       wcześniej gemma4 uznała, że "użytkownik chce samego kodu", i wkleiła grę do czatu.
+    return ("You work in the user's working folder with the tools list_files, read_file, search_files, "
+            "write_file and edit_file. Paths are relative to that folder. You work in a loop: call tools as "
+            "many times as you need, then answer.\n"
+            "RULE: whenever the user asks you to write, create, make, generate, build, fix, change or add "
+            "anything that can live in a file (code, a program, a game, a web page, a script, a config, a "
+            "document, notes), you MUST save it with write_file (new file) or edit_file (change) - even if the "
+            "user doesn't say 'save' or 'file'. Never paste the full content into the chat instead. Don't ask "
+            "for permission: the app shows the user a preview and asks them. Pick a sensible file name "
+            "yourself. After saving, answer briefly: which files you saved and how to use them.\n"
+            "Read a file before changing it, prefer edit_file for small changes, and never guess file "
+            "contents. If the user rejects a change, don't repeat it. Answer in the language of the user's "
+            f"question.\nWorking folder: {katalog}")
+
+
+# WHAT: przypomnienie doklejane do BIEŻĄCEGO pytania, gdy jest katalog roboczy.
+# WHY:  polecenie systemowe na początku rozmowy słabnie przy długiej historii i przy wynikach
+#       wyszukiwania doklejonych do pytania - przypomnienie tuż przy pytaniu działa najpewniej.
+_PRZYPOMNIENIE_KATALOGU = ("[Working folder is active: if this request is to write, create or change something, "
+                           "save it to files with write_file/edit_file - do not just show it in the chat.]")
 
 
 def _sciezka_w_katalogu(katalog, sciezka):
