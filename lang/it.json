@@ -687,5 +687,6 @@
   "Nowy plik: {sciezka}": "Nuovo file: {sciezka}",
   "Zmiana pliku: {sciezka}": "Modifica del file: {sciezka}",
   "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.": "{model} non sa usare strumenti: per lavorare sui file scegli un modello con il tag \"strumenti\" (es. qwen3, gemma4) o chiudi la cartella.",
-  "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4).": "{model} non sa usare strumenti: per lavorare sui file scegli un modello con il tag \"strumenti\" (es. qwen3, gemma4)."
+  "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4).": "{model} non sa usare strumenti: per lavorare sui file scegli un modello con il tag \"strumenti\" (es. qwen3, gemma4).",
+  "Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.": "Il modello sta ancora lavorando ({s} s): scrivere un file lungo può richiedere qualche minuto; poi compare una finestra con l'anteprima delle modifiche."
 }

@@ -4356,7 +4356,10 @@ def polecenie_katalogu(katalog):
     return ("You can work with files in the user's working folder using the tools list_files, read_file, "
             "search_files, write_file and edit_file. Paths are relative to that folder. You work in a loop: "
             "call tools as many times as you need, then answer. Read a file before changing it, prefer "
-            "edit_file for small changes, and never guess file contents. If the user rejects a change, "
+            "edit_file for small changes, and never guess file contents. When the user asks you to create "
+            "or change something that belongs in files (a program, a game, a web page, a script, a document), "
+            "save it with write_file or edit_file in the working folder instead of only showing it in the chat; "
+            "then say briefly which files you saved and how to use them. If the user rejects a change, "
             "don't repeat it. Answer in the language of the user's question. "
             f"Working folder: {katalog}")
 
@@ -4511,7 +4514,7 @@ def roznica_zmiany(zmiana):
 #       Ollama sama niczego nie zapamiętuje - historię zawsze trzyma program.
 _WERSJA_PLIKU_ROZMOWY = 1
 # WHY: klucze potrzebne tylko w trakcie pracy okna - do pliku nie trafiają
-_KLUCZE_ROBOCZE_WIADOMOSCI = {"trwa", "start", "laduje", "szuka", "etap"}
+_KLUCZE_ROBOCZE_WIADOMOSCI = {"trwa", "start", "laduje", "szuka", "etap", "pliki"}
 _KLUCZE_ROBOCZE_ZALACZNIKA = {"fragmenty", "wektory", "gotowy", "procent", "eta", "sciezka", "tekst_pelny"}
 
 
@@ -4985,8 +4988,20 @@ class WidokCzatu(QTextBrowser):
                 kolor = self.kolorBledu if krok.get("stan") in ("blad", "odrzucono") else self.kolorWyciszony
                 c.insertText("› " + opis_kroku(krok) + "\n", self._znaki(kolor, kursywa=True))
             c.insertText("\n")
+        # WHY: wywołanie narzędzia (np. zapis długiego pliku) Ollama oddaje dopiero w całości -
+        #      model generuje go kilka minut bez żadnego tekstu (zgłoszenie użytkownika: wyglądało
+        #      na zawieszenie, odpowiedź przerwana). Po 5 s ciszy mówimy, co się dzieje.
+        praca_w_ciszy = None
+        if w.get("trwa") and w.get("pliki"):
+            cisza = int(time.monotonic() - w.get("_ostatni_kawalek", w.get("start", time.monotonic())))
+            if cisza >= 5:
+                praca_w_ciszy = _("Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; "
+                                  "potem pojawi się okienko z podglądem zmian.").format(s=cisza)
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
+            if praca_w_ciszy:
+                c.insertBlock(QTextBlockFormat())
+                c.insertText(praca_w_ciszy, self._znaki(self.kolorWyciszony, kursywa=True))
             # WHAT: pod odpowiedzią - klikalne źródła z wyszukiwania (numery jak w odpowiedzi)
             if w.get("zrodla_www"):
                 # WHY: osobny akapit z odstępem - inaczej lista przylegała do ostatniego zdania
@@ -5010,6 +5025,8 @@ class WidokCzatu(QTextBrowser):
         elif w.get("trwa"):
             if w.get("etap"):
                 tekst = w["etap"]
+            elif praca_w_ciszy and not myslenie and not w.get("laduje"):
+                tekst = praca_w_ciszy
             elif myslenie:
                 tekst = _("model myśli...")
             elif w.get("szuka"):
@@ -5021,7 +5038,7 @@ class WidokCzatu(QTextBrowser):
                 tekst = _("czekam na odpowiedź...")
             # WHY: licznik sekund - widać, że program żyje, a nie zawiesił się
             sekundy = int(time.monotonic() - w.get("start", time.monotonic()))
-            if sekundy >= 1:
+            if sekundy >= 1 and tekst != praca_w_ciszy:  # WHY: ten komunikat ma już własny licznik
                 tekst += f"  {sekundy} s"
             c.insertText(tekst, self._znaki(self.kolorWyciszony, kursywa=True))
         self._styl_kodu(ramka)
@@ -9605,7 +9622,7 @@ class MainWindow(QMainWindow):
                             "pytanie": self._czat[-1].get("tresc", ""), "emb": self._model_embeddingow()}
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
                            "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
-                           "gb": model["rozmiar"] / 1024 ** 3})
+                           "gb": model["rozmiar"] / 1024 ** 3, "pliki": bool(self._katalog_roboczy)})
         if wyszukiwanie:
             self._czat[-1]["etap"] = _("Układam zapytania do wyszukiwarki...")
         self._pokaz_czat(do_dolu=True)
@@ -9850,7 +9867,8 @@ class MainWindow(QMainWindow):
         ostatnia = self._czat[-1] if self._czat else None
         if self._czat_worker is None or not ostatnia or not ostatnia.get("trwa"):
             self._czat_zegar.stop()
-        elif not _rozdziel_myslenie(ostatnia["tresc"])[1].strip():
+        elif not _rozdziel_myslenie(ostatnia["tresc"])[1].strip() or ostatnia.get("pliki"):
+            # WHY: przy pracy na plikach model potrafi długo milczeć także PO pierwszym tekście
             self._czat_odswiez_ostatnia()
 
     def _czat_fragment(self, tresc, myslenie):
@@ -9859,6 +9877,7 @@ class MainWindow(QMainWindow):
         ostatnia = self._czat[-1]
         ostatnia["tresc"] += tresc
         ostatnia["myslenie"] += myslenie
+        ostatnia["_ostatni_kawalek"] = time.monotonic()
         # WHY: model sypie kilkadziesiąt kawałków na sekundę - widok odświeżamy
         #      najwyżej co 80 ms, a nie przy każdym słowie
         if not self._czat_odswiezenie_zaplanowane:
