@@ -39,6 +39,7 @@ import grp
 import shutil
 import subprocess
 import tarfile
+import threading
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -54,7 +55,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QIcon, QDesktopServices, QFontDatabase, QPainter, QColor, QPen, QPainterPath, QFont, QFontMetrics, QPixmap,
     QImage, QBitmap, QRegion, QCursor, QTextCursor, QTextFrameFormat, QTextBlockFormat, QTextCharFormat,
-    QTextDocument, QTextImageFormat, QKeySequence, QShortcut, QTextFormat,
+    QTextDocument, QTextImageFormat, QKeySequence, QShortcut, QTextFormat, QSyntaxHighlighter,
 )
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -79,7 +80,7 @@ from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 #       2026-10-30, przed szerszym udostępnieniem od 1.0).
 NAZWA_PROGRAMU = "LamaDeck"
 ID_PROGRAMU = "lamadeck"
-WERSJA = "1.0.1"
+WERSJA = "1.1.0"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
@@ -2818,9 +2819,12 @@ class CzatWorker(WatekTla):
     zrodla = pyqtSignal(object)            # [(plik, [(linia_od, linia_do), ...])] - fragmenty z dużych plików
     etap = pyqtSignal(str)                 # co się dzieje przed odpowiedzią (wyszukiwanie w internecie)
     zrodla_www = pyqtSignal(object)        # [{"tytul", "url"}] - strony z wyszukiwania, w kolejności numerów
+    narzedzie = pyqtSignal(object)         # krok pracy na plikach: {"nazwa", "sciezka", "stan", "info"}
+    prosba_zapisu = pyqtSignal(object)     # zmiana pliku do zatwierdzenia (przygotuj_zmiane_pliku)
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
-    def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None, wyszukiwanie=None):
+    def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None, wyszukiwanie=None,
+                 katalog=None):
         super().__init__()
         self.adres = adres
         self.model = model
@@ -2829,12 +2833,23 @@ class CzatWorker(WatekTla):
         self.myslenie = myslenie  # WHY: "think" do /api/chat; None = nie wysyłać (model nie myśli)
         # WHY: {"zrodlo", "pytanie", "emb": (model, adres) albo None} - None = bez wyszukiwania
         self.wyszukiwanie = wyszukiwanie
+        # WHY: katalog roboczy = model dostaje narzędzia do plików (NARZEDZIA_KATALOGU)
+        self.katalog = katalog
         self._anuluj = False
         self._odpowiedz = None
+        # WHAT: decyzja użytkownika o zapisie - wątek czeka na nią (threading.Event), okno ją ustawia.
+        self._decyzja = threading.Event()
+        self._zgoda = False
+
+    def odpowiedz_na_zapis(self, zgoda):
+        # WHAT: decyzja z okna (DialogZmianyPliku albo zgoda zapamiętana dla katalogu) - budzi wątek.
+        self._zgoda = zgoda
+        self._decyzja.set()
 
     def anuluj(self):
         # WHY: zamknięcie połączenia przerywa generowanie po stronie Ollamy.
         self._anuluj = True
+        self._decyzja.set()  # WHY: wątek czekający na decyzję o zapisie też ma się zakończyć
         if self._odpowiedz is not None:
             try:
                 self._odpowiedz.close()
@@ -2845,7 +2860,83 @@ class CzatWorker(WatekTla):
         dane = {"model": self.model, "messages": self.wiadomosci, "stream": True}
         if self.myslenie is not None:
             dane["think"] = self.myslenie
+        if self.katalog:
+            dane["tools"] = NARZEDZIA_KATALOGU
         return dane
+
+    def _wykonaj_narzedzie(self, nazwa, argumenty):
+        # WHAT: jedno wywołanie narzędzia -> tekst dla modelu; krok idzie też do okna (sygnał narzedzie).
+        # WHY:  błąd (zła ścieżka, plik binarny...) wraca do modelu jako tekst - model może się
+        #       poprawić; nie przerywa całej odpowiedzi.
+        argumenty = argumenty if isinstance(argumenty, dict) else {}
+        krok = {"nazwa": nazwa, "sciezka": argumenty.get("path") or argumenty.get("text") or "", "stan": "ok"}
+        try:
+            if nazwa == "list_files":
+                wynik = narzedzie_lista(self.katalog, argumenty.get("path") or ".")
+            elif nazwa == "read_file":
+                wynik = narzedzie_czytaj(self.katalog, argumenty.get("path", ""),
+                                         argumenty.get("start_line"), argumenty.get("end_line"))
+            elif nazwa == "search_files":
+                wynik = narzedzie_szukaj(self.katalog, argumenty.get("text", ""), argumenty.get("file_pattern"))
+            elif nazwa in ("write_file", "edit_file"):
+                zmiana = przygotuj_zmiane_pliku(self.katalog, nazwa, argumenty)
+                krok["sciezka"] = zmiana["sciezka"]
+                krok["nowy"] = zmiana["stara"] is None
+                # WHY: zawsze przez okno - to ono wie, czy katalog ma zgodę na zapis bez pytania
+                self._decyzja.clear()
+                self.prosba_zapisu.emit(zmiana)
+                self._decyzja.wait()
+                if self._anuluj:
+                    return "Cancelled by the user."
+                if not self._zgoda:
+                    krok["stan"] = "odrzucono"
+                    self.narzedzie.emit(krok)
+                    return "The user rejected this change. Do not repeat it; ask what they want instead."
+                zapisz_zmiane_pliku(zmiana)
+                wynik = f"Saved {zmiana['sciezka']}."
+            else:
+                raise ValueError(f"unknown tool '{nazwa}'")
+        except (OSError, ValueError, TypeError) as e:
+            krok["stan"] = "blad"
+            krok["info"] = str(e)
+            self.narzedzie.emit(krok)
+            return f"Error: {e}"
+        self.narzedzie.emit(krok)
+        return wynik
+
+    def _runda(self):
+        # WHAT: jedno zapytanie do /api/chat ze strumieniem -> (statystyki, treść, rozumowanie, tool_calls).
+        # WHY:  przy strumieniu wywołania narzędzi mogą przyjść w kilku kawałkach - zbieramy
+        #       wszystko (docs: "gather every chunk of thinking, content, and tool_calls").
+        statystyki, tresc, myslenie, wywolania = {}, "", "", []
+        # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
+        #      pierwszym słowem potrafi trwać ponad minutę.
+        with requests.post(f"{self.adres}/api/chat", stream=True, timeout=(10, 600),
+                           json=self._zapytanie()) as odp:
+            self._odpowiedz = odp
+            if odp.status_code != 200:
+                try:
+                    blad = odp.json().get("error") or odp.text
+                except ValueError:
+                    blad = odp.text
+                raise RuntimeError(f"HTTP {odp.status_code}: {blad}")
+            for linia in odp.iter_lines():
+                if self._anuluj:
+                    break
+                if not linia:
+                    continue
+                dane = json.loads(linia)
+                if dane.get("error"):
+                    raise RuntimeError(dane["error"])
+                wiadomosc = dane.get("message") or {}
+                if wiadomosc.get("content") or wiadomosc.get("thinking"):
+                    tresc += wiadomosc.get("content", "")
+                    myslenie += wiadomosc.get("thinking", "")
+                    self.fragment.emit(wiadomosc.get("content", ""), wiadomosc.get("thinking", ""))
+                wywolania += wiadomosc.get("tool_calls") or []
+                if dane.get("done"):
+                    statystyki = dane
+        return statystyki, tresc, myslenie, wywolania
 
     def _okno_kontekstu(self):
         # WHAT: okno kontekstu, z jakim model NAPRAWDĘ działa (/api/ps: context_length); None = nie wiadomo.
@@ -3029,30 +3120,36 @@ class CzatWorker(WatekTla):
                 self._dolacz_fragmenty()
             if self._model_w_pamieci() is False:
                 self.ladowanie.emit()
-            # WHY: długi limit czytania - wczytanie dużego modelu do pamięci przed
-            #      pierwszym słowem potrafi trwać ponad minutę.
-            with requests.post(f"{self.adres}/api/chat", stream=True, timeout=(10, 600),
-                               json=self._zapytanie()) as odp:
-                self._odpowiedz = odp
-                if odp.status_code != 200:
-                    try:
-                        blad = odp.json().get("error") or odp.text
-                    except ValueError:
-                        blad = odp.text
-                    raise RuntimeError(f"HTTP {odp.status_code}: {blad}")
-                for linia in odp.iter_lines():
+            if self.katalog:
+                # WHY: polecenie systemowe tylko na czas tej odpowiedzi - nie trafia do zapisu rozmowy
+                self.wiadomosci = [{"role": "system", "content": polecenie_katalogu(self.katalog)}] + self.wiadomosci
+            kroki = 0
+            while True:
+                statystyki, tresc, myslenie, wywolania = self._runda()
+                if self._anuluj or not wywolania or not self.katalog:
+                    break
+                # WHAT: model chce użyć narzędzi - wykonujemy je i pytamy go ponownie (pętla agenta).
+                wiadomosc = {"role": "assistant", "content": tresc, "tool_calls": wywolania}
+                if myslenie:
+                    wiadomosc["thinking"] = myslenie
+                self.wiadomosci.append(wiadomosc)
+                for wywolanie in wywolania:
+                    funkcja = wywolanie.get("function") or {}
+                    kroki += 1
+                    if kroki > _MAKS_KROKOW_NARZEDZI:
+                        wynik = (f"Tool limit reached ({_MAKS_KROKOW_NARZEDZI} calls) - stop calling tools "
+                                 "and answer with what you have.")
+                    else:
+                        wynik = self._wykonaj_narzedzie(funkcja.get("name", ""), funkcja.get("arguments"))
                     if self._anuluj:
                         break
-                    if not linia:
-                        continue
-                    dane = json.loads(linia)
-                    if dane.get("error"):
-                        raise RuntimeError(dane["error"])
-                    wiadomosc = dane.get("message") or {}
-                    if wiadomosc.get("content") or wiadomosc.get("thinking"):
-                        self.fragment.emit(wiadomosc.get("content", ""), wiadomosc.get("thinking", ""))
-                    if dane.get("done"):
-                        statystyki = dane
+                    self.wiadomosci.append({"role": "tool", "tool_name": funkcja.get("name", ""), "content": wynik})
+                if self._anuluj:
+                    break
+                if tresc.strip():
+                    self.fragment.emit("\n\n", "")  # WHY: tekst kolejnej rundy w nowym akapicie
+                if kroki > _MAKS_KROKOW_NARZEDZI + 3:
+                    break  # WHY: model nie przestaje mimo komunikatu o limicie
             if self._anuluj:
                 statystyki = {"anulowano": True}
             elif statystyki:
@@ -4176,6 +4273,236 @@ def _tresc_dla_modelu(wiadomosc):
     return "\n\n".join(czesci)
 
 
+# --- Katalog roboczy czatu: narzędzia dla modelu (tool calling) ---
+# WHAT: model z możliwością "tools" dostaje listę narzędzi, prosi o ich wywołanie,
+#       a program je wykonuje - TYLKO w wybranym katalogu - i odsyła wynik.
+# WHY:  sama Ollama plików nie dotyka (wywołania narzędzi wykonuje klient - docs.ollama.com/
+#       capabilities/tool-calling). Celowo bez usuwania plików i bez uruchamiania poleceń;
+#       każdy zapis potwierdza użytkownik (podgląd zmian). Nazwy i opisy narzędzi po
+#       angielsku - z takimi modele radzą sobie najpewniej.
+_POMIJANE_KATALOGI = {".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv", "env",
+                      ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".idea", ".vscode",
+                      "dist", "build", ".cache", ".next", "target"}
+_MAKS_KROKOW_NARZEDZI = 25        # WHY: zabezpieczenie przed modelem, który kręci się w kółko
+_MAKS_ZNAKOW_ODCZYTU = 40000      # WHY: ok. 10 tys. tokenów na jeden odczyt - reszta przez zakres linii
+_MAKS_POZYCJI_LISTY = 300
+_MAKS_TRAFIEN = 100
+_MAKS_PLIK_DO_SZUKANIA = 2 * 1024 * 1024
+
+NARZEDZIA_KATALOGU = [
+    {"type": "function", "function": {
+        "name": "list_files",
+        "description": "List files and folders in the working folder (recursively). Folders end with '/'. "
+                       "Hidden folders and build/dependency folders are skipped.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Folder relative to the working folder, '.' for its root"},
+        }}}},
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a text file from the working folder. Lines are numbered. Long files are cut - "
+                       "then read further parts with start_line.",
+        "parameters": {"type": "object", "required": ["path"], "properties": {
+            "path": {"type": "string", "description": "File path relative to the working folder"},
+            "start_line": {"type": "integer", "description": "First line to read (from 1), optional"},
+            "end_line": {"type": "integer", "description": "Last line to read, optional"},
+        }}}},
+    {"type": "function", "function": {
+        "name": "search_files",
+        "description": "Search for a text (case-insensitive) in the text files of the working folder. "
+                       "Returns matching lines as path:line: text.",
+        "parameters": {"type": "object", "required": ["text"], "properties": {
+            "text": {"type": "string", "description": "Text to look for"},
+            "file_pattern": {"type": "string", "description": "Optional file name pattern, e.g. '*.py'"},
+        }}}},
+    {"type": "function", "function": {
+        "name": "write_file",
+        "description": "Create a new file or replace the whole content of a file in the working folder. "
+                       "The user must approve every write. For small changes in an existing file use edit_file.",
+        "parameters": {"type": "object", "required": ["path", "content"], "properties": {
+            "path": {"type": "string", "description": "File path relative to the working folder"},
+            "content": {"type": "string", "description": "The complete new content of the file"},
+        }}}},
+    {"type": "function", "function": {
+        "name": "edit_file",
+        "description": "Replace one exact fragment of an existing file with new text. old_text must appear in "
+                       "the file exactly once - read the file first. The user must approve every edit.",
+        "parameters": {"type": "object", "required": ["path", "old_text", "new_text"], "properties": {
+            "path": {"type": "string", "description": "File path relative to the working folder"},
+            "old_text": {"type": "string", "description": "Exact text to replace, copied from the file"},
+            "new_text": {"type": "string", "description": "Text to put in its place"},
+        }}}},
+]
+
+
+def opis_kroku(krok):
+    # WHAT: krok pracy modelu na plikach jako krótki tekst dla człowieka ("przeczytał plik: a.py").
+    # WHY:  tłumaczony przy wyświetlaniu - zapisana rozmowa przeżywa zmianę języka.
+    sciezka = krok.get("sciezka") or "."
+    if krok.get("stan") == "odrzucono":
+        return _("odrzuciłeś zmianę: {sciezka}").format(sciezka=sciezka)
+    if krok.get("stan") == "blad":
+        return _("nie udało się ({narzedzie}): {blad}").format(narzedzie=krok.get("nazwa", ""), blad=krok.get("info", ""))
+    wzor = {"list_files": _("przejrzał katalog: {sciezka}"), "read_file": _("przeczytał plik: {sciezka}"),
+            "search_files": _("szukał w plikach: {sciezka}"),
+            "write_file": _("utworzył plik: {sciezka}") if krok.get("nowy") else _("zapisał plik: {sciezka}"),
+            "edit_file": _("zmienił plik: {sciezka}")}.get(krok.get("nazwa"), "{sciezka}")
+    return wzor.format(sciezka=sciezka)
+
+
+def polecenie_katalogu(katalog):
+    # WHAT: wiadomość systemowa dla modelu, gdy rozmowa ma katalog roboczy.
+    # WHY:  docs Ollamy radzą powiedzieć modelowi, że działa w pętli i może wywołać narzędzia
+    #       kilka razy; bez tego mniejsze modele zgadują zawartość plików zamiast je czytać.
+    return ("You can work with files in the user's working folder using the tools list_files, read_file, "
+            "search_files, write_file and edit_file. Paths are relative to that folder. You work in a loop: "
+            "call tools as many times as you need, then answer. Read a file before changing it, prefer "
+            "edit_file for small changes, and never guess file contents. If the user rejects a change, "
+            "don't repeat it. Answer in the language of the user's question. "
+            f"Working folder: {katalog}")
+
+
+def _sciezka_w_katalogu(katalog, sciezka):
+    # WHAT: ścieżka podana przez model -> prawdziwa ścieżka WEWNĄTRZ katalogu roboczego.
+    # WHY:  po rozwinięciu linków symbolicznych i ".." - inaczej "../../.ssh" albo link
+    #       w katalogu wyprowadziłby model poza wybrany folder.
+    korzen = Path(katalog).resolve()
+    sciezka = (sciezka or ".").strip() or "."
+    cel = (korzen / sciezka).resolve()
+    if cel != korzen and korzen not in cel.parents:
+        raise ValueError(f"'{sciezka}' is outside the working folder")
+    return korzen, cel
+
+
+def _czy_pomijac(nazwa):
+    return nazwa in _POMIJANE_KATALOGI or (nazwa.startswith(".") and nazwa not in (".github",))
+
+
+def narzedzie_lista(katalog, path="."):
+    korzen, cel = _sciezka_w_katalogu(katalog, path)
+    if not cel.is_dir():
+        raise ValueError(f"'{path}' is not a folder")
+    wynik = []
+    for sciezka, katalogi, pliki in os.walk(cel):
+        katalogi[:] = sorted(k for k in katalogi if not _czy_pomijac(k))
+        baza = Path(sciezka)
+        for k in katalogi:
+            wynik.append(str((baza / k).relative_to(korzen)) + "/")
+        for p in sorted(pliki):
+            if not p.startswith("."):
+                wynik.append(str((baza / p).relative_to(korzen)))
+        if len(wynik) > _MAKS_POZYCJI_LISTY:
+            break
+    if not wynik:
+        return "(empty folder)"
+    wynik.sort()
+    if len(wynik) > _MAKS_POZYCJI_LISTY:
+        wynik = wynik[:_MAKS_POZYCJI_LISTY] + [f"... (list cut at {_MAKS_POZYCJI_LISTY} entries - "
+                                               "list a subfolder to see more)"]
+    return "\n".join(wynik)
+
+
+def _czytaj_tekst(plik):
+    # WHAT: zawartość pliku tekstowego albo ValueError dla binarnego.
+    dane = plik.read_bytes()
+    if b"\0" in dane[:8192]:
+        raise ValueError(f"'{plik.name}' is not a text file")
+    return dane.decode("utf-8", errors="replace")
+
+
+def narzedzie_czytaj(katalog, path, start_line=None, end_line=None):
+    korzen, cel = _sciezka_w_katalogu(katalog, path)
+    if not cel.is_file():
+        raise ValueError(f"'{path}' does not exist or is not a file")
+    linie = _czytaj_tekst(cel).splitlines()
+    od = max(1, int(start_line or 1))
+    do = min(len(linie), int(end_line or len(linie)))
+    wynik, dlugosc, ostatnia = [], 0, od - 1
+    for nr in range(od, do + 1):
+        linia = f"{nr:>5} | {linie[nr - 1]}"
+        if dlugosc + len(linia) > _MAKS_ZNAKOW_ODCZYTU and wynik:
+            break
+        wynik.append(linia)
+        dlugosc += len(linia) + 1
+        ostatnia = nr
+    naglowek = f"{cel.relative_to(korzen)} ({len(linie)} lines)"
+    if ostatnia < len(linie):
+        naglowek += f" - showing lines {od}-{ostatnia}; read more with start_line={ostatnia + 1}"
+    return naglowek + "\n" + "\n".join(wynik)
+
+
+def narzedzie_szukaj(katalog, text, file_pattern=None):
+    import fnmatch
+    korzen, _cel = _sciezka_w_katalogu(katalog, ".")
+    szukane = (text or "").lower()
+    if not szukane:
+        raise ValueError("empty search text")
+    trafienia = []
+    for sciezka, katalogi, pliki in os.walk(korzen):
+        katalogi[:] = sorted(k for k in katalogi if not _czy_pomijac(k))
+        for nazwa in sorted(pliki):
+            if nazwa.startswith(".") or (file_pattern and not fnmatch.fnmatch(nazwa, file_pattern)):
+                continue
+            plik = Path(sciezka) / nazwa
+            try:
+                if plik.stat().st_size > _MAKS_PLIK_DO_SZUKANIA:
+                    continue
+                tekst = _czytaj_tekst(plik)
+            except (OSError, ValueError):
+                continue
+            for nr, linia in enumerate(tekst.splitlines(), 1):
+                if szukane in linia.lower():
+                    trafienia.append(f"{plik.relative_to(korzen)}:{nr}: {linia.strip()[:200]}")
+                    if len(trafienia) >= _MAKS_TRAFIEN:
+                        return "\n".join(trafienia) + f"\n... (cut at {_MAKS_TRAFIEN} matches)"
+    return "\n".join(trafienia) or "(no matches)"
+
+
+def przygotuj_zmiane_pliku(katalog, narzedzie, argumenty):
+    # WHAT: zapis/edycja proponowana przez model -> {"sciezka", "plik", "stara", "nowa"} do pokazania
+    #       użytkownikowi; NIC jeszcze nie zapisuje.
+    korzen, cel = _sciezka_w_katalogu(katalog, argumenty.get("path", ""))
+    if cel == korzen or cel.is_dir():
+        raise ValueError(f"'{argumenty.get('path')}' is a folder, not a file")
+    stara = _czytaj_tekst(cel) if cel.exists() else None
+    if narzedzie == "write_file":
+        nowa = argumenty.get("content")
+        if not isinstance(nowa, str):
+            raise ValueError("missing 'content'")
+    else:
+        if stara is None:
+            raise ValueError(f"'{argumenty.get('path')}' does not exist - use write_file to create it")
+        stary_tekst, nowy_tekst = argumenty.get("old_text") or "", argumenty.get("new_text")
+        if not stary_tekst or not isinstance(nowy_tekst, str):
+            raise ValueError("missing 'old_text' or 'new_text'")
+        ile = stara.count(stary_tekst)
+        if ile != 1:
+            raise ValueError(f"old_text found {ile} times in the file - it must appear exactly once; "
+                             "read the file and copy a longer, unique fragment")
+        nowa = stara.replace(stary_tekst, nowy_tekst, 1)
+    if nowa == stara:
+        raise ValueError("the new content is the same as the current one")
+    return {"sciezka": str(cel.relative_to(korzen)), "plik": str(cel), "stara": stara, "nowa": nowa}
+
+
+def zapisz_zmiane_pliku(zmiana):
+    # WHAT: zapis zatwierdzonej zmiany - przez plik tymczasowy i os.replace (bez połowy pliku przy błędzie).
+    plik = Path(zmiana["plik"])
+    plik.parent.mkdir(parents=True, exist_ok=True)
+    tymczasowy = plik.with_name(plik.name + ".lamadeck-tmp")
+    tymczasowy.write_text(zmiana["nowa"], encoding="utf-8")
+    if plik.exists():
+        shutil.copymode(plik, tymczasowy)
+    os.replace(tymczasowy, plik)
+
+
+def roznica_zmiany(zmiana):
+    # WHAT: podgląd zmiany dla użytkownika (unified diff; nowy plik - cała treść z "+").
+    import difflib
+    stara = (zmiana["stara"] or "").splitlines(keepends=True)
+    nowa = zmiana["nowa"].splitlines(keepends=True)
+    return "".join(difflib.unified_diff(stara, nowa, fromfile=zmiana["sciezka"], tofile=zmiana["sciezka"]))
+
+
 # --- Zapisane rozmowy czatu ---
 # WHAT: każda rozmowa to jeden plik JSON w ~/.local/share/LamaDeck/czaty/,
 #       zapisywany po każdej odpowiedzi.
@@ -4247,7 +4574,7 @@ def _zapisz_plik_rozmowy(id_rozmowy, dane):
     os.replace(tymczasowy, plik)
 
 
-def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host, tytul_wlasny=None):
+def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host, tytul_wlasny=None, katalog=None):
     # WHAT: zapis rozmowy do pliku; zwraca wpis do listy rozmów (bez treści wiadomości).
     # WHY:  tytuł nadany przez użytkownika (tytul_wlasny) wygrywa z tym z pierwszego pytania
     #       i nie nadpisuje się przy kolejnych odpowiedziach.
@@ -4255,6 +4582,8 @@ def zapisz_rozmowe(id_rozmowy, utworzono, wiadomosci, model, host, tytul_wlasny=
             "tytul_wlasny": bool(tytul_wlasny), "utworzono": utworzono,
             "zmieniono": time.time(), "model": model, "host": host,
             "wiadomosci": _wiadomosci_do_zapisu(wiadomosci)}
+    if katalog:
+        dane["katalog"] = katalog  # WHY: po otwarciu rozmowy wraca też katalog roboczy
     _zapisz_plik_rozmowy(id_rozmowy, dane)
     return _wpis_listy_rozmow(id_rozmowy, dane)
 
@@ -4287,6 +4616,8 @@ def rozmowa_do_markdown(dane):
                     linie.append(f"- {_('Zdjęcie') if z['typ'] == 'obraz' else _('Plik')}: {z['nazwa']}")
         elif w["rola"] == "assistant":
             linie += [f"## {w.get('kto', '')}", "", _rozdziel_myslenie(w.get("tresc", ""))[1]]
+            if w.get("narzedzia"):
+                linie += [""] + [f"- *{opis_kroku(k)}*" for k in w["narzedzia"]]
             if w.get("zrodla_www"):
                 linie += ["", f"**{_('Źródła:')}**"]
                 linie += [f"{nr}. [{z['tytul']}]({z['url']})" for nr, z in enumerate(w["zrodla_www"], 1)]
@@ -4336,6 +4667,105 @@ def _rozdziel_myslenie(tresc):
         return reszta, ""  # WHY: model wciąż myśli - odpowiedzi jeszcze nie ma
     myslenie, odpowiedz = reszta.split("</think>", 1)
     return myslenie, odpowiedz.lstrip()
+
+
+class _PodswietlRoznice(QSyntaxHighlighter):
+    """Kolory linii podglądu zmian: dodane, usunięte, nagłówki fragmentów."""
+
+    def __init__(self, widok):
+        super().__init__(widok.document())
+        self.widok = widok
+
+    def highlightBlock(self, tekst):
+        if tekst.startswith(("+++", "---")):
+            kolor = self.widok.kolorNaglowka
+        elif tekst.startswith("@@"):
+            kolor = self.widok.kolorNaglowka
+        elif tekst.startswith("+"):
+            kolor = self.widok.kolorDodane
+        elif tekst.startswith("-"):
+            kolor = self.widok.kolorUsuniete
+        else:
+            return
+        f = QTextCharFormat()
+        f.setForeground(kolor)
+        self.setFormat(0, len(tekst), f)
+
+
+class WidokRoznicy(QPlainTextEdit):
+    """Podgląd zmiany pliku (unified diff); kolory z theme.qss (qproperty)."""
+    kolorDodane = _wlasciwosc_koloru("kolorDodane", "#5fd38d")
+    kolorUsuniete = _wlasciwosc_koloru("kolorUsuniete", "#f47c84")
+    kolorNaglowka = _wlasciwosc_koloru("kolorNaglowka", "#3daee9")
+
+    def __init__(self, tekst):
+        self._kolory = {}
+        super().__init__()
+        self.setObjectName("log")
+        self.setReadOnly(True)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._podswietlenie = _PodswietlRoznice(self)
+        self.setPlainText(tekst)
+
+    def showEvent(self, zdarzenie):
+        # WHY: kolory z QSS są znane dopiero po nałożeniu stylu - koloruj jeszcze raz
+        super().showEvent(zdarzenie)
+        # WHY: bez ligatur JetBrains Mono - "---" i "+++" diffu zlewały się w jedną kreskę
+        #      (jak w kodzie czatu, _styl_kodu); po nałożeniu stylu, bo QSS ustawia czcionkę
+        czcionka = self.font()
+        czcionka.setStyleStrategy(QFont.StyleStrategy.PreferNoShaping)
+        self.setFont(czcionka)
+        self._podswietlenie.rehighlight()
+
+
+class DialogZmianyPliku(QDialog):
+    """Model chce zapisać plik w katalogu roboczym - podgląd zmian i decyzja użytkownika.
+
+    WHY: model nigdy nie zapisuje sam. Zgoda może dotyczyć jednego zapisu, całej sesji
+         (do zamknięcia programu) albo na stałe tego katalogu - prośba użytkownika, żeby nie
+         akceptować co chwilę (self.wybor: "raz" / "sesja" / "zawsze" / None = odrzucono).
+    """
+
+    def __init__(self, zmiana, katalog, parent=None):
+        super().__init__(parent)
+        self.wybor = None
+        nowy = zmiana["stara"] is None
+        self.setWindowTitle(_("Model chce utworzyć plik") if nowy else _("Model chce zmienić plik"))
+        self.resize(900, 620)
+        uk = QVBoxLayout(self)
+        uk.setSpacing(10)
+        naglowek = _etykieta((_("Nowy plik: {sciezka}") if nowy else _("Zmiana pliku: {sciezka}")).format(
+            sciezka=zmiana["sciezka"]), "h3")
+        uk.addWidget(naglowek)
+        opis = _etykieta(_("Katalog roboczy: {katalog}").format(
+            katalog=str(katalog).replace(str(Path.home()), "~", 1)), "muted")
+        uk.addWidget(opis)
+        uk.addWidget(WidokRoznicy(roznica_zmiany(zmiana)), 1)
+        przyciski = QHBoxLayout()
+        odrzuc = QPushButton(_("Odrzuć"))
+        odrzuc.setObjectName("danger")
+        odrzuc.clicked.connect(self.reject)
+        przyciski.addWidget(odrzuc)
+        przyciski.addStretch(1)
+        for tekst, wybor, dymek in (
+                (_("Zezwalaj zawsze dla tego katalogu"), "zawsze",
+                 _("Kolejne zapisy w tym katalogu bez pytania - także po ponownym uruchomieniu programu. "
+                   "Cofniesz to przyciskiem \"Pytaj znowu\" przy katalogu.")),
+                (_("Zezwalaj w tej sesji"), "sesja",
+                 _("Kolejne zapisy w tym katalogu bez pytania, dopóki nie zamkniesz programu.")),
+                (_("Zapisz"), "raz", _("Tylko ta jedna zmiana."))):
+            btn = QPushButton(tekst)
+            btn.setToolTip(dymek)
+            if wybor == "raz":
+                btn.setObjectName("primary")
+                btn.setDefault(True)
+            btn.clicked.connect(lambda _c=False, w=wybor: self._wybierz(w))
+            przyciski.addWidget(btn)
+        uk.addLayout(przyciski)
+
+    def _wybierz(self, wybor):
+        self.wybor = wybor
+        self.accept()
 
 
 class WidokCzatu(QTextBrowser):
@@ -4549,6 +4979,12 @@ class WidokCzatu(QTextBrowser):
         if myslenie and self.pokaz_myslenie:
             c.insertText(_("Rozumowanie modelu") + "\n", self._znaki(self.kolorWyciszony, gruby=True))
             c.insertText(myslenie + "\n\n", self._znaki(self.kolorWyciszony, kursywa=True))
+        # WHAT: kroki pracy na plikach (katalog roboczy) - widać, co model przeczytał i zmienił
+        if w.get("narzedzia"):
+            for krok in w["narzedzia"]:
+                kolor = self.kolorBledu if krok.get("stan") in ("blad", "odrzucono") else self.kolorWyciszony
+                c.insertText("› " + opis_kroku(krok) + "\n", self._znaki(kolor, kursywa=True))
+            c.insertText("\n")
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
             # WHAT: pod odpowiedzią - klikalne źródła z wyszukiwania (numery jak w odpowiedzi)
@@ -4714,6 +5150,7 @@ _IKONY_SVG = {
     "szukaj": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
     "edytuj": '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    "folder": '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
     "internet": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     "spinacz": '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -5852,6 +6289,8 @@ class MainWindow(QMainWindow):
         self._zalaczniki = []           # WHY: pliki czekające na wysłanie z następną wiadomością
         self._linki_nieudane = set()    # WHY: linki z pytania, których strony nie dało się pobrać
         self._szukaj_w_internecie = False  # WHY: przycisk z globusem w czacie - przeżywa przebudowę okna
+        self._katalog_roboczy = None    # WHY: katalog, w którym model czatu może czytać i zapisywać pliki
+        self._katalogi_sesji = set()    # WHY: katalogi z zapisem bez pytania do zamknięcia programu
         self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
         self._czat_utworzono = None
@@ -8310,6 +8749,30 @@ class MainWindow(QMainWindow):
         self.rzad_zalacznikow = QHBoxLayout()
         self.rzad_zalacznikow.setSpacing(6)
         uk.addLayout(self.rzad_zalacznikow)
+        # WHAT: wybrany katalog roboczy - ścieżka, czy zapis idzie bez pytania, "Pytaj znowu", odpięcie.
+        self.ramka_katalogu = QFrame()
+        self.ramka_katalogu.setObjectName("chatChip")
+        h = QHBoxLayout(self.ramka_katalogu)
+        h.setContentsMargins(10, 4, 4, 4)
+        h.setSpacing(8)
+        ikona_katalogu = QLabel()
+        ikona_katalogu.setPixmap(ikona("folder", PALETA.wyciszony, rozmiar=16, grubosc=1.8).pixmap(16, 16))
+        h.addWidget(ikona_katalogu)
+        self.lbl_katalog = QLabel()
+        h.addWidget(self.lbl_katalog, 1)
+        self.btn_katalog_pytaj = QPushButton(_("Pytaj znowu"))
+        self.btn_katalog_pytaj.setObjectName("link")
+        self.btn_katalog_pytaj.setToolTip(_("Cofnij zgodę na zapis bez pytania w tym katalogu"))
+        self.btn_katalog_pytaj.clicked.connect(self._pytaj_znowu_o_zapis)
+        h.addWidget(self.btn_katalog_pytaj)
+        odepnij = QPushButton()
+        odepnij.setObjectName("iconButton")
+        odepnij.setIcon(ikona("zamknij", PALETA.wyciszony, rozmiar=14, grubosc=2))
+        odepnij.setFixedSize(24, 24)
+        odepnij.setToolTip(_("Zakończ pracę na plikach w tym katalogu"))
+        odepnij.clicked.connect(lambda: self._ustaw_katalog_roboczy(None))
+        h.addWidget(odepnij)
+        uk.addWidget(self.ramka_katalogu)
         wpis = QHBoxLayout()
         wpis.setSpacing(10)
         self.btn_czat_zalacz = QPushButton()
@@ -8335,6 +8798,19 @@ class MainWindow(QMainWindow):
         self.btn_czat_internet.toggled.connect(self._przelacz_szukanie_w_internecie)
         wpis.addWidget(self.btn_czat_internet)
         self._odswiez_przycisk_internetu()
+        # WHAT: katalog roboczy - model czyta i (za zgodą) zapisuje pliki w wybranym folderze.
+        self.btn_czat_katalog = QPushButton()
+        self.btn_czat_katalog.setObjectName("attachButton")
+        self.btn_czat_katalog.setCheckable(True)
+        self.btn_czat_katalog.setIcon(ikona("folder", PALETA.tekst, rozmiar=20, grubosc=1.8))
+        self.btn_czat_katalog.setIconSize(QSize(20, 20))
+        self.btn_czat_katalog.setFixedSize(48, 76)
+        self.btn_czat_katalog.setToolTip(_(
+            "Katalog roboczy: model może przeglądać i czytać pliki w wybranym folderze, a zapisywać je "
+            "tylko po Twojej zgodzie. Wymaga modelu z tagiem \"narzędzia\"."))
+        self.btn_czat_katalog.clicked.connect(self._wybierz_katalog_roboczy)
+        wpis.addWidget(self.btn_czat_katalog)
+        self._odswiez_katalog_roboczy()
         self.pole_czat = QPlainTextEdit()
         self.pole_czat.setObjectName("chatInput")
         self.pole_czat.setPlaceholderText(_("Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)"))
@@ -8944,7 +9420,8 @@ class MainWindow(QMainWindow):
         model, host = self._wybrany_model_czatu()
         try:
             wpis = zapisz_rozmowe(self._czat_id, self._czat_utworzono, self._czat,
-                                  model["nazwa"] if model else "", host["adres"] if host else "", self._czat_tytul)
+                                  model["nazwa"] if model else "", host["adres"] if host else "", self._czat_tytul,
+                                  self._katalog_roboczy)
         except OSError as e:
             self._uwaga_czatu(_("Nie udało się zapisać rozmowy: {blad}").format(blad=e), "warn")
             return
@@ -8970,6 +9447,9 @@ class MainWindow(QMainWindow):
         self._czat_utworzono = dane.get("utworzono") or time.time()
         self._czat_tytul = dane.get("tytul") if dane.get("tytul_wlasny") else None
         self._uwaga_czatu("")
+        # WHY: katalog roboczy wraca razem z rozmową - o ile nadal istnieje
+        katalog = dane.get("katalog")
+        self._ustaw_katalog_roboczy(katalog if katalog and Path(katalog).is_dir() else None)
         # WHY: dalej rozmawiamy tym samym modelem - o ile jest jeszcze na liście
         indeks = self.combo_czat_model.findData(f"{dane.get('host', '')}|{dane.get('model', '')}")
         if indeks >= 0:
@@ -9092,6 +9572,8 @@ class MainWindow(QMainWindow):
                                 "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
                               "warn")
             return
+        if not self._sprawdz_narzedzia(model):
+            return
         self._czat.append({"rola": "user", "tresc": tekst, "zalaczniki": list(self._zalaczniki)})
         self._zalaczniki = []
         self._linki_nieudane = set()
@@ -9135,7 +9617,7 @@ class MainWindow(QMainWindow):
         if dokumenty:
             self._czat[-1]["szuka"] = True
         worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model),
-                            wyszukiwanie)
+                            wyszukiwanie, self._katalog_roboczy)
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
@@ -9143,6 +9625,8 @@ class MainWindow(QMainWindow):
         worker.zrodla.connect(self._czat_zrodla)
         worker.etap.connect(self._czat_etap)
         worker.zrodla_www.connect(self._czat_zrodla_www)
+        worker.narzedzie.connect(self._czat_narzedzie)
+        worker.prosba_zapisu.connect(self._czat_prosba_zapisu)
         worker.zakonczono.connect(self._czat_koniec)
         # WHY: co sekundę odświeżamy licznik czekania, dopóki nie przyjdzie pierwsze słowo
         if not hasattr(self, "_czat_zegar"):
@@ -9169,6 +9653,8 @@ class MainWindow(QMainWindow):
                 self._uwaga_czatu(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
                                     "(np. gemma3, qwen2.5vl, llava).").format(
                                         model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
+                return
+            if not self._sprawdz_narzedzia(model):
                 return
             self._czat.pop()
             self._uwaga_czatu("")
@@ -9238,6 +9724,91 @@ class MainWindow(QMainWindow):
             self._czat[-1]["szuka"] = False
             self._czat[-1]["zrodla"] = zrodla
             self._czat_odswiez_ostatnia()
+
+    # --- katalog roboczy (narzędzia do plików) ---------------------------------
+    def _wybierz_katalog_roboczy(self):
+        # WHY: przycisk nie zmienia stanu sam - zaznaczenie pokazuje tylko, czy katalog jest wybrany
+        self.btn_czat_katalog.setChecked(bool(self._katalog_roboczy))
+        start = self._katalog_roboczy or str(Path.home())
+        katalog = QFileDialog.getExistingDirectory(self, _("Katalog roboczy dla czatu"), start)
+        if katalog:
+            self._ustaw_katalog_roboczy(katalog)
+
+    def _ustaw_katalog_roboczy(self, katalog):
+        self._katalog_roboczy = katalog
+        self._odswiez_katalog_roboczy()
+        if katalog:
+            model, _host = self._wybrany_model_czatu()
+            if model and "tools" not in model.get("mozliwosci", []):
+                self._uwaga_czatu(_("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model "
+                                    "z tagiem \"narzędzia\" (np. qwen3, gemma4).").format(
+                                        model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
+
+    @staticmethod
+    def _katalogi_zawsze():
+        wartosc = _ustawienia().value("czat/katalogi_zaufane", [])
+        return [wartosc] if isinstance(wartosc, str) else list(wartosc or [])
+
+    def _zapis_bez_pytania(self, katalog):
+        return katalog in self._katalogi_sesji or katalog in self._katalogi_zawsze()
+
+    def _pytaj_znowu_o_zapis(self):
+        katalog = self._katalog_roboczy
+        self._katalogi_sesji.discard(katalog)
+        _ustawienia().setValue("czat/katalogi_zaufane", [k for k in self._katalogi_zawsze() if k != katalog])
+        self._odswiez_katalog_roboczy()
+        self.wpis_log(_("Zapis w katalogu {katalog} znów wymaga Twojej zgody.").format(katalog=katalog))
+
+    def _odswiez_katalog_roboczy(self):
+        if not hasattr(self, "ramka_katalogu"):
+            return
+        katalog = self._katalog_roboczy
+        self.btn_czat_katalog.setChecked(bool(katalog))
+        self.ramka_katalogu.setVisible(bool(katalog))
+        if not katalog:
+            return
+        krotko = katalog.replace(str(Path.home()), "~", 1)
+        if katalog in self._katalogi_zawsze():
+            zapis = _("zapis bez pytania (zawsze)")
+        elif katalog in self._katalogi_sesji:
+            zapis = _("zapis bez pytania (do zamknięcia programu)")
+        else:
+            zapis = _("zapis po Twojej zgodzie")
+        self.lbl_katalog.setText(_("Katalog roboczy: {katalog} · {zapis}").format(katalog=krotko, zapis=zapis))
+        self.btn_katalog_pytaj.setVisible(self._zapis_bez_pytania(katalog))
+
+    def _sprawdz_narzedzia(self, model):
+        # WHAT: z katalogiem roboczym tylko modele z możliwością "tools" - inne i tak by go nie użyły.
+        if self._katalog_roboczy and "tools" not in model.get("mozliwosci", []):
+            self._uwaga_czatu(_("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model "
+                                "z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.").format(
+                                    model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
+            return False
+        return True
+
+    def _czat_narzedzie(self, krok):
+        if self.sender() is self._czat_worker and self._czat:
+            self._czat[-1].setdefault("narzedzia", []).append(krok)
+            self._czat_odswiez_ostatnia()
+
+    def _czat_prosba_zapisu(self, zmiana):
+        # WHAT: model chce zapisać plik - zgoda zapamiętana dla katalogu albo okienko z podglądem.
+        worker = self.sender()
+        if worker is not self._czat_worker:
+            return
+        katalog = self._katalog_roboczy
+        if self._zapis_bez_pytania(katalog):
+            worker.odpowiedz_na_zapis(True)
+            return
+        dialog = DialogZmianyPliku(zmiana, katalog, self)
+        dialog.exec()
+        if dialog.wybor == "sesja":
+            self._katalogi_sesji.add(katalog)
+        elif dialog.wybor == "zawsze":
+            _ustawienia().setValue("czat/katalogi_zaufane", self._katalogi_zawsze() + [katalog])
+        if dialog.wybor in ("sesja", "zawsze"):
+            self._odswiez_katalog_roboczy()
+        worker.odpowiedz_na_zapis(dialog.wybor is not None)
 
     def _czat_etap(self, tekst):
         if self.sender() is self._czat_worker and self._czat:

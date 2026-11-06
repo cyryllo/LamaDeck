@@ -16,7 +16,7 @@ everything runs on your LAN.
 **New here? The [user guide](docs/GUIDE.md) shows every screen with screenshots — what each feature
 does and how to turn it on** (also on the [project page](https://cyryllo.github.io/LamaDeck/guide/)).
 
-> **Status: 1.0 — feature-complete.** Daily driver on my own setup. From here on the project
+> **Status: 1.1 — feature-complete.** Daily driver on my own setup. From here on the project
 > gets bug fixes only (see [Roadmap](#roadmap)). [Bug reports and feedback](../../issues) are
 > welcome. Project page: https://cyryllo.github.io/LamaDeck/
 
@@ -198,6 +198,10 @@ fonts are bundled, so it looks the same everywhere).
   calling needed. Results come from **SearXNG** — installed with one click on this computer, no
   account — or your own SearXNG server, or Ollama's web search (free ollama.com account). Off by
   default: queries go to the internet only when you switch it on
+- **Working folder**: the folder button lets the model browse, read and search the files of a
+  folder you choose and change them — every write shows a preview of the change and needs your
+  approval (once, for the session, or always for that folder). The model can't leave the folder,
+  delete files or run commands. Needs a model tagged *tools* (qwen3, gemma4…)
 - **Links in a question**: paste a link and the app downloads the page itself — straight from
   your computer, no account — and adds its text to the question (a PDF link works too; long
   pages go through excerpt search). Pages that only load with JavaScript are reported as such
@@ -264,6 +268,7 @@ fonts are bundled, so it looks the same everywhere).
   Markdown export
 - [x] **Web search in the chat** with sources (SearXNG or Ollama's web search)
 - [x] Packages: own APT repository, `.deb`, AppImage
+- [x] **1.1 — working folder in the chat**: the model works with your files, every change approved
 
 **From now on: bug fixes only.** The app covers what it set out to do; anything bigger (user
 accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.

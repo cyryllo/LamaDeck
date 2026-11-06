@@ -12,7 +12,7 @@ wszystko działa lokalnie, w Twoim LAN.
 > z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
 > przenosi przy pierwszym uruchomieniu.
 
-> **Status: 1.0 — wersja kompletna.** Używam jej na co dzień na własnym sprzęcie. Od teraz
+> **Status: 1.1 — wersja kompletna.** Używam jej na co dzień na własnym sprzęcie. Od teraz
 > projekt dostaje już tylko poprawki błędów (patrz [Plan](#plan)). [Zgłoszenia błędów i
 > uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
@@ -197,6 +197,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   bez wywoływania narzędzi. Wyniki z **SearXNG** — instalowanego jednym kliknięciem na tym
   komputerze, bez konta — z własnego serwera SearXNG albo z wyszukiwarki Ollamy (darmowe konto na
   ollama.com). Domyślnie wyłączone: zapytania wychodzą do internetu tylko, gdy je włączysz
+- **Katalog roboczy**: przycisk z folderem pozwala modelowi przeglądać, czytać i przeszukiwać pliki
+  wybranego katalogu oraz je zmieniać — każdy zapis pokazuje podgląd zmian i wymaga Twojej zgody
+  (raz, na sesję albo zawsze dla tego katalogu). Model nie wyjdzie poza katalog, nie usuwa plików
+  i nie uruchamia poleceń. Potrzebny model z tagiem *narzędzia* (qwen3, gemma4…)
 - **Linki w pytaniu**: wklejasz link, a program sam pobiera stronę — wprost z Twojego komputera,
   bez konta — i dołącza jej tekst do pytania (link do PDF też działa; długie strony idą przez
   wyszukiwanie fragmentów). Strony, które wczytują się dopiero w JavaScripcie, program zgłasza
@@ -263,6 +267,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   i poprawianie, kopiowanie i eksport do Markdown
 - [x] **Wyszukiwanie w internecie w czacie** ze źródłami (SearXNG albo wyszukiwarka Ollamy)
 - [x] Pakiety: własne repozytorium APT, `.deb`, AppImage
+- [x] **1.1 — katalog roboczy w czacie**: model pracuje na Twoich plikach, każda zmiana za zgodą
 
 **Od teraz: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe (konta
 użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.

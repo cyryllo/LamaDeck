@@ -146,6 +146,27 @@ ekranu:
 Model pisze 1–3 zapytania, LamaDeck czyta do 5 stron, wybiera fragmenty pasujące do pytania,
 a odpowiedź ma pod spodem listę klikalnych źródeł. W dymku widać, co program właśnie robi.
 
+**Katalog roboczy** — model pracuje na Twoich plikach (potrzebny model z tagiem *narzędzia*,
+np. qwen3 albo gemma4):
+
+1. Kliknij przycisk z **folderem** obok globusa i wybierz katalog (np. projekt). Pasek nad polem
+   wiadomości go pokazuje; ✕ na nim kończy pracę w katalogu.
+2. Zapytaj, np. „co robi ten projekt?” albo „dopisz opis funkcji suma() w app.py”. Model sam
+   przegląda katalog, czyta i przeszukuje pliki; każdy krok widać w odpowiedzi („› przeczytał plik:
+   app.py”).
+3. **Każdy zapis wymaga Twojej zgody.** Okienko pokazuje dokładnie, co się zmieni (dodane linie na
+   zielono, usunięte na czerwono):
+
+![Zatwierdzanie zmiany](img/pl/zapis.png)
+
+- **Zapisz** — tylko ta zmiana; **Zezwalaj w tej sesji** — kolejne zapisy w tym katalogu bez
+  pytania do zamknięcia LamaDeck; **Zezwalaj zawsze dla tego katalogu** — zapamiętane dla tego
+  projektu (cofniesz przyciskiem **Pytaj znowu** na pasku katalogu); **Odrzuć** — plik zostaje bez
+  zmian.
+- Model nie wyjdzie poza wybrany katalog (także przez `..` ani link), nie usuwa plików i nie
+  uruchamia poleceń. Na jedno pytanie ma najwyżej 25 kroków.
+- Katalog zapisuje się razem z rozmową i wraca, gdy ją otworzysz.
+
 **Rozmowy** zapisują się same po każdej odpowiedzi (tylko na tym komputerze). Lista po lewej je
 otwiera i przeszukuje tytuły oraz treść. Prawy klik na rozmowie: **Zmień nazwę** (też dwuklik
 albo F2), **Eksportuj do Markdown** albo **Usuń rozmowę**.

@@ -589,6 +589,12 @@ WidokCzatu {
     qproperty-tloModelu: #2c3138;
     qproperty-tloKodu: #15181b;
 }
+/* Czat - podgląd zmiany pliku w katalogu roboczym (DialogZmianyPliku) */
+WidokRoznicy {
+    qproperty-kolorDodane: #5fd38d;
+    qproperty-kolorUsuniete: #f47c84;
+    qproperty-kolorNaglowka: #3daee9;
+}
 QPlainTextEdit#chatInput { padding: 8px 10px; font-size: 10.5pt; }
 QPlainTextEdit#chatInput:focus { border-color: #3daee9; }
 /* Załączniki czatu: przycisk ze spinaczem, "chipy" z nazwami, uwaga nad polem */
