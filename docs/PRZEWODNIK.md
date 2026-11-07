@@ -180,8 +180,17 @@ co się zmieni (dodane linie na zielono, usunięte na czerwono):
 - **Zapisz** — tylko ta zmiana.
 - **Zezwalaj w tej sesji** — kolejne zapisy w tym katalogu bez pytania, do zamknięcia LamaDeck.
 - **Zezwalaj zawsze dla tego katalogu** — zapamiętane dla tego projektu, także po ponownym
-  uruchomieniu. **Pytaj znowu** na pasku katalogu to cofa.
+  uruchomieniu.
 - **Odrzuć** — plik zostaje bez zmian, a model dostaje informację, żeby jej nie powtarzał.
+
+**Jak często pytać — dla wszystkich katalogów i dla projektu:**
+
+- *Ustawienia → Czat → Zapis w katalogu roboczym* ustawia zachowanie dla każdego nowego katalogu:
+  **Pytaj za każdym razem** (domyślnie), **Pytaj raz na sesję** (pierwsza zgoda przepuszcza kolejne
+  zapisy do zamknięcia LamaDeck) albo **Zezwalaj zawsze**.
+- Konkretny projekt może mieć własny wybór: kliknij **Zapis: … ▾** na pasku katalogu i wybierz
+  jedną z tych samych opcji albo **Jak w Ustawieniach**. Wybór projektu wygrywa z domyślnym — możesz
+  więc np. wszędzie zezwalać, a w jednym ważnym projekcie dalej pytać.
 
 **Warto wiedzieć:**
 
@@ -249,7 +258,8 @@ zalogowaniu).
   [Zasobnik systemowy](#zasobnik-systemowy).
 - **Wersje i aktualizacje** — **Sprawdź aktualizacje** dla Ollamy, LiteLLM, Open WebUI i SearXNG.
   Nic nie aktualizuje się samo.
-- **Czat** — model do wyszukiwania w dużych plikach i źródło wyszukiwania w internecie (patrz
+- **Czat** — model do wyszukiwania w dużych plikach, domyślne uprawnienie zapisu w katalogu
+  roboczym (patrz [Katalog roboczy](#katalog-roboczy)) i źródło wyszukiwania w internecie (patrz
   [Czat](#czat)):
 
 ![Ustawienia czatu](img/pl/ustawienia-czat.png)

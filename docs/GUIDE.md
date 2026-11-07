@@ -181,9 +181,17 @@ you to pick one that can.
 - **Save** — only this change.
 - **Allow for this session** — further writes in this folder without asking, until you close
   LamaDeck.
-- **Always allow for this folder** — remembered for this project, also after a restart. **Ask
-  again** on the folder bar takes it back.
+- **Always allow for this folder** — remembered for this project, also after a restart.
 - **Reject** — the file stays as it was, and the model is told not to repeat the change.
+
+**How much to ask — for all folders and per project:**
+
+- *Settings → Chat → Writing in the working folder* sets the default for every new folder:
+  **Ask every time** (the default), **Ask once per session** (the first approval lets further
+  writes through until you close LamaDeck) or **Always allow**.
+- A particular project can have its own choice: click **Writing: … ▾** on the folder bar and pick
+  one of the same options, or **As in Settings**. The project's choice wins over the default — so
+  you can, say, always allow everywhere but keep asking in one important project.
 
 **Good to know:**
 
@@ -250,7 +258,8 @@ log in again).
 - **System tray icon** and **Start the program after login** — see [System tray](#system-tray).
 - **Versions and updates** — **Check for updates** for Ollama, LiteLLM, Open WebUI and SearXNG.
   Nothing updates by itself.
-- **Chat** — the model for searching large files and the web search source (see [Chat](#chat)):
+- **Chat** — the model for searching large files, the default write permission in the working
+  folder (see [Working folder](#working-folder)) and the web search source (see [Chat](#chat)):
 
 ![Chat settings](img/en/ustawienia-czat.png)
 

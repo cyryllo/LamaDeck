@@ -4337,6 +4337,46 @@ NARZEDZIA_KATALOGU = [
 ]
 
 
+# WHAT: uprawnienia zapisu w katalogu roboczym: "pytaj" (za każdym razem), "sesja" (pierwsza zgoda
+#       otwiera zapis bez pytania do zamknięcia programu), "zawsze" (bez pytania).
+# WHY:  prośba użytkownika - domyślne zachowanie w Ustawieniach, a dla konkretnego projektu własny
+#       wybór, który wygrywa z domyślnym (np. "pytaj" w jednym projekcie przy domyślnym "zawsze").
+TRYBY_ZAPISU = ["pytaj", "sesja", "zawsze"]
+
+
+def tryb_zapisu_domyslny():
+    tryb = _ustawienia().value("czat/zapis_domyslny", "pytaj")
+    return tryb if tryb in TRYBY_ZAPISU else "pytaj"
+
+
+def tryby_zapisu_katalogow():
+    # WHAT: {katalog: tryb} - wybory dla projektów (QSettings czat/zapis_katalogow, JSON).
+    # WHY:  JSON zamiast listy QSettings - słownik ścieżek z ukośnikami QSettings zamieniałby na grupy.
+    ustawienia = _ustawienia()
+    try:
+        tryby = json.loads(ustawienia.value("czat/zapis_katalogow", "") or "{}")
+    except ValueError:
+        tryby = {}
+    # WHY: przeniesienie zgód "zawsze" z 1.1.0-1.1.3 (lista czat/katalogi_zaufane)
+    stare = ustawienia.value("czat/katalogi_zaufane", None)
+    if stare:
+        for katalog in ([stare] if isinstance(stare, str) else list(stare)):
+            tryby.setdefault(katalog, "zawsze")
+        ustawienia.setValue("czat/zapis_katalogow", json.dumps(tryby))
+        ustawienia.remove("czat/katalogi_zaufane")
+    return {k: v for k, v in tryby.items() if v in TRYBY_ZAPISU}
+
+
+def ustaw_tryb_zapisu_katalogu(katalog, tryb):
+    # WHAT: wybór dla projektu; None = jak w Ustawieniach (wpis znika).
+    tryby = tryby_zapisu_katalogow()
+    if tryb is None:
+        tryby.pop(katalog, None)
+    else:
+        tryby[katalog] = tryb
+    _ustawienia().setValue("czat/zapis_katalogow", json.dumps(tryby))
+
+
 def opis_kroku(krok):
     # WHAT: krok pracy modelu na plikach jako krótki tekst dla człowieka ("przeczytał plik: a.py").
     # WHY:  tłumaczony przy wyświetlaniu - zapisana rozmowa przeżywa zmianę języka.
@@ -4771,7 +4811,7 @@ class DialogZmianyPliku(QDialog):
         for tekst, wybor, dymek in (
                 (_("Zezwalaj zawsze dla tego katalogu"), "zawsze",
                  _("Kolejne zapisy w tym katalogu bez pytania - także po ponownym uruchomieniu programu. "
-                   "Cofniesz to przyciskiem \"Pytaj znowu\" przy katalogu.")),
+                   "Zmienisz to na pasku katalogu w czacie (\"Zapis: ...\").")),
                 (_("Zezwalaj w tej sesji"), "sesja",
                  _("Kolejne zapisy w tym katalogu bez pytania, dopóki nie zamkniesz programu.")),
                 (_("Zapisz"), "raz", _("Tylko ta jedna zmiana."))):
@@ -8795,11 +8835,12 @@ class MainWindow(QMainWindow):
         h.addWidget(ikona_katalogu)
         self.lbl_katalog = QLabel()
         h.addWidget(self.lbl_katalog, 1)
-        self.btn_katalog_pytaj = QPushButton(_("Pytaj znowu"))
-        self.btn_katalog_pytaj.setObjectName("link")
-        self.btn_katalog_pytaj.setToolTip(_("Cofnij zgodę na zapis bez pytania w tym katalogu"))
-        self.btn_katalog_pytaj.clicked.connect(self._pytaj_znowu_o_zapis)
-        h.addWidget(self.btn_katalog_pytaj)
+        # WHAT: "Zapis: ..." - menu z uprawnieniem dla TEGO katalogu (wygrywa z domyślnym z Ustawień)
+        self.btn_katalog_zapis = QPushButton()
+        self.btn_katalog_zapis.setObjectName("link")
+        self.btn_katalog_zapis.setToolTip(_("Jak model ma zapisywać pliki w tym katalogu"))
+        self.btn_katalog_zapis.clicked.connect(self._menu_zapisu_katalogu)
+        h.addWidget(self.btn_katalog_zapis)
         odepnij = QPushButton()
         odepnij.setObjectName("iconButton")
         odepnij.setIcon(ikona("zamknij", PALETA.wyciszony, rozmiar=14, grubosc=2))
@@ -9780,19 +9821,53 @@ class MainWindow(QMainWindow):
                                         model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
 
     @staticmethod
-    def _katalogi_zawsze():
-        wartosc = _ustawienia().value("czat/katalogi_zaufane", [])
-        return [wartosc] if isinstance(wartosc, str) else list(wartosc or [])
+    def _nazwa_trybu_zapisu(tryb):
+        return {"pytaj": _("Pytaj za każdym razem"), "sesja": _("Pytaj raz na sesję"),
+                "zawsze": _("Zezwalaj zawsze")}[tryb]
+
+    def _tryb_zapisu(self, katalog):
+        # WHAT: (tryb, czy_wybrany_dla_katalogu) - wybór projektu albo domyślny z Ustawień.
+        wlasny = tryby_zapisu_katalogow().get(katalog)
+        return (wlasny, True) if wlasny else (tryb_zapisu_domyslny(), False)
 
     def _zapis_bez_pytania(self, katalog):
-        return katalog in self._katalogi_sesji or katalog in self._katalogi_zawsze()
+        tryb, _wlasny = self._tryb_zapisu(katalog)
+        return tryb == "zawsze" or katalog in self._katalogi_sesji
 
-    def _pytaj_znowu_o_zapis(self):
+    def _menu_zapisu_katalogu(self):
+        # WHAT: menu na pasku katalogu - "Jak w Ustawieniach" albo jeden z trzech trybów dla projektu.
         katalog = self._katalog_roboczy
-        self._katalogi_sesji.discard(katalog)
-        _ustawienia().setValue("czat/katalogi_zaufane", [k for k in self._katalogi_zawsze() if k != katalog])
+        if not katalog:
+            return
+        tryb, wlasny = self._tryb_zapisu(katalog)
+        menu = QMenu(self)
+        akcja = menu.addAction(_("Jak w Ustawieniach ({tryb})").format(
+            tryb=self._nazwa_trybu_zapisu(tryb_zapisu_domyslny()).lower()))
+        akcja.setCheckable(True)
+        akcja.setChecked(not wlasny)
+        akcja.triggered.connect(lambda: self._ustaw_zapis_katalogu(None))
+        menu.addSeparator()
+        for kod in TRYBY_ZAPISU:
+            akcja = menu.addAction(self._nazwa_trybu_zapisu(kod))
+            akcja.setCheckable(True)
+            akcja.setChecked(wlasny and tryb == kod)
+            akcja.triggered.connect(lambda _c=False, k=kod: self._ustaw_zapis_katalogu(k))
+        menu.exec(self.btn_katalog_zapis.mapToGlobal(self.btn_katalog_zapis.rect().bottomLeft()))
+
+    def _zmiana_zapisu_domyslnego(self, _indeks=None):
+        tryb = self.combo_zapis_domyslny.currentData()
+        _ustawienia().setValue("czat/zapis_domyslny", tryb)
         self._odswiez_katalog_roboczy()
-        self.wpis_log(_("Zapis w katalogu {katalog} znów wymaga Twojej zgody.").format(katalog=katalog))
+        self.wpis_log(_("Domyślny zapis w katalogu roboczym: {tryb}.").format(tryb=self._nazwa_trybu_zapisu(tryb).lower()))
+
+    def _ustaw_zapis_katalogu(self, tryb):
+        katalog = self._katalog_roboczy
+        ustaw_tryb_zapisu_katalogu(katalog, tryb)
+        # WHY: zmiana trybu cofa zgodę z tej sesji - inaczej "Pytaj za każdym razem" dalej by nie pytało
+        self._katalogi_sesji.discard(katalog)
+        self._odswiez_katalog_roboczy()
+        opis = self._nazwa_trybu_zapisu(tryb) if tryb else _("jak w Ustawieniach")
+        self.wpis_log(_("Zapis w katalogu {katalog}: {tryb}.").format(katalog=katalog, tryb=opis.lower()))
 
     def _odswiez_katalog_roboczy(self):
         if not hasattr(self, "ramka_katalogu"):
@@ -9803,14 +9878,18 @@ class MainWindow(QMainWindow):
         if not katalog:
             return
         krotko = katalog.replace(str(Path.home()), "~", 1)
-        if katalog in self._katalogi_zawsze():
+        tryb, wlasny = self._tryb_zapisu(katalog)
+        if tryb == "zawsze":
             zapis = _("zapis bez pytania (zawsze)")
         elif katalog in self._katalogi_sesji:
             zapis = _("zapis bez pytania (do zamknięcia programu)")
+        elif tryb == "sesja":
+            zapis = _("zgoda raz na sesję")
         else:
             zapis = _("zapis po Twojej zgodzie")
         self.lbl_katalog.setText(_("Katalog roboczy: {katalog} · {zapis}").format(katalog=krotko, zapis=zapis))
-        self.btn_katalog_pytaj.setVisible(self._zapis_bez_pytania(katalog))
+        self.btn_katalog_zapis.setText(_("Zapis: {tryb} ▾").format(
+            tryb=(self._nazwa_trybu_zapisu(tryb) if wlasny else _("jak w Ustawieniach")).lower()))
 
     def _sprawdz_narzedzia(self, model):
         # WHAT: z katalogiem roboczym tylko modele z możliwością "tools" - inne i tak by go nie użyły.
@@ -9837,11 +9916,13 @@ class MainWindow(QMainWindow):
             return
         dialog = DialogZmianyPliku(zmiana, katalog, self)
         dialog.exec()
-        if dialog.wybor == "sesja":
+        tryb, _wlasny = self._tryb_zapisu(katalog)
+        # WHY: tryb "raz na sesję" - pierwsza zgoda otwiera zapis bez pytania do zamknięcia programu
+        if dialog.wybor == "sesja" or (dialog.wybor == "raz" and tryb == "sesja"):
             self._katalogi_sesji.add(katalog)
         elif dialog.wybor == "zawsze":
-            _ustawienia().setValue("czat/katalogi_zaufane", self._katalogi_zawsze() + [katalog])
-        if dialog.wybor in ("sesja", "zawsze"):
+            ustaw_tryb_zapisu_katalogu(katalog, "zawsze")
+        if dialog.wybor in ("sesja", "zawsze") or katalog in self._katalogi_sesji:
             self._odswiez_katalog_roboczy()
         worker.odpowiedz_na_zapis(dialog.wybor is not None)
 
@@ -10616,6 +10697,28 @@ class MainWindow(QMainWindow):
             "pobierz", slot=self._pobierz_model_rag)
         h.addWidget(self.btn_pobierz_rag, 0, Qt.AlignmentFlag.AlignTop)
         uk.addWidget(self.ramka_rag_brak)
+        # WHAT: domyślne uprawnienie zapisu w katalogu roboczym (projekt może mieć własne - pasek katalogu)
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(14)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel(_("Zapis w katalogu roboczym")))
+        opis = _etykieta(_("jak model ma zapisywać pliki w nowych katalogach. Dla konkretnego projektu zmienisz "
+                           "to na pasku katalogu w czacie (\"Zapis: ...\") - tamten wybór wygrywa."), "muted")
+        opis.setWordWrap(True)
+        teksty.addWidget(opis)
+        h.addLayout(teksty, 1)
+        self.combo_zapis_domyslny = QComboBox()
+        self.combo_zapis_domyslny.setMinimumWidth(320)
+        for kod in TRYBY_ZAPISU:
+            self.combo_zapis_domyslny.addItem(self._nazwa_trybu_zapisu(kod), kod)
+        self.combo_zapis_domyslny.setCurrentIndex(self.combo_zapis_domyslny.findData(tryb_zapisu_domyslny()))
+        self.combo_zapis_domyslny.currentIndexChanged.connect(self._zmiana_zapisu_domyslnego)
+        h.addWidget(self.combo_zapis_domyslny, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(wiersz)
         # WHY: wyszukiwanie w internecie to też ustawienie czatu - jedna karta (prośba użytkownika)
         self._sekcja_wyszukiwania(uk)
         v.addWidget(karta)

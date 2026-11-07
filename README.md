@@ -274,7 +274,7 @@ fonts are bundled, so it looks the same everywhere).
 
 **Next — 1.1.x, polishing the working folder:**
 
-- [ ] Default write permission for new folders in Settings (ask every time / allow for the session /
+- [x] Default write permission for new folders in Settings (ask every time / ask once per session /
   always allow), changeable per project on the folder bar
 - [ ] A list of the files the model saved under its answer — click one to preview it
 - [ ] A file preview inside the app that refreshes by itself as the model changes the file,
