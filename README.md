@@ -16,9 +16,9 @@ everything runs on your LAN.
 **New here? The [user guide](docs/GUIDE.md) shows every screen with screenshots — what each feature
 does and how to turn it on** (also on the [project page](https://cyryllo.github.io/LamaDeck/guide/)).
 
-> **Status: 1.1 — feature-complete.** Daily driver on my own setup. From here on the project
-> gets bug fixes only (see [Roadmap](#roadmap)). [Bug reports and feedback](../../issues) are
-> welcome. Project page: https://cyryllo.github.io/LamaDeck/
+> **Status: 1.1 — stable.** Daily driver on my own setup. Next: polishing the chat and its working
+> folder (1.1.x), then the same chat in your web browser (1.2) — see the [Roadmap](#roadmap).
+> [Bug reports and feedback](../../issues) are welcome. Project page: https://cyryllo.github.io/LamaDeck/
 
 ![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)
 
@@ -212,6 +212,8 @@ fonts are bundled, so it looks the same everywhere).
   pictures are saved too, large files have to be attached again to keep searching them
 - Also opens straight from the tray panel ("Open chat")
 
+![Working folder: the model adds a button to index.html](screenshots/lamadeck-folder.png)
+
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
 - Settings: open the browser after start, require login (only switchable off while there are no
@@ -259,19 +261,30 @@ fonts are bundled, so it looks the same everywhere).
 
 ## Roadmap
 
-**1.0** is the complete version. Everything planned is done:
+**Done:**
 
 - [x] Multi-host model management, LiteLLM router, Open WebUI with one click, log with plain
   explanations, tray panel, seven languages
 - [x] Built-in chat: attachments and documents, large files searched by excerpts, links in a
   question, saved conversations, context usage, thinking on/off, regenerate and edit, copy and
   Markdown export
-- [x] **Web search in the chat** with sources (SearXNG or Ollama's web search)
-- [x] Packages: own APT repository, `.deb`, AppImage
-- [x] **1.1 — working folder in the chat**: the model works with your files, every change approved
+- [x] **1.0** — web search in the chat with sources (SearXNG or Ollama's web search); own APT
+  repository, `.deb`, AppImage
+- [x] **1.1** — working folder in the chat: the model works with your files, every change approved
 
-**From now on: bug fixes only.** The app covers what it set out to do; anything bigger (user
-accounts, knowledge bases, agents, voice) is what Open WebUI is for — and it's built in.
+**Next — 1.1.x, polishing the working folder:**
+
+- [ ] Default write permission for new folders in Settings (ask every time / allow for the session /
+  always allow), changeable per project on the folder bar
+- [ ] A list of the files the model saved under its answer — click one to preview it
+- [ ] A file preview inside the app that refreshes by itself as the model changes the file,
+  including web pages (e.g. a game) shown as in a browser
+
+**Then — 1.2, the chat in your web browser:**
+
+- [ ] LamaDeck serves its chat on a port, with the same features as in the window and the same
+  saved conversations — start on the computer, continue on your phone. Only this computer by
+  default; other devices on your network only after you turn it on, with a password
 
 ## Notes
 

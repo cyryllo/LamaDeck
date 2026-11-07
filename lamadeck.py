@@ -4341,6 +4341,9 @@ def opis_kroku(krok):
     # WHAT: krok pracy modelu na plikach jako krótki tekst dla człowieka ("przeczytał plik: a.py").
     # WHY:  tłumaczony przy wyświetlaniu - zapisana rozmowa przeżywa zmianę języka.
     sciezka = krok.get("sciezka") or "."
+    # WHY: "." to dla modelu cały katalog - "przejrzał katalog: ." wyglądało jak błąd
+    if krok.get("nazwa") == "list_files" and sciezka in (".", "./") and krok.get("stan") == "ok":
+        return _("przejrzał katalog roboczy")
     if krok.get("stan") == "odrzucono":
         return _("odrzuciłeś zmianę: {sciezka}").format(sciezka=sciezka)
     if krok.get("stan") == "blad":

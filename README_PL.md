@@ -12,9 +12,9 @@ wszystko działa lokalnie, w Twoim LAN.
 > z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
 > przenosi przy pierwszym uruchomieniu.
 
-> **Status: 1.1 — wersja kompletna.** Używam jej na co dzień na własnym sprzęcie. Od teraz
-> projekt dostaje już tylko poprawki błędów (patrz [Plan](#plan)). [Zgłoszenia błędów i
-> uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
+> **Status: 1.1 — stabilna.** Używam jej na co dzień na własnym sprzęcie. Dalej: dopracowanie
+> czatu i katalogu roboczego (1.1.x), potem ten sam czat w przeglądarce (1.2) — patrz [Plan](#plan).
+> [Zgłoszenia błędów i uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
 **Pierwszy raz? [Instrukcja](docs/PRZEWODNIK.md) pokazuje każdy ekran na zrzutach — co robi każda
 funkcja i jak ją włączyć** (także na [stronie projektu](https://cyryllo.github.io/LamaDeck/pl/guide/)).
@@ -211,6 +211,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   zdjęcia też się zapisują, a duże pliki trzeba dołączyć ponownie, żeby dalej w nich szukać
 - Otwiera się też wprost z okienka zasobnika („Otwórz czat”)
 
+![Katalog roboczy: model dodaje przycisk do index.html](screenshots/lamadeck-folder_pl.png)
+
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
 - Ustawienia: otwieranie przeglądarki po starcie, wymaganie logowania (wyłączyć da się tylko,
@@ -258,19 +260,30 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 ## Plan
 
-**1.0** to wersja kompletna. Wszystko, co było zaplanowane, jest zrobione:
+**Zrobione:**
 
 - [x] Zarządzanie modelami na wielu hostach, router LiteLLM, Open WebUI jednym kliknięciem,
   dziennik z prostymi wyjaśnieniami, okienko w zasobniku, siedem języków
 - [x] Wbudowany czat: załączniki i dokumenty, duże pliki przeszukiwane fragmentami, linki
   w pytaniu, zapisywane rozmowy, zajętość kontekstu, myślenie wł./wył., ponowne generowanie
   i poprawianie, kopiowanie i eksport do Markdown
-- [x] **Wyszukiwanie w internecie w czacie** ze źródłami (SearXNG albo wyszukiwarka Ollamy)
-- [x] Pakiety: własne repozytorium APT, `.deb`, AppImage
-- [x] **1.1 — katalog roboczy w czacie**: model pracuje na Twoich plikach, każda zmiana za zgodą
+- [x] **1.0** — wyszukiwanie w internecie w czacie ze źródłami (SearXNG albo wyszukiwarka Ollamy);
+  własne repozytorium APT, `.deb`, AppImage
+- [x] **1.1** — katalog roboczy w czacie: model pracuje na Twoich plikach, każda zmiana za zgodą
 
-**Od teraz: tylko poprawki błędów.** Program robi to, do czego powstał; wszystko większe (konta
-użytkowników, bazy wiedzy, agenci, głos) to zadanie Open WebUI — a ono jest wbudowane.
+**Dalej — 1.1.x, dopracowanie katalogu roboczego:**
+
+- [ ] Domyślne uprawnienia zapisu dla nowych katalogów w Ustawieniach (pytaj za każdym razem /
+  zezwalaj w sesji / zezwalaj zawsze), do zmiany dla konkretnego projektu na pasku katalogu
+- [ ] Lista plików zapisanych przez model pod jego odpowiedzią — kliknięcie otwiera podgląd
+- [ ] Podgląd pliku w programie, który sam się odświeża, gdy model go zmienia — także strony WWW
+  (np. gra) pokazane tak jak w przeglądarce
+
+**Potem — 1.2, czat w przeglądarce:**
+
+- [ ] LamaDeck udostępnia swój czat na porcie, z tymi samymi funkcjami co w oknie i tymi samymi
+  zapisanymi rozmowami — zaczynasz na komputerze, kończysz na telefonie. Domyślnie tylko ten
+  komputer; inne urządzenia w sieci domowej dopiero po włączeniu, z hasłem
 
 ## Uwagi
 

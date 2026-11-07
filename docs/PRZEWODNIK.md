@@ -146,30 +146,54 @@ ekranu:
 Model pisze 1–3 zapytania, LamaDeck czyta do 5 stron, wybiera fragmenty pasujące do pytania,
 a odpowiedź ma pod spodem listę klikalnych źródeł. W dymku widać, co program właśnie robi.
 
-**Katalog roboczy** — model pracuje na Twoich plikach (potrzebny model z tagiem *narzędzia*,
-np. qwen3 albo gemma4):
-
-1. Kliknij przycisk z **folderem** obok globusa i wybierz katalog (np. projekt). Pasek nad polem
-   wiadomości go pokazuje; ✕ na nim kończy pracę w katalogu.
-2. Zapytaj, np. „co robi ten projekt?” albo „dopisz opis funkcji suma() w app.py”. Model sam
-   przegląda katalog, czyta i przeszukuje pliki; każdy krok widać w odpowiedzi („› przeczytał plik:
-   app.py”).
-3. **Każdy zapis wymaga Twojej zgody.** Okienko pokazuje dokładnie, co się zmieni (dodane linie na
-   zielono, usunięte na czerwono):
-
-![Zatwierdzanie zmiany](img/pl/zapis.png)
-
-- **Zapisz** — tylko ta zmiana; **Zezwalaj w tej sesji** — kolejne zapisy w tym katalogu bez
-  pytania do zamknięcia LamaDeck; **Zezwalaj zawsze dla tego katalogu** — zapamiętane dla tego
-  projektu (cofniesz przyciskiem **Pytaj znowu** na pasku katalogu); **Odrzuć** — plik zostaje bez
-  zmian.
-- Model nie wyjdzie poza wybrany katalog (także przez `..` ani link), nie usuwa plików i nie
-  uruchamia poleceń. Na jedno pytanie ma najwyżej 25 kroków.
-- Katalog zapisuje się razem z rozmową i wraca, gdy ją otworzysz.
+Przycisk z folderem obok globusa włącza **katalog roboczy** — patrz następny rozdział.
 
 **Rozmowy** zapisują się same po każdej odpowiedzi (tylko na tym komputerze). Lista po lewej je
 otwiera i przeszukuje tytuły oraz treść. Prawy klik na rozmowie: **Zmień nazwę** (też dwuklik
 albo F2), **Eksportuj do Markdown** albo **Usuń rozmowę**.
+
+## Katalog roboczy
+
+![Model pracuje na plikach w katalogu](img/pl/katalog.png)
+
+Model może pracować wprost na plikach wybranego katalogu — czytać je, przeszukiwać, tworzyć
+i zmieniać. Potrzebny jest model z tagiem *narzędzia* (qwen3, gemma4…); przy innych LamaDeck
+podpowie, żeby wybrać taki, który to umie.
+
+**Jak z tego korzystać:**
+
+1. W czacie kliknij przycisk z **folderem** obok globusa i wybierz katalog (np. projekt). Pasek nad
+   polem wiadomości go pokazuje, razem z tym, czy zapis wymaga Twojej zgody; ✕ na nim zamyka
+   katalog.
+2. Pytaj zwyczajnie: „co robi ten projekt?”, „dodaj przycisk do index.html”, „napisz grę Tetris
+   w jednym pliku HTML”. Gdy prosisz o **napisanie, utworzenie albo zmianę** czegoś, model sam
+   zapisuje wynik do pliku w katalogu — nie musisz mówić „zapisz”. W czacie tylko napisze, jakie
+   pliki zapisał.
+3. Każdy krok widać w odpowiedzi: „› przejrzał katalog roboczy”, „› przeczytał plik: index.html”,
+   „› zmienił plik: index.html”.
+
+**Każdy zapis wymaga Twojej zgody.** Zanim cokolwiek zostanie zapisane, okienko pokazuje dokładnie,
+co się zmieni (dodane linie na zielono, usunięte na czerwono):
+
+![Zatwierdzanie zmiany](img/pl/zapis.png)
+
+- **Zapisz** — tylko ta zmiana.
+- **Zezwalaj w tej sesji** — kolejne zapisy w tym katalogu bez pytania, do zamknięcia LamaDeck.
+- **Zezwalaj zawsze dla tego katalogu** — zapamiętane dla tego projektu, także po ponownym
+  uruchomieniu. **Pytaj znowu** na pasku katalogu to cofa.
+- **Odrzuć** — plik zostaje bez zmian, a model dostaje informację, żeby jej nie powtarzał.
+
+**Warto wiedzieć:**
+
+- Model nie wyjdzie poza wybrany katalog (także przez `..` ani link symboliczny), nie usuwa plików
+  i nie uruchamia poleceń. Na jedno pytanie ma najwyżej 25 kroków. Katalogi ukryte oraz takie jak
+  `.git`, `node_modules` czy `venv` są pomijane.
+- Zapis długiego pliku (całej gry, długiej strony) na wolniejszym sprzęcie trwa nawet kilka minut:
+  model musi wygenerować cały plik, zanim cokolwiek się pojawi. Dymek mówi, że model wciąż pracuje,
+  i liczy sekundy; potem pojawia się okienko zgody.
+- Przy pracy na plikach wyłącz globus, chyba że naprawdę chcesz szukać w internecie — wyniki
+  wyszukiwania zajmują dużą część kontekstu modelu.
+- Katalog zapisuje się razem z rozmową i wraca, gdy ją otworzysz.
 
 ## Router LiteLLM
 
@@ -271,5 +295,9 @@ wyszukiwaniem w internecie, które włączasz sam.
 - **Wyszukiwanie nie daje wyników** — naciśnij *Sprawdź wyszukiwanie* w Ustawieniach; SearXNG mógł
   zostać zatrzymany. Niektóre wyszukiwarki czasem pytają o captchę — SearXNG korzysta wtedy
   z pozostałych.
+
+- **Model pokazuje kod w czacie zamiast go zapisać** — sprawdź, czy widać pasek katalogu (katalog
+  jest wybrany) i czy model ma tag *narzędzia*. Mniejsze modele czasem ignorują polecenie; wtedy
+  wystarczy napisać „zapisz to”.
 
 Znalazłeś błąd? [Zgłoś go na GitHubie](https://github.com/cyryllo/LamaDeck/issues).

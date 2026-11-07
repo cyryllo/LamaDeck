@@ -688,5 +688,6 @@
   "Zmiana pliku: {sciezka}": "Change to file: {sciezka}",
   "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.": "{model} can't use tools - for working with files choose a model tagged \"tools\" (e.g. qwen3, gemma4) or close the folder.",
   "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4).": "{model} can't use tools - for working with files choose a model tagged \"tools\" (e.g. qwen3, gemma4).",
-  "Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.": "The model is still working ({s} s) - writing a longer file can take a few minutes; then a window with a preview of the changes appears."
+  "Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.": "The model is still working ({s} s) - writing a longer file can take a few minutes; then a window with a preview of the changes appears.",
+  "przejrzał katalog roboczy": "looked through the working folder"
 }

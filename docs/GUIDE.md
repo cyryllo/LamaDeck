@@ -147,29 +147,55 @@ The model writes 1–3 search queries, LamaDeck reads up to 5 pages, picks the p
 your question, and the answer lists the clickable sources below. In the bubble you can see what
 it's doing at the moment.
 
-**Working folder** — let the model work with your files (needs a model tagged *tools*, e.g. qwen3
-or gemma4):
-
-1. Click the **folder** button next to the globe and choose a folder (e.g. a project). A bar above
-   the message field shows it; the ✕ there closes it.
-2. Ask, e.g. "what does this project do?" or "add a docstring to suma() in app.py". The model
-   looks through the folder, reads and searches the files by itself; each step shows in the answer
-   ("› read the file: app.py").
-3. **Every write needs your approval.** A window shows exactly what changes (added lines green,
-   removed red):
-
-![Approving a change](img/en/zapis.png)
-
-- **Save** — only this change; **Allow for this session** — further writes in this folder
-  without asking until you close LamaDeck; **Always allow for this folder** — remembered for
-  this project (undo with **Ask again** on the folder bar); **Reject** — the file stays as it was.
-- The model can't leave the chosen folder (not even through `..` or a link), can't delete files
-  and can't run commands. It takes at most 25 steps per question.
-- The folder is saved with the conversation and comes back when you open it.
+The folder button next to the globe turns on the **working folder** — see the next section.
 
 **Conversations** are saved automatically after every answer (only on this computer). The list on
 the left opens them and searches titles and content. Right-click a conversation to **Rename**
 (also double-click or F2), **Export to Markdown** or **Delete**.
+
+## Working folder
+
+![The model working on files in a folder](img/en/katalog.png)
+
+The model can work directly with the files of a folder you choose — read them, search them, create
+and change them. It needs a model tagged *tools* (qwen3, gemma4…); with other models LamaDeck tells
+you to pick one that can.
+
+**How to use it:**
+
+1. In the chat, click the **folder** button next to the globe and choose a folder (e.g. a project).
+   A bar above the message field shows it, together with whether writes need your approval; the ✕
+   there closes the folder.
+2. Ask in plain words: "what does this project do?", "add a button to index.html", "write a Tetris
+   game in one HTML file". Whenever you ask it to **write, create or change** something, the model
+   saves it to a file in the folder by itself — you don't have to say "save it". In the chat it only
+   tells you which files it saved.
+3. Each step shows in the answer: "› looked through the working folder", "› read the file: index.html",
+   "› changed the file: index.html".
+
+**Every write needs your approval.** Before anything is saved, a window shows exactly what changes
+(added lines green, removed red):
+
+![Approving a change](img/en/zapis.png)
+
+- **Save** — only this change.
+- **Allow for this session** — further writes in this folder without asking, until you close
+  LamaDeck.
+- **Always allow for this folder** — remembered for this project, also after a restart. **Ask
+  again** on the folder bar takes it back.
+- **Reject** — the file stays as it was, and the model is told not to repeat the change.
+
+**Good to know:**
+
+- The model can't leave the chosen folder (not even through `..` or a symbolic link), can't delete
+  files and can't run commands. It takes at most 25 steps per question. Hidden folders and folders
+  like `.git`, `node_modules` or `venv` are skipped.
+- Writing a long file (a whole game, a long page) can take a few minutes on slower hardware: the
+  model has to produce the whole file before anything appears. The bubble says the model is still
+  working and counts the seconds; the approval window follows.
+- Turn the globe off while working on files, unless you really want a web search — search results
+  take a large part of the model's context.
+- The folder is saved with the conversation and comes back when you open it.
 
 ## LiteLLM Router
 
@@ -268,5 +294,9 @@ searches you turn on yourself.
   chat model. With `OLLAMA_MAX_LOADED_MODELS=2` (one of the recommended values) both stay in memory.
 - **A web search gives no results** — press *Test search* in Settings; SearXNG may be stopped.
   Some search engines occasionally ask for a captcha; SearXNG then uses the others.
+
+- **The model shows code in the chat instead of saving it** — check that the folder bar is visible
+  (the folder is chosen) and that the model is tagged *tools*. Smaller models sometimes ignore the
+  instruction; then just say "save it".
 
 Found a bug? [Report it on GitHub](https://github.com/cyryllo/LamaDeck/issues).

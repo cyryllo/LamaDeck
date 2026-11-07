@@ -6,11 +6,14 @@
 #       a na zrzucie i tak widać zwykłą ścieżkę rozmów.
 # UWAGA: "czat" wysyła PRAWDZIWE pytanie (z wyszukiwaniem w internecie) do gemma4 na tym
 #        komputerze - zajmuje Ollamę na 2-3 minuty.
-# Użycie: QT_QPA_PLATFORM=offscreen python3 docs/zrzuty.py <pl|en> docs/img/<pl|en> [czat]
+# Użycie: QT_QPA_PLATFORM=offscreen python3 docs/zrzuty.py <pl|en> docs/img/<pl|en> [czat] [katalog]
+#         "katalog" = katalog roboczy na tymczasowym folderze z index.html (prawdziwa gemma4,
+#         zgoda na zapis klikana automatycznie, prawdziwe okienko zgody trafia do zapis.png)
 #         potem panel/czat/zasobnik kopiuje się do screenshots/lamadeck-*(_pl).png
 import os, sys, time, tempfile
 from pathlib import Path
 jezyk, wyjscie = sys.argv[1], Path(sys.argv[2]); z_czatem = "czat" in sys.argv[3:]
+z_katalogiem = "katalog" in sys.argv[3:]  # WHY: prawdziwa praca gemma4 na plikach (zrzuty katalog.png, zapis.png)
 sys.argv = ["x"]; sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import lamadeck as om
 czaty = Path(tempfile.mkdtemp())
@@ -32,6 +35,8 @@ def zrzut(widget, nazwa):
     print("  ", nazwa)
 
 w = om.MainWindow(); w.resize(1600, 900); w.show()
+# WHY: bez rozumowania modelu na zrzutach (zasłaniało odpowiedź) - tylko w tym oknie, ustawienie zostaje
+w.widok_czatu.pokaz_myslenie = False
 w._przejdz("panel"); czekaj(9000)
 zrzut(w, "panel")
 w._przejdz("hosty"); czekaj(4000); zrzut(w, "hosty")
@@ -78,6 +83,45 @@ if z_czatem:
     w.widok_czatu.verticalScrollBar().setValue(0); czekaj(300)
     zrzut(w, "czat")
     w.btn_czat_internet.setChecked(False)
+
+if z_katalogiem:
+    import shutil
+    # WHAT: mały projekt w ~/.cache (krótka ścieżka na pasku katalogu), po zrzutach usuwany
+    projekt = Path.home() / ".cache" / "lamadeck-zrzuty" / ("moja-strona" if jezyk == "pl" else "my-page")
+    shutil.rmtree(projekt, ignore_errors=True)
+    projekt.mkdir(parents=True)
+    (projekt / "index.html").write_text(
+        "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>Demo</title>\n</head>\n"
+        "<body>\n  <h1>" + ("Moja strona" if jezyk == "pl" else "My page") + "</h1>\n</body>\n</html>\n")
+    zgody = []
+    def _zgoda(self):
+        # WHY: prawdziwe okienko zgody - zrzut, potem "Zapisz" (tylko ta zmiana)
+        self.resize(900, 520); self.show(); czekaj(400)
+        if not zgody:  # WHY: pierwsza zmiana jest najczytelniejsza (dodanie przycisku)
+            self.grab().save(str(wyjscie / "zapis.png")); print("   ", "zapis")
+        zgody.append(1); self.wybor = "raz"; self.hide()
+    om.DialogZmianyPliku.exec = _zgoda
+    w._przejdz("czat"); czekaj(1500)
+    w.nowa_rozmowa()
+    c = w.combo_czat_model
+    for i in range(c.count()):
+        if "gemma4" in (c.itemData(i) or "") and "localhost" in (c.itemData(i) or ""):
+            c.setCurrentIndex(i); break
+    w.btn_czat_internet.setChecked(False)
+    w._ustaw_katalog_roboczy(str(projekt))
+    pytanie = {"pl": "Dodaj do index.html przycisk, który po kliknięciu zmienia kolor tła na losowy.",
+               "en": "Add a button to index.html that changes the background to a random colour when clicked."}[jezyk]
+    w.pole_czat.setPlainText(pytanie); w.wyslij_czat()
+    start = time.time()
+    while w._czat_worker is not None and time.time() - start < 900:
+        czekaj(1000)
+    czekaj(1500)
+    print("   katalog: %.0f s, kroki: %s, zgód: %d" % (time.time() - start,
+          [(k["nazwa"], k["stan"]) for k in w._czat[-1].get("narzedzia", [])], len(zgody)))
+    pasek = w.widok_czatu.verticalScrollBar(); pasek.setValue(pasek.maximum()); czekaj(300)
+    zrzut(w, "katalog")
+    w._ustaw_katalog_roboczy(None)
+    shutil.rmtree(projekt.parent, ignore_errors=True)
 
 w._przejdz("panel"); czekaj(3000)
 okienko = om.OknoZasobnika(w); w.okno_zasobnika = okienko

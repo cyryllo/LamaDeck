@@ -688,5 +688,6 @@
   "Zmiana pliku: {sciezka}": "Cambio en el archivo: {sciezka}",
   "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.": "{model} no sabe usar herramientas: para trabajar con archivos elige un modelo con la etiqueta \"herramientas\" (p. ej. qwen3, gemma4) o cierra la carpeta.",
   "{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4).": "{model} no sabe usar herramientas: para trabajar con archivos elige un modelo con la etiqueta \"herramientas\" (p. ej. qwen3, gemma4).",
-  "Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.": "El modelo sigue trabajando ({s} s): escribir un archivo largo puede tardar unos minutos; después aparece una ventana con la vista previa de los cambios."
+  "Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.": "El modelo sigue trabajando ({s} s): escribir un archivo largo puede tardar unos minutos; después aparece una ventana con la vista previa de los cambios.",
+  "przejrzał katalog roboczy": "revisó la carpeta de trabajo"
 }
