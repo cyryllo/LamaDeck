@@ -108,11 +108,11 @@ routera.
 
 **Podstawy:**
 
-- Model wybierasz po prawej. Tagi pod nim mówią, co potrafi: *zdjęcia*, *myślenie*, *narzędzia*,
+- Model wybierasz w karcie u góry po lewej (nad listą rozmów). Tagi pod nim mówią, co potrafi: *zdjęcia*, *myślenie*, *narzędzia*,
   i czy jest już *w pamięci*.
 - **Enter** wysyła, **Shift+Enter** to nowa linia. Gdy model pisze, **Wyślij** zmienia się
   w **Zatrzymaj**.
-- Pod każdą odpowiedzią: tokeny na sekundę, liczba tokenów i czas. Prawa karta pokazuje szczegóły
+- Pod każdą odpowiedzią: tokeny na sekundę, liczba tokenów i czas. Ta karta pokazuje szczegóły
   i **Kontekst** — ile pamięci rozmowy modelu jest już zajęte. Od 80% pojawia się ostrzeżenie;
   wtedy zacznij **Nową rozmowę**.
 - **Myślenie modelu** włącza albo wyłącza rozumowanie w modelach, które myślą przed odpowiedzią
@@ -170,7 +170,12 @@ podpowie, żeby wybrać taki, który to umie.
    zapisuje wynik do pliku w katalogu — nie musisz mówić „zapisz”. W czacie tylko napisze, jakie
    pliki zapisał.
 3. Każdy krok widać w odpowiedzi: „› przejrzał katalog roboczy”, „› przeczytał plik: index.html”,
-   „› zmienił plik: index.html”.
+   „› zmienił plik: index.html”. Pod odpowiedzią **Zapisane pliki** wypisują, co model zapisał.
+4. Kliknij zapisany plik, a obok rozmowy otworzy się **podgląd** (lewa kolumna chowa się na ten czas,
+   ✕ ją przywraca; granicę między rozmową a podglądem możesz przeciągnąć). Trzy widoki: **Kod**
+   (z numerami linii), **Zmiany** (co model zmienił w tej sesji) i **Strona** (strona WWW albo gra
+   pokazana tak jak w przeglądarce). Podgląd odświeża się sam, gdy model znów zapisze plik. Przycisk
+   ze strzałką otwiera plik w domyślnym programie.
 
 **Każdy zapis wymaga Twojej zgody.** Zanim cokolwiek zostanie zapisane, okienko pokazuje dokładnie,
 co się zmieni (dodane linie na zielono, usunięte na czerwono):

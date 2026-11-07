@@ -65,9 +65,16 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
-    QSystemTrayIcon, QTextBrowser, QToolTip, QInputDialog,
+    QSystemTrayIcon, QTextBrowser, QToolTip, QInputDialog, QSplitter,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
+# WHAT: silnik przeglądarki Qt - podgląd stron (np. gier) z katalogu roboczego w oknie programu.
+# WHY:  opcjonalny (w Debianie osobny pakiet python3-pyqt6.qtwebengine, ok. 100 MB) - bez niego
+#       przycisk "Strona" otwiera plik w zwykłej przeglądarce. Import PRZED QApplication (wymóg Qt).
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+except ImportError:
+    QWebEngineView = None
 from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 
 # --- Konfiguracja ---------------------------------------------------------
@@ -4831,6 +4838,7 @@ class DialogZmianyPliku(QDialog):
 
 class WidokCzatu(QTextBrowser):
     akcja = pyqtSignal(str)  # "ponow" / "popraw" - ikony przy ostatniej wiadomości
+    plik = pyqtSignal(str)   # ścieżka pliku zapisanego przez model (względna) - otwórz podgląd
 
     """Rozmowa na ekranie "Czat": nagłówek (kto mówi) i dymek z treścią.
 
@@ -4861,6 +4869,7 @@ class WidokCzatu(QTextBrowser):
         self._start_ostatniej = 0
         self._kody = {}  # WHY: treść bloków kodu pod linkami "Kopiuj kod" (kopiuj:<numer>)
         self._dymki = {}  # WHY: opis ikony pod jej adresem - QTextBrowser sam dymków nie pokazuje
+        self._pliki_linki = {}  # WHY: ścieżki plików pod linkami "plik:<numer>" (podgląd)
         self.ensurePolished()
 
     def _przewin(self, wartosc, na_dole, do_dolu=False):
@@ -4880,6 +4889,7 @@ class WidokCzatu(QTextBrowser):
         self.document().clear()  # WHY: czyści też miniatury zdjęć - wstawiane są od nowa
         self._kody = {}
         self._dymki = {}
+        self._pliki_linki = {}
         if not wiadomosci:
             c = QTextCursor(self.document())
             format_bloku = QTextBlockFormat()
@@ -4916,6 +4926,8 @@ class WidokCzatu(QTextBrowser):
     def _klik_linku(self, url):
         if url.scheme() == "akcja":
             self.akcja.emit(url.path())
+        elif url.scheme() == "plik":
+            self.plik.emit(self._pliki_linki.get(url.path(), ""))
         elif url.scheme() == "kopiuj":
             QApplication.clipboard().setText(self._kody.get(url.path(), ""))
             QToolTip.showText(QCursor.pos(), _("Skopiowano do schowka"), self)
@@ -5013,7 +5025,7 @@ class WidokCzatu(QTextBrowser):
                 self._kody[numer] = odpowiedz
                 self._ikona(c, "kopiuj", f"kopiuj:{numer}", _("Kopiuj odpowiedź"))
         if akcje and w["rola"] != "user":
-            self._ikona(c, "odswiez", "akcja:ponow", _("Wygeneruj ponownie - modelem wybranym teraz po prawej"))
+            self._ikona(c, "odswiez", "akcja:ponow", _("Wygeneruj ponownie - modelem wybranym teraz po lewej"))
         if akcje and w["rola"] == "user":
             self._ikona(c, "edytuj", "akcja:popraw", _("Popraw pytanie - wróci do pola, a ono i odpowiedź "
                                                        "znikną z rozmowy"))
@@ -5057,6 +5069,24 @@ class WidokCzatu(QTextBrowser):
                                   "potem pojawi się okienko z podglądem zmian.").format(s=cisza)
         if odpowiedz.strip():
             c.insertMarkdown(odpowiedz)
+            # WHAT: pliki zapisane w tej odpowiedzi - klik otwiera podgląd obok rozmowy
+            zapisane = list(dict.fromkeys(k["sciezka"] for k in w.get("narzedzia") or []
+                                          if k.get("nazwa") in ("write_file", "edit_file") and k.get("stan") == "ok"))
+            if zapisane:
+                odstep = QTextBlockFormat()
+                odstep.setTopMargin(10)
+                c.insertBlock(odstep)
+                c.insertText(_("Zapisane pliki:") + " ", self._znaki(self.kolorWyciszony, gruby=True))
+                for nr, sciezka in enumerate(zapisane):
+                    numer = str(len(self._pliki_linki))
+                    self._pliki_linki[numer] = sciezka
+                    if nr:
+                        c.insertText(" · ", self._znaki(self.kolorWyciszony))
+                    link = self._znaki(self.kolorLinku)
+                    link.setAnchor(True)
+                    link.setAnchorHref(f"plik:{numer}")
+                    link.setToolTip(_("Pokaż podgląd obok rozmowy"))
+                    c.insertText(sciezka, link)
             if praca_w_ciszy:
                 c.insertBlock(QTextBlockFormat())
                 c.insertText(praca_w_ciszy, self._znaki(self.kolorWyciszony, kursywa=True))
@@ -6366,6 +6396,8 @@ class MainWindow(QMainWindow):
         self._szukaj_w_internecie = False  # WHY: przycisk z globusem w czacie - przeżywa przebudowę okna
         self._katalog_roboczy = None    # WHY: katalog, w którym model czatu może czytać i zapisywać pliki
         self._katalogi_sesji = set()    # WHY: katalogi z zapisem bez pytania do zamknięcia programu
+        self._przed_zmianami = {}       # WHY: treść pliku sprzed pierwszej zmiany modelu (widok "Zmiany")
+        self._podglad = None            # WHY: {"sciezka", "plik", "tryb", "mtime"} - otwarty podgląd pliku
         self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
         self._czat_utworzono = None
@@ -8776,9 +8808,17 @@ class MainWindow(QMainWindow):
 
         rzad = QHBoxLayout()
         rzad.setSpacing(18)
+        # WHAT: lewa kolumna - u góry model i statystyki, pod nimi zapisane rozmowy.
+        # WHY:  prośba użytkownika - karta modelu z prawej przeszła na lewo: rozmowa jest szersza,
+        #       a podgląd pliku chowa tylko tę jedną kolumnę (dwie kolumny zamiast trzech)
+        self.kolumna_czatu = QWidget()
+        self.kolumna_czatu.setFixedWidth(340)  # WHY: tytuły rozmów w 1-2 liniach
+        lewa = QVBoxLayout(self.kolumna_czatu)
+        lewa.setContentsMargins(0, 0, 0, 0)
+        lewa.setSpacing(18)
+        rzad.addWidget(self.kolumna_czatu)
         # --- zapisane rozmowy ---
         karta, uk = self._karta()
-        karta.setFixedWidth(340)  # WHY: szersza kosztem prawej karty - tytuły rozmów w 1-2 liniach
         uk.addWidget(_etykieta(_("Rozmowy"), "h2"))
         self.pole_szukaj_rozmow = QLineEdit()
         self.pole_szukaj_rozmow.setPlaceholderText(_("Szukaj w rozmowach..."))
@@ -8806,7 +8846,8 @@ class MainWindow(QMainWindow):
         uwaga.setObjectName("smallNote")  # WHY: mała czcionka - to tylko podpowiedź (prośba użytkownika)
         uwaga.setWordWrap(True)
         uk.addWidget(uwaga)
-        rzad.addWidget(karta)
+        lewa.addWidget(karta, 1)
+        self.karta_rozmow = karta
 
         # --- rozmowa ---
         karta, uk = self._karta()
@@ -8903,13 +8944,18 @@ class MainWindow(QMainWindow):
         self.btn_czat_wyslij.setMinimumWidth(120)
         wpis.addWidget(self.btn_czat_wyslij)
         uk.addLayout(wpis)
-        rzad.addWidget(karta, 1)
+        # WHAT: rozmowa i podgląd pliku obok siebie, granica do przeciągnięcia (podgląd domyślnie schowany)
+        self.podzial_czatu = QSplitter(Qt.Orientation.Horizontal)
+        self.podzial_czatu.setChildrenCollapsible(False)
+        self.podzial_czatu.setHandleWidth(18)
+        self.podzial_czatu.addWidget(karta)
+        self.podzial_czatu.addWidget(self._karta_podgladu())
+        rzad.addWidget(self.podzial_czatu, 1)
 
-        # --- model i statystyki ---
-        # WHY: zwarta i wąska (prośba użytkownika) - więcej miejsca dla rozmowy i listy rozmów;
-        #      opisy statystyk w dymkach po najechaniu, nie pod każdą liczbą
+        # --- model i statystyki (w lewej kolumnie, nad rozmowami) ---
+        # WHY: zwarta (prośba użytkownika) - opisy statystyk w dymkach po najechaniu, nie pod liczbami
         karta, uk = self._karta()
-        karta.setFixedWidth(290)
+        karta.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         uk.setSpacing(8)
         uk.addWidget(_etykieta(_("Model"), "h3"))
         self.combo_czat_model = QComboBox()
@@ -8993,9 +9039,11 @@ class MainWindow(QMainWindow):
             siatka.addWidget(wartosc, nr, 1, Qt.AlignmentFlag.AlignRight)
             self._lbl_stat_czatu[klucz] = wartosc
         uk.addLayout(siatka)
-        uk.addStretch(1)
-        rzad.addWidget(karta)
+        lewa.insertWidget(0, karta)
+        self.karta_modelu = karta
         v.addLayout(rzad, 1)
+        self.widok_czatu.plik.connect(self._otworz_podglad)
+        self._podglad = None
 
         self._wypelnij_liste_rozmow()
         self._odswiez_modele_czatu()
@@ -9420,7 +9468,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "widok_czatu"):
             return
         if self._modele_czatu():
-            pusty = _("Wybierz model po prawej i zadaj pytanie.")
+            pusty = _("Wybierz model po lewej i zadaj pytanie.")
         else:
             pusty = _("Brak modeli do rozmowy na hostach online. Pobierz model na ekranie \"Modele\".")
         self.widok_czatu.pokaz(self._czat, pusty, do_dolu)
@@ -9811,6 +9859,8 @@ class MainWindow(QMainWindow):
             self._ustaw_katalog_roboczy(katalog)
 
     def _ustaw_katalog_roboczy(self, katalog):
+        if katalog != self._katalog_roboczy:
+            self._zamknij_podglad()
         self._katalog_roboczy = katalog
         self._odswiez_katalog_roboczy()
         if katalog:
@@ -9853,6 +9903,162 @@ class MainWindow(QMainWindow):
             akcja.setChecked(wlasny and tryb == kod)
             akcja.triggered.connect(lambda _c=False, k=kod: self._ustaw_zapis_katalogu(k))
         menu.exec(self.btn_katalog_zapis.mapToGlobal(self.btn_katalog_zapis.rect().bottomLeft()))
+
+    # --- podgląd pliku z katalogu roboczego ---------------------------------------
+    def _karta_podgladu(self):
+        # WHAT: panel obok rozmowy: nazwa pliku, widoki Kod / Zmiany / Strona, "Otwórz", ✕.
+        karta, uk = self._karta()
+        uk.setSpacing(10)
+        gora = QHBoxLayout()
+        gora.setSpacing(6)
+        self.lbl_podglad = _etykieta("", "h3")
+        self.lbl_podglad.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        gora.addWidget(self.lbl_podglad, 1)
+        self._chipy_podgladu = {}
+        grupa = QButtonGroup(karta)
+        for tryb, nazwa, dymek in (
+                ("kod", _("Kod"), _("Treść pliku z numerami linii")),
+                ("zmiany", _("Zmiany"), _("Co zmienił model - względem wersji sprzed pierwszej zmiany w tej sesji")),
+                ("strona", _("Strona"), _("Strona tak, jak w przeglądarce - także gry z JavaScriptem"))):
+            chip = self._chip(nazwa, lambda _c=False, t=tryb: self._tryb_podgladu(t))
+            chip.setToolTip(dymek)
+            grupa.addButton(chip)
+            gora.addWidget(chip)
+            self._chipy_podgladu[tryb] = chip
+        otworz = self._przycisk("", "otworz", slot=self._otworz_plik_podgladu)
+        otworz.setToolTip(_("Otwórz w domyślnym programie"))
+        gora.addWidget(otworz)
+        zamknij = QPushButton()
+        zamknij.setObjectName("iconButton")
+        zamknij.setIcon(ikona("zamknij", PALETA.wyciszony, rozmiar=16, grubosc=2))
+        zamknij.setToolTip(_("Zamknij podgląd"))
+        zamknij.clicked.connect(self._zamknij_podglad)
+        gora.addWidget(zamknij)
+        uk.addLayout(gora)
+        self.lbl_podglad_info = _etykieta("", "muted")
+        uk.addWidget(self.lbl_podglad_info)
+        self.stos_podgladu = QStackedWidget()
+        self.widok_podgladu_kod = WidokRoznicy("")
+        self.widok_podgladu_zmiany = WidokRoznicy("")
+        self.stos_podgladu.addWidget(self.widok_podgladu_kod)
+        self.stos_podgladu.addWidget(self.widok_podgladu_zmiany)
+        # WHY: bez QtWebEngine "Strona" otwiera zwykłą przeglądarkę (patrz _tryb_podgladu)
+        self.widok_podgladu_strona = QWebEngineView() if QWebEngineView else None
+        if self.widok_podgladu_strona is not None:
+            self.stos_podgladu.addWidget(self.widok_podgladu_strona)
+        uk.addWidget(self.stos_podgladu, 1)
+        karta.hide()
+        self.karta_podgladu = karta
+        # WHAT: co sekundę - czy plik się zmienił (model zapisał nową wersję) -> odśwież widok
+        # WHY:  sprawdzanie czasu zmiany zamiast QFileSystemWatcher - zapis przez plik tymczasowy
+        #       i os.replace podmienia plik, a obserwator gubi wtedy ścieżkę
+        self._zegar_podgladu = QTimer(self)
+        self._zegar_podgladu.setInterval(1000)
+        self._zegar_podgladu.timeout.connect(self._sprawdz_podglad)
+        return karta
+
+    def _otworz_podglad(self, sciezka):
+        # WHAT: podgląd pliku z katalogu roboczego rozmowy; lista rozmów i karta modelu się chowają.
+        if not sciezka:
+            return
+        if not self._katalog_roboczy:
+            self._uwaga_czatu(_("Ten plik jest w katalogu roboczym, który nie jest teraz otwarty - wybierz go "
+                                "przyciskiem z folderem."), "warn")
+            return
+        try:
+            _korzen, plik = _sciezka_w_katalogu(self._katalog_roboczy, sciezka)
+        except ValueError as e:
+            self._uwaga_czatu(str(e), "warn")
+            return
+        html_ = plik.suffix.lower() in (".html", ".htm", ".svg")
+        self._podglad = {"sciezka": sciezka, "plik": str(plik), "mtime": None,
+                         "tryb": "strona" if html_ and self.widok_podgladu_strona is not None else "kod"}
+        self.lbl_podglad.setText(sciezka)
+        otwarty = self.karta_podgladu.isVisible()
+        self.kolumna_czatu.hide()
+        self.karta_podgladu.show()
+        if not otwarty:
+            # WHY: po ułożeniu okna - wcześniej splitter nie zna jeszcze nowej szerokości
+            QTimer.singleShot(0, lambda: self.podzial_czatu.setSizes([1, 1]))
+        self._wczytaj_podglad()
+        self._zegar_podgladu.start()
+
+    def _zamknij_podglad(self):
+        if not hasattr(self, "karta_podgladu") or self._podglad is None:
+            return
+        self._podglad = None
+        self._zegar_podgladu.stop()
+        self.karta_podgladu.hide()
+        self.kolumna_czatu.show()
+
+    def _tryb_podgladu(self, tryb):
+        if self._podglad is None:
+            return
+        if tryb == "strona" and self.widok_podgladu_strona is None:
+            # WHY: bez silnika przeglądarki w programie - zwykła przeglądarka
+            self._otworz_plik_podgladu()
+            self._chipy_podgladu[self._podglad["tryb"]].setChecked(True)
+            return
+        self._podglad["tryb"] = tryb
+        self._wczytaj_podglad()
+
+    def _otworz_plik_podgladu(self):
+        if self._podglad:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._podglad["plik"]))
+
+    def _sprawdz_podglad(self):
+        if self._podglad is None:
+            self._zegar_podgladu.stop()
+            return
+        try:
+            mtime = Path(self._podglad["plik"]).stat().st_mtime
+        except OSError:
+            mtime = None
+        if mtime != self._podglad["mtime"]:
+            self._wczytaj_podglad()
+
+    def _wczytaj_podglad(self):
+        # WHAT: treść podglądu w wybranym widoku; też po każdej zmianie pliku (odświeżanie).
+        p = self._podglad
+        plik = Path(p["plik"])
+        try:
+            p["mtime"] = plik.stat().st_mtime
+            dane = plik.read_bytes()
+        except OSError:
+            p["mtime"] = None
+            dane = None
+        tryb = p["tryb"]
+        for kod, chip in self._chipy_podgladu.items():
+            chip.setChecked(kod == tryb)
+        self._chipy_podgladu["zmiany"].setEnabled(p["plik"] in self._przed_zmianami)
+        if dane is None:
+            self.lbl_podglad_info.setText(_("Pliku jeszcze nie ma albo nie da się go odczytać."))
+            self.widok_podgladu_kod.setPlainText("")
+            self.stos_podgladu.setCurrentWidget(self.widok_podgladu_kod)
+            return
+        binarny = b"\0" in dane[:8192]
+        tekst = "" if binarny else dane.decode("utf-8", errors="replace")
+        linie = tekst.splitlines()
+        self.lbl_podglad_info.setText(
+            _("{kb} KB · zmieniony {godzina} · odświeża się sam").format(
+                kb=max(1, len(dane) // 1024), godzina=time.strftime("%H:%M:%S", time.localtime(p["mtime"])))
+            if not binarny else _("plik binarny - użyj \"Otwórz\" albo \"Strona\""))
+        if tryb == "strona" and self.widok_podgladu_strona is not None:
+            # WHY: setUrl przy każdej zmianie = przeładowanie strony (gra startuje od nowa)
+            self.widok_podgladu_strona.setUrl(QUrl.fromLocalFile(str(plik)))
+            self.stos_podgladu.setCurrentWidget(self.widok_podgladu_strona)
+        elif tryb == "zmiany" and p["plik"] in self._przed_zmianami:
+            zmiana = {"sciezka": p["sciezka"], "stara": self._przed_zmianami[p["plik"]], "nowa": tekst}
+            roznica = roznica_zmiany(zmiana) or _("(bez zmian względem wersji sprzed zmian modelu)")
+            self.widok_podgladu_zmiany.setPlainText(roznica)
+            self.stos_podgladu.setCurrentWidget(self.widok_podgladu_zmiany)
+        else:
+            pozycja = self.widok_podgladu_kod.verticalScrollBar().value()
+            szer = len(str(len(linie)))
+            self.widok_podgladu_kod.setPlainText(
+                "\n".join(f"{nr:>{szer}} │ {linia}" for nr, linia in enumerate(linie, 1)) if not binarny else "")
+            self.widok_podgladu_kod.verticalScrollBar().setValue(pozycja)  # WHY: odświeżenie nie skacze na górę
+            self.stos_podgladu.setCurrentWidget(self.widok_podgladu_kod)
 
     def _zmiana_zapisu_domyslnego(self, _indeks=None):
         tryb = self.combo_zapis_domyslny.currentData()
@@ -9911,6 +10117,8 @@ class MainWindow(QMainWindow):
         if worker is not self._czat_worker:
             return
         katalog = self._katalog_roboczy
+        # WHY: wersja sprzed PIERWSZEJ zmiany w tej sesji - widok "Zmiany" w podglądzie
+        self._przed_zmianami.setdefault(zmiana["plik"], zmiana["stara"])
         if self._zapis_bez_pytania(katalog):
             worker.odpowiedz_na_zapis(True)
             return

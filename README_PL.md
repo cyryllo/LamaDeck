@@ -275,7 +275,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 - [x] Domyślne uprawnienia zapisu dla nowych katalogów w Ustawieniach (pytaj za każdym razem /
   pytaj raz na sesję / zezwalaj zawsze), do zmiany dla konkretnego projektu na pasku katalogu
-- [ ] Lista plików zapisanych przez model pod jego odpowiedzią — kliknięcie otwiera podgląd
+- [x] Lista plików zapisanych przez model pod jego odpowiedzią — kliknięcie otwiera podgląd
 - [ ] Podgląd pliku w programie, który sam się odświeża, gdy model go zmienia — także strony WWW
   (np. gra) pokazane tak jak w przeglądarce
 

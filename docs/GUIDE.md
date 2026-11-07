@@ -108,11 +108,11 @@ without the router.
 
 **Basics:**
 
-- Choose the model on the right. Tags under it say what it can do: *pictures*, *thinking*,
+- Choose the model in the panel at the top left (above the list of conversations). Tags under it say what it can do: *pictures*, *thinking*,
   *tools*, and whether it's already *in memory*.
 - **Enter** sends, **Shift+Enter** starts a new line. While the model writes, **Send** turns into
   **Stop**.
-- Under every answer: tokens per second, the number of tokens and the time. The right panel shows
+- Under every answer: tokens per second, the number of tokens and the time. That panel shows
   the details and **Context** — how much of the model's memory for the conversation is used.
   From 80% you get a warning; then start a **New conversation**.
 - **Model thinking** turns reasoning on or off for models that think before answering (qwen3,
@@ -171,7 +171,12 @@ you to pick one that can.
    saves it to a file in the folder by itself — you don't have to say "save it". In the chat it only
    tells you which files it saved.
 3. Each step shows in the answer: "› looked through the working folder", "› read the file: index.html",
-   "› changed the file: index.html".
+   "› changed the file: index.html". Below the answer, **Saved files** lists what the model wrote.
+4. Click a saved file to open a **preview next to the conversation** (the left column hides for the
+   time being, ✕ brings it back; drag the border to change the width). Three views: **Code** (with
+   line numbers), **Changes** (what the model changed in this session) and **Page** (a web page or a
+   game shown as in a browser). The preview refreshes by itself whenever the model saves the file
+   again. The arrow button opens the file in its default app.
 
 **Every write needs your approval.** Before anything is saved, a window shows exactly what changes
 (added lines green, removed red):
