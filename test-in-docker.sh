@@ -37,6 +37,8 @@ RUN dnf install -y mesa-libGL mesa-libEGL libxkbcommon libxkbcommon-x11 fontconf
     dejavu-sans-fonts freetype dbus-libs libX11 libX11-xcb libxcb xcb-util-cursor \
     xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm xcb-util \
     libwayland-client libwayland-cursor libwayland-egl glib2 libICE libSM systemd polkit \
+    libXcomposite libXdamage libXfixes libXrandr libXtst libxkbfile libxshmfence alsa-lib nss nspr \
+    mesa-libgbm libdrm cups-libs \
     && dnf clean all'
             ;;
         debian|ubuntu)
@@ -47,7 +49,7 @@ RUN dnf install -y mesa-libGL mesa-libEGL libxkbcommon libxkbcommon-x11 fontconf
             dockerfile="FROM $base
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pyqt6 \
-    python3-pyqt6.qtsvg python3-pyqt6.qtpdf python3-requests pkexec systemd curl \
+    python3-pyqt6.qtsvg python3-pyqt6.qtpdf python3-pyqt6.qtwebengine python3-requests pkexec systemd curl \
     ca-certificates libgl1 libegl1 fonts-dejavu-core qt6-wayland && rm -rf /var/lib/apt/lists/*"
             ;;
         *)

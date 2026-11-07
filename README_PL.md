@@ -32,6 +32,10 @@ funkcja i jak ją włączyć** (także na [stronie projektu](https://cyryllo.git
 - Opcjonalnie: **uv** (do instalacji Open WebUI i LiteLLM — aplikacja doinstaluje je sama w razie potrzeby)
 - Opcjonalnie: moduł **QtPdf** do załączników PDF w czacie — jest w PyQt6 z pip; w Debianie to
   `python3-pyqt6.qtpdf` (`install.sh` zaproponuje instalację, pakiet `.deb` dociąga go sam)
+- Opcjonalnie: moduł **QtWebEngine** (ok. 100 MB) do widoku "Strona" w podglądzie plików w czacie —
+  strony WWW i gry pokazane w programie. pip: `PyQt6-WebEngine`; Debian/Ubuntu:
+  `python3-pyqt6.qtwebengine` (`install.sh` go instaluje albo proponuje, `.deb` i AppImage go mają).
+  Bez niego "Strona" otwiera plik w przeglądarce
 - Opcjonalnie: `ffmpeg`, `pandoc`, `zstd` (pełna funkcjonalność Open WebUI — głos, dokumenty w RAG;
   aplikacja proponuje ich instalację przez `apt` zaraz po udanej instalacji Open WebUI)
 
@@ -92,7 +96,7 @@ Odinstalowanie: `./install.sh --uninstall` (komunikaty skryptu są po angielsku)
 **Ręcznie, do dewelopowania** — bez kopiowania i wpisu w menu:
 
 ```
-pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" requests
+pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" "PyQt6-WebEngine<6.12" "PyQt6-WebEngine-Qt6<6.12" requests
 python3 lamadeck.py
 ```
 
@@ -276,7 +280,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] Domyślne uprawnienia zapisu dla nowych katalogów w Ustawieniach (pytaj za każdym razem /
   pytaj raz na sesję / zezwalaj zawsze), do zmiany dla konkretnego projektu na pasku katalogu
 - [x] Lista plików zapisanych przez model pod jego odpowiedzią — kliknięcie otwiera podgląd
-- [ ] Podgląd pliku w programie, który sam się odświeża, gdy model go zmienia — także strony WWW
+- [x] Podgląd pliku w programie, który sam się odświeża, gdy model go zmienia — także strony WWW
   (np. gra) pokazane tak jak w przeglądarce
 
 **Potem — 1.2, czat w przeglądarce:**

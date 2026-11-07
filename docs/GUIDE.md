@@ -178,6 +178,11 @@ you to pick one that can.
    game shown as in a browser). The preview refreshes by itself whenever the model saves the file
    again. The arrow button opens the file in its default app.
 
+   ![File preview](img/en/podglad.png)
+
+   **Page** needs the QtWebEngine module (in the `.deb` and the AppImage; `install.sh` installs or
+   offers it). Without it, **Page** opens the file in your web browser instead.
+
 **Every write needs your approval.** Before anything is saved, a window shows exactly what changes
 (added lines green, removed red):
 

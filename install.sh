@@ -267,7 +267,7 @@ command -v pkexec >/dev/null 2>&1 || {
 
 # WHY: PyQt6 below 6.12 - 6.12 (October 2026) dropped the QtPdf module from the pip
 #      wheel, and the chat needs it to read PDF attachments (same pin as build-appimage.sh)
-PIP_PACKAGES=("PyQt6<6.12" "PyQt6-Qt6<6.12" requests)
+PIP_PACKAGES=("PyQt6<6.12" "PyQt6-Qt6<6.12" "PyQt6-WebEngine<6.12" "PyQt6-WebEngine-Qt6<6.12" requests)
 install_python_deps
 
 # WHAT: PDF attachments in the chat need the QtPdf module.
@@ -278,6 +278,23 @@ python3 -c "import PyQt6.QtPdf" >/dev/null 2>&1 || {
     _confirm_apt_install python3-pyqt6.qtpdf \
         "The QtPdf module is missing - the chat needs it to read PDF attachments (optional)." \
         || echo "Skipping QtPdf - PDF files can't be attached in the chat until it's installed."
+}
+
+# WHAT: the file preview in the chat ("Page" view - web pages and games from the working folder)
+#       uses QtWebEngine (~100 MB). Optional: without it "Page" opens the default browser.
+# WHY:  it must come from the same place as PyQt6 - apt package for the system PyQt6, pip wheel
+#       (same 6.11 line) for the pip one; mixing the two breaks Qt.
+python3 -c "import PyQt6.QtWebEngineWidgets" >/dev/null 2>&1 || {
+    if python3 -c "import PyQt6, sys; sys.exit(0 if PyQt6.__file__.startswith('/usr/') else 1)" 2>/dev/null; then
+        _confirm_apt_install python3-pyqt6.qtwebengine \
+            "The QtWebEngine module is missing - the chat uses it to show web pages and games from the working folder (optional, about 100 MB)." \
+            || echo "Skipping QtWebEngine - the \"Page\" preview will open in your browser instead."
+    else
+        echo "Installing PyQt6-WebEngine for the file preview in the chat (about 100 MB)..."
+        python3 -m pip install --user "PyQt6-WebEngine<6.12" "PyQt6-WebEngine-Qt6<6.12" >/dev/null 2>&1 \
+            || python3 -m pip install --user --break-system-packages "PyQt6-WebEngine<6.12" "PyQt6-WebEngine-Qt6<6.12" >/dev/null 2>&1 \
+            || echo "Couldn't install PyQt6-WebEngine - the \"Page\" preview will open in your browser instead."
+    fi
 }
 
 # 2) Copy the script to a stable location (survives removing/moving the cloned repo)

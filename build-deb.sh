@@ -132,7 +132,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-requests, pkexec, systemd, curl
+Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-pyqt6.qtwebengine, python3-requests, pkexec, systemd, curl
 Replaces: ollama-manager
 Conflicts: ollama-manager
 Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>

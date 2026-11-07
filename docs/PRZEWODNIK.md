@@ -177,6 +177,11 @@ podpowie, żeby wybrać taki, który to umie.
    pokazana tak jak w przeglądarce). Podgląd odświeża się sam, gdy model znów zapisze plik. Przycisk
    ze strzałką otwiera plik w domyślnym programie.
 
+   ![Podgląd pliku](img/pl/podglad.png)
+
+   **Strona** potrzebuje modułu QtWebEngine (jest w `.deb` i w AppImage; `install.sh` go instaluje
+   albo proponuje). Bez niego **Strona** otwiera plik w przeglądarce.
+
 **Każdy zapis wymaga Twojej zgody.** Zanim cokolwiek zostanie zapisane, okienko pokazuje dokładnie,
 co się zmieni (dodane linie na zielono, usunięte na czerwono):
 

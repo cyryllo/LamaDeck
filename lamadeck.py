@@ -75,6 +75,18 @@ try:
     from PyQt6.QtWebEngineWidgets import QWebEngineView
 except ImportError:
     QWebEngineView = None
+# WHY: Ubuntu 23.10+ (AppArmor) blokuje nieuprzywilejowane przestrzenie nazw, na których stoi
+#      piaskownica Chromium w QtWebEngine - strona w podglądzie by się nie pokazała. Piaskownicy
+#      nie wyłączamy; na takim systemie "Strona" otwiera plik w zwykłej przeglądarce.
+try:
+    if Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip() == "1":
+        QWebEngineView = None
+except OSError:
+    pass
+# WHY: Chromium nie uruchamia się jako root (bez wyłączania piaskownicy) - a jego błąd kończył
+#      cały program; root i tak nie jest zwykłym użytkownikiem tego programu
+if os.geteuid() == 0:
+    QWebEngineView = None
 from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 
 # --- Konfiguracja ---------------------------------------------------------
@@ -3502,6 +3514,31 @@ def _etykieta(tekst="", rola=None, **wlasciwosci):
     for nazwa, wartosc in wlasciwosci.items():
         lbl.setProperty(nazwa, wartosc)
     return lbl
+
+
+class EtykietaZawijana(QLabel):
+    """Zawijana etykieta, która NIE włącza trybu "wysokość zależna od szerokości" w układzie.
+
+    WHY: jedna zawijana etykieta (setWordWrap) przełącza cały układ nadrzędny w ten tryb, a w nim
+         QBoxLayout ściskał SĄSIEDNIĄ kartę poniżej jej minimum - karta modelu w czacie wchodziła na
+         listę rozmów przez podpowiedź pod listą. Tu wysokość zawiniętego tekstu idzie zwykłym
+         minimum (ustawianym po każdej zmianie szerokości), więc układ liczy się normalnie.
+    """
+
+    def __init__(self, tekst="", rola=None):
+        super().__init__(tekst)
+        if rola:
+            self.setProperty("role", rola)
+        self.setWordWrap(True)
+
+    def hasHeightForWidth(self):
+        return False
+
+    def resizeEvent(self, zdarzenie):
+        super().resizeEvent(zdarzenie)
+        potrzebna = self.heightForWidth(self.width())
+        if potrzebna > 0 and potrzebna != self.minimumHeight():
+            self.setMinimumHeight(potrzebna)
 
 
 class EtykietaSkracana(QLabel):
@@ -8841,10 +8878,10 @@ class MainWindow(QMainWindow):
             skrot.setContext(Qt.ShortcutContext.WidgetShortcut)
             skrot.activated.connect(slot)
         sciezka = str(katalog_rozmow()).replace(str(Path.home()), "~", 1)
-        uwaga = _etykieta(_("Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, "
-                            "tylko na tym komputerze: {sciezka}").format(sciezka=sciezka), "muted")
+        # WHY: EtykietaZawijana - zwykła zawijana etykieta ściskała kartę modelu nad listą (patrz klasa)
+        uwaga = EtykietaZawijana(_("Prawy klik na rozmowie: zmień nazwę, eksportuj, usuń. Zapisywane automatycznie, "
+                                   "tylko na tym komputerze: {sciezka}").format(sciezka=sciezka), "muted")
         uwaga.setObjectName("smallNote")  # WHY: mała czcionka - to tylko podpowiedź (prośba użytkownika)
-        uwaga.setWordWrap(True)
         uk.addWidget(uwaga)
         lewa.addWidget(karta, 1)
         self.karta_rozmow = karta
@@ -8955,7 +8992,9 @@ class MainWindow(QMainWindow):
         # --- model i statystyki (w lewej kolumnie, nad rozmowami) ---
         # WHY: zwarta (prośba użytkownika) - opisy statystyk w dymkach po najechaniu, nie pod liczbami
         karta, uk = self._karta()
-        karta.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        # WHY: Minimum, nie Maximum - przy Maximum układ dawał karcie tylko sizeHint (bez zawiniętych
+        #      tekstów) i wchodziła na listę rozmów; nadmiar miejsca i tak bierze lista (stretch 1)
+        karta.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         uk.setSpacing(8)
         uk.addWidget(_etykieta(_("Model"), "h3"))
         self.combo_czat_model = QComboBox()
@@ -9032,7 +9071,9 @@ class MainWindow(QMainWindow):
                 ("calosc", _("Czas całkowity"), ""))):
             lbl = _etykieta(nazwa, "muted")
             lbl.setToolTip(opis)
-            lbl.setWordWrap(True)  # WHY: dłuższe tłumaczenia ("Verarbeitung der Frage") w dwóch liniach
+            # WHY: BEZ zawijania - zawinięte etykiety nie liczą się do minimalnej wysokości karty i wiersze
+            #      nachodziły na siebie (ucięte "Przetwarzanie pytania" przy 1600x900); kolumna ma 340 px,
+            #      najdłuższe tłumaczenie ("Verarbeitung der Frage") mieści się w jednej linii
             siatka.addWidget(lbl, nr, 0)
             wartosc = _etykieta("—", "mono")
             wartosc.setToolTip(opis)
@@ -9942,10 +9983,10 @@ class MainWindow(QMainWindow):
         self.widok_podgladu_zmiany = WidokRoznicy("")
         self.stos_podgladu.addWidget(self.widok_podgladu_kod)
         self.stos_podgladu.addWidget(self.widok_podgladu_zmiany)
-        # WHY: bez QtWebEngine "Strona" otwiera zwykłą przeglądarkę (patrz _tryb_podgladu)
-        self.widok_podgladu_strona = QWebEngineView() if QWebEngineView else None
-        if self.widok_podgladu_strona is not None:
-            self.stos_podgladu.addWidget(self.widok_podgladu_strona)
+        # WHY: widok strony powstaje dopiero przy pierwszym podglądzie strony (_wczytaj_podglad) -
+        #      silnik Chromium kosztuje pamięć i czas startu, a większość rozmów go nie potrzebuje;
+        #      bez QtWebEngine "Strona" otwiera zwykłą przeglądarkę (patrz _tryb_podgladu)
+        self.widok_podgladu_strona = None
         uk.addWidget(self.stos_podgladu, 1)
         karta.hide()
         self.karta_podgladu = karta
@@ -9972,7 +10013,7 @@ class MainWindow(QMainWindow):
             return
         html_ = plik.suffix.lower() in (".html", ".htm", ".svg")
         self._podglad = {"sciezka": sciezka, "plik": str(plik), "mtime": None,
-                         "tryb": "strona" if html_ and self.widok_podgladu_strona is not None else "kod"}
+                         "tryb": "strona" if html_ and QWebEngineView is not None else "kod"}
         self.lbl_podglad.setText(sciezka)
         otwarty = self.karta_podgladu.isVisible()
         self.kolumna_czatu.hide()
@@ -9994,7 +10035,7 @@ class MainWindow(QMainWindow):
     def _tryb_podgladu(self, tryb):
         if self._podglad is None:
             return
-        if tryb == "strona" and self.widok_podgladu_strona is None:
+        if tryb == "strona" and QWebEngineView is None:
             # WHY: bez silnika przeglądarki w programie - zwykła przeglądarka
             self._otworz_plik_podgladu()
             self._chipy_podgladu[self._podglad["tryb"]].setChecked(True)
@@ -10043,7 +10084,10 @@ class MainWindow(QMainWindow):
             _("{kb} KB · zmieniony {godzina} · odświeża się sam").format(
                 kb=max(1, len(dane) // 1024), godzina=time.strftime("%H:%M:%S", time.localtime(p["mtime"])))
             if not binarny else _("plik binarny - użyj \"Otwórz\" albo \"Strona\""))
-        if tryb == "strona" and self.widok_podgladu_strona is not None:
+        if tryb == "strona" and QWebEngineView is not None:
+            if self.widok_podgladu_strona is None:
+                self.widok_podgladu_strona = QWebEngineView()
+                self.stos_podgladu.addWidget(self.widok_podgladu_strona)
             # WHY: setUrl przy każdej zmianie = przeładowanie strony (gra startuje od nowa)
             self.widok_podgladu_strona.setUrl(QUrl.fromLocalFile(str(plik)))
             self.stos_podgladu.setCurrentWidget(self.widok_podgladu_strona)

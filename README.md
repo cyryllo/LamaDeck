@@ -33,6 +33,10 @@ does and how to turn it on** (also on the [project page](https://cyryllo.github.
 - Optional: **uv** (for installing Open WebUI and LiteLLM — the app installs it itself if needed)
 - Optional: the **QtPdf** module for PDF attachments in the chat — included in the pip PyQt6;
   on Debian it's `python3-pyqt6.qtpdf` (`install.sh` offers it, the `.deb` pulls it in)
+- Optional: the **QtWebEngine** module (about 100 MB) for the "Page" view of the file preview in
+  the chat — web pages and games shown inside the app. pip: `PyQt6-WebEngine`; Debian/Ubuntu:
+  `python3-pyqt6.qtwebengine` (`install.sh` installs or offers it, the `.deb` and the AppImage
+  include it). Without it, "Page" opens the file in your web browser
 - Optional: `ffmpeg`, `pandoc`, `zstd` (full Open WebUI functionality — voice, document RAG;
   the app offers to install these via `apt` right after a successful Open WebUI install)
 
@@ -95,7 +99,7 @@ Uninstall with `./install.sh --uninstall`.
 **Manually, for development** — no copying, no menu entry:
 
 ```
-pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" requests
+pip install "PyQt6<6.12" "PyQt6-Qt6<6.12" "PyQt6-WebEngine<6.12" "PyQt6-WebEngine-Qt6<6.12" requests
 python3 lamadeck.py
 ```
 
@@ -201,7 +205,10 @@ fonts are bundled, so it looks the same everywhere).
 - **Working folder**: the folder button lets the model browse, read and search the files of a
   folder you choose and change them — every write shows a preview of the change and needs your
   approval (once, for the session, or always for that folder). The model can't leave the folder,
-  delete files or run commands. Needs a model tagged *tools* (qwen3, gemma4…)
+  delete files or run commands. Needs a model tagged *tools* (qwen3, gemma4…). The files it saved
+  are listed under the answer; click one to open a **preview** next to the conversation — the code
+  with line numbers, the changes, or the page itself (a web page or a game, as in a browser) — that
+  refreshes by itself whenever the model saves the file again
 - **Links in a question**: paste a link and the app downloads the page itself — straight from
   your computer, no account — and adds its text to the question (a PDF link works too; long
   pages go through excerpt search). Pages that only load with JavaScript are reported as such
@@ -277,7 +284,7 @@ fonts are bundled, so it looks the same everywhere).
 - [x] Default write permission for new folders in Settings (ask every time / ask once per session /
   always allow), changeable per project on the folder bar
 - [x] A list of the files the model saved under its answer — click one to preview it
-- [ ] A file preview inside the app that refreshes by itself as the model changes the file,
+- [x] A file preview inside the app that refreshes by itself as the model changes the file,
   including web pages (e.g. a game) shown as in a browser
 
 **Then — 1.2, the chat in your web browser:**

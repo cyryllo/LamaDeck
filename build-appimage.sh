@@ -62,29 +62,58 @@ PY="$APP_DIR/usr/python/bin/python3"
 #      (including QtSvg, QtPdf and the Wayland/X11 platform plugins).
 # WHY: PyQt6 pinned to 6.11 - 6.12 (October 2026) no longer ships the QtPdf module,
 #      which the chat needs to read PDF attachments
-echo "Installing PyQt6 and requests..."
+# WHY: PyQt6-WebEngine for the file preview in the chat ("Page" view - web pages and games),
+#      same 6.11 line as PyQt6
+echo "Installing PyQt6, PyQt6-WebEngine and requests..."
 "$PY" -s -m pip install --quiet --no-cache-dir --only-binary=:all: \
-    --disable-pip-version-check "PyQt6==6.11.*" "PyQt6-Qt6==6.11.*" requests
+    --disable-pip-version-check "PyQt6==6.11.*" "PyQt6-Qt6==6.11.*" \
+    "PyQt6-WebEngine==6.11.*" "PyQt6-WebEngine-Qt6==6.11.*" requests
 
 # WHAT: drops parts of Qt and Python the app never uses.
-# WHY:  roughly halves the file. The app uses Widgets, Gui, Svg, Pdf, DBus and
-#       Network only; QML/Quick, multimedia, 3D and the designer are unused.
+# WHY:  a much smaller file. The app imports Widgets, Gui, Svg, Pdf, DBus, Network and
+#       WebEngineWidgets. WebEngine itself needs the Qml, Quick, QuickWidgets, WebChannel,
+#       Positioning and OpenGL LIBRARIES (checked with ldd), so those stay - only their
+#       Python bindings go. The ldd check below stops the build if anything is missing.
 SITE="$("$PY" -s -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 QT="$SITE/PyQt6/Qt6"
-rm -rf "$QT/qml" "$QT/translations"/qtwebengine* 2>/dev/null || true
-for pattern in Quick Qml Designer Multimedia SpatialAudio 3D ShaderTools Charts DataVis \
-               Graphs RemoteObjects Sensors SerialPort Bluetooth Nfc Positioning Help \
-               Test TextToSpeech WebChannel WebSockets Sql OpenGLWidgets Lottie; do
-    rm -f "$QT/lib/libQt6${pattern}"*.so* "$SITE/PyQt6/Qt${pattern}"*.so "$SITE/PyQt6/Qt${pattern}"*.pyi
+rm -rf "$QT/qml" 2>/dev/null || true
+# WHY: the QtWebChannel and QtPositioning bindings stay - PyQt6.QtWebEngineWidgets imports them
+for pattern in Quick Qml Designer Multimedia SpatialAudio 3D Charts DataVis Graphs RemoteObjects \
+               Sensors SerialPort Bluetooth Nfc Help Test TextToSpeech \
+               WebSockets Sql OpenGLWidgets Lottie WebEngineQuick; do
+    rm -f "$SITE/PyQt6/Qt${pattern}"*.so "$SITE/PyQt6/Qt${pattern}"*.pyi
 done
-rm -rf "$QT/plugins/"{sqldrivers,multimedia,qmltooling,sceneparsers,renderers,geometryloaders,position,sensors,texttospeech} 2>/dev/null || true
+for pattern in Designer Multimedia SpatialAudio 3D Quick3D QuickControls QuickDialogs QuickTemplates \
+               QuickParticles QuickShapes QuickTimeline QuickVectorImage QuickEffects QuickLayouts \
+               QuickTest Charts DataVis Graphs RemoteObjects Sensors SerialPort Bluetooth Nfc Help \
+               Test TextToSpeech WebSockets Sql Lottie ShaderTools WebEngineQuick; do
+    rm -f "$QT/lib/libQt6${pattern}"*.so*
+done
+# WHY: plugins of the removed parts (3D, QML tools, help, multimedia...) would point at missing libraries
+rm -rf "$QT/plugins/"{sqldrivers,multimedia,qmltooling,qmlls,qmllint,sceneparsers,renderers,renderplugins,geometryloaders,assetimporters,help,scxmldatamodel,sensors,texttospeech,position,webview,egldeviceintegrations} 2>/dev/null || true
+# WHY: FFmpeg libraries of Qt Multimedia (not used; WebEngine has its own decoder built in)
+rm -f "$QT/lib/"{libavcodec,libavformat,libavutil,libswresample,libswscale,libQt6FFmpegStub,libQt6LabsPlatform}* 2>/dev/null || true
+# WHAT: every remaining Qt library, plugin and helper must find its Qt libraries INSIDE the bundle.
+# WHY:  a plain ldd check would also accept Qt libraries installed on the build machine - the
+#       AppImage then fails on a computer without them (found on a clean Fedora).
+MISSING=""
+while IFS= read -r -d '' f; do
+    for lib in $(ldd "$f" 2>/dev/null | grep -o 'libQt6[A-Za-z0-9]*\.so\.6' | sort -u); do
+        [ -e "$QT/lib/$lib" ] || MISSING="$MISSING${f#"$QT"/}: $lib"$'\n'
+    done
+done < <(find "$QT" -type f \( -name "*.so*" -o -name "QtWebEngineProcess" \) -print0)
+if [ -n "$MISSING" ]; then
+    echo "Trimmed too much - Qt libraries missing from the AppImage:" >&2
+    printf '%s' "$MISSING" >&2
+    exit 1
+fi
 rm -rf "$APP_DIR/usr/python/lib/python3.12/"{test,idlelib,tkinter,turtledemo,ensurepip,lib2to3} \
        "$APP_DIR/usr/python/lib/"{libtcl,libtk}* "$APP_DIR/usr/python/lib/"{tcl,tk}[0-9]* 2>/dev/null || true
 find "$APP_DIR/usr/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # WHAT: a quick check that the trimmed Python still loads everything the app imports.
 QT_QPA_PLATFORM=offscreen "$PY" -s -c '
-from PyQt6 import QtCore, QtGui, QtWidgets, QtSvg, QtNetwork, QtDBus, QtPdf
+from PyQt6 import QtCore, QtGui, QtWidgets, QtSvg, QtNetwork, QtDBus, QtPdf, QtWebEngineWidgets
 import requests, sqlite3, zipfile, ssl
 print("Python", __import__("sys").version.split()[0], "- Qt", QtCore.QT_VERSION_STR, "- imports OK")
 '
