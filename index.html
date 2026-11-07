@@ -97,7 +97,9 @@
         <h2>A chat that shows the numbers</h2>
         <ul style="margin-top:1.25rem">
           <li><strong>Working folder</strong>: the model reads and searches the files of a folder you
-            choose and changes them only with your approval, with a preview of every change.</li>
+            choose and changes them only with your approval, with a preview of every change. Click
+            a saved file to see it next to the conversation - a web page or a game runs right there
+            and reloads whenever the model saves it again.</li>
           <li><strong>Web search with sources</strong>: one click on the globe button, the model
             writes the queries, the app reads the pages and the answer cites them as [1], [2].
             Results from SearXNG installed with one click, no account.</li>
@@ -192,24 +194,32 @@ cd LamaDeck
     <div class="wrap">
       <h2>Roadmap</h2>
       <div class="roadmap">
-        <div class="milestone now">
-          <h3>1.1 · complete</h3>
+        <div class="milestone">
+          <h3>1.0 – 1.1 · done</h3>
           <ul>
             <li><span class="done">Done:</span> hosts, models, LiteLLM router, Open WebUI, log, tray,
               seven languages</li>
             <li><span class="done">Done:</span> chat with attachments, saved conversations, context
               usage, thinking on/off, Markdown export</li>
-            <li><span class="done">Done:</span> web search in the chat with sources (SearXNG or
-              Ollama's web search)</li>
-            <li><span class="done">Done:</span> APT repository, .deb and AppImage</li>
+            <li><span class="done">1.0:</span> web search in the chat with sources; APT repository,
+              .deb and AppImage</li>
             <li><span class="done">1.1:</span> working folder in the chat - the model works with your
               files, every change approved</li>
           </ul>
         </div>
+        <div class="milestone now">
+          <h3>1.1.x · now: polishing the working folder</h3>
+          <ul>
+            <li><span class="done">1.1.4:</span> default write permission for new folders, changeable per project</li>
+            <li><span class="done">1.1.5:</span> the files the model saved, listed under its answer, with a preview</li>
+            <li><span class="done">1.1.6:</span> the preview refreshes by itself and shows web pages and games as in a browser</li>
+          </ul>
+        </div>
         <div class="milestone">
-          <h3>From now on · bug fixes</h3>
-          <p>The app covers what it set out to do. Anything bigger, such as user accounts,
-            knowledge bases or voice, is what Open WebUI is for, and it is built in.</p>
+          <h3>1.2 · the chat in your web browser</h3>
+          <p>LamaDeck serves its chat on a port, with the same features and the same saved
+            conversations - start on the computer, continue on your phone. Only this computer by
+            default; your home network only after you turn it on, with a password.</p>
         </div>
       </div>
     </div>
