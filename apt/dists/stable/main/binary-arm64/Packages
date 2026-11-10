@@ -1,26 +1,4 @@
 Package: lamadeck
-Version: 1.0.1
-Architecture: all
-Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
-Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-requests, pkexec, systemd, curl
-Conflicts: ollama-manager
-Replaces: ollama-manager
-Filename: pool/main/lamadeck_1.0.1_all.deb
-Size: 781240
-MD5sum: 878f53141f09d1d231a78a884c230a98
-SHA1: b50fdd45f6fdde6e9049a64fc574e8c475242135
-SHA256: 555743e9ad1a214e55dd07ddd6783e81ea8d8e25f54384c53c74cca12ae39c05
-Section: utils
-Priority: optional
-Homepage: https://github.com/cyryllo/LamaDeck
-Description: control panel for a local AI stack (Ollama, LiteLLM, Open WebUI)
- Unofficial desktop app (PyQt6, KDE) for a local AI stack: the Ollama service
- and models on several hosts, a LiteLLM router with one OpenAI-compatible
- address, Open WebUI, and a built-in chat with speed statistics, attachments
- and search in large files. Formerly called "Ollama Manager". Requires
- systemd and polkit; Ollama itself can be installed from the app.
-
-Package: lamadeck
 Version: 1.1.2
 Architecture: all
 Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
@@ -54,6 +32,28 @@ Size: 797020
 MD5sum: 298ad78f588c82fb93c8f906cb2b60e1
 SHA1: e1727baef76c6eeefdfc159f917726b21ce81771
 SHA256: 46a886a4ad525d5bdaf512431d0a8144d020b7c06d61e41ed93ddad6fb308a9a
+Section: utils
+Priority: optional
+Homepage: https://github.com/cyryllo/LamaDeck
+Description: control panel for a local AI stack (Ollama, LiteLLM, Open WebUI)
+ Unofficial desktop app (PyQt6, KDE) for a local AI stack: the Ollama service
+ and models on several hosts, a LiteLLM router with one OpenAI-compatible
+ address, Open WebUI, and a built-in chat with speed statistics, attachments
+ and search in large files. Formerly called "Ollama Manager". Requires
+ systemd and polkit; Ollama itself can be installed from the app.
+
+Package: lamadeck
+Version: 1.2.1
+Architecture: all
+Maintainer: Cyryl Sochacki <cyrylsochacki@gmail.com>
+Depends: python3, python3-pyqt6, python3-pyqt6.qtsvg, python3-pyqt6.qtpdf, python3-pyqt6.qtwebengine, python3-requests, pkexec, systemd, curl
+Conflicts: ollama-manager
+Replaces: ollama-manager
+Filename: pool/main/lamadeck_1.2.1_all.deb
+Size: 858240
+MD5sum: 1d962c38fa42152951bed16b609b5b26
+SHA1: 3cc5440d51627896621c5fde6f1415ce5efd843e
+SHA256: d2fbede71bf9979d99473c8d9d3d08abb62e0fe5d1b771eff792e4fef3077457
 Section: utils
 Priority: optional
 Homepage: https://github.com/cyryllo/LamaDeck

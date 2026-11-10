@@ -27,12 +27,12 @@
 
 <main>
   <div class="wrap intro">
-    <span class="status">Version 1.1 · free and open source (GPL-3.0)</span>
+    <span class="status">Version 1.2 · free and open source (GPL-3.0)</span>
     <h1>A control panel for your local AI stack</h1>
     <p class="lead">LamaDeck is a desktop app for KDE that runs Ollama on every computer in your
       home network, joins all their models behind one address for VS Code and other tools, and
-      has its own chat that can search the web and cite its sources. No terminal, no Docker, no
-      cloud.</p>
+      has its own chat that can search the web, cite its sources and work with your files - also in
+      your web browser, on your phone too. No terminal, no Docker, no cloud.</p>
     <div class="actions">
       <a class="button primary" href="#install">Install on Debian / Ubuntu</a>
       <a class="button" href="guide/">User guide</a>
@@ -123,6 +123,27 @@
   <section>
     <div class="wrap-wide split tray">
       <div>
+        <h2>The same chat in your browser - on your phone too</h2>
+        <ul style="margin-top:1.25rem">
+          <li>LamaDeck serves its own chat at <code>http://localhost:11500</code>: the same models and
+            the same saved conversations as in the window. Start at the computer, carry on from the
+            sofa.</li>
+          <li>Everything from the window: answers as they're written, web search with sources,
+            attachments, and the working folder with approval, saved files and the live preview.</li>
+          <li>Off by default and only on this computer. Your home network only after you turn it on,
+            with a password - the settings show a QR code for the phone.</li>
+          <li>No accounts, no database, no extra service: a small web server inside the app.</li>
+        </ul>
+      </div>
+      <figure class="shot" style="max-width:18rem">
+        <img src="img/lamadeck-web-phone.png" alt="LamaDeck chat in a phone browser: a trip plan with a table" width="460" height="943" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide split tray">
+      <div>
         <h2>Or keep it in the tray</h2>
         <ul style="margin-top:1.25rem">
           <li>A small panel next to the clock: service switches, CPU, VRAM and RAM, and the models
@@ -204,22 +225,22 @@ cd LamaDeck
             <li><span class="done">1.0:</span> web search in the chat with sources; APT repository,
               .deb and AppImage</li>
             <li><span class="done">1.1:</span> working folder in the chat - the model works with your
-              files, every change approved</li>
+              files, every change approved; saved files and a live preview, web pages and games too</li>
           </ul>
         </div>
         <div class="milestone now">
-          <h3>1.1.x · now: polishing the working folder</h3>
+          <h3>1.2 · done: the chat in your web browser</h3>
           <ul>
-            <li><span class="done">1.1.4:</span> default write permission for new folders, changeable per project</li>
-            <li><span class="done">1.1.5:</span> the files the model saved, listed under its answer, with a preview</li>
-            <li><span class="done">1.1.6:</span> the preview refreshes by itself and shows web pages and games as in a browser</li>
+            <li><span class="done">1.2.0:</span> the same chat and conversations in the browser, on
+              your phone too; home network with a password and a QR code</li>
+            <li><span class="done">1.2.1:</span> attachments, the working folder with approval and
+              the file preview in the browser</li>
           </ul>
         </div>
         <div class="milestone">
-          <h3>1.2 · the chat in your web browser</h3>
-          <p>LamaDeck serves its chat on a port, with the same features and the same saved
-            conversations - start on the computer, continue on your phone. Only this computer by
-            default; your home network only after you turn it on, with a password.</p>
+          <h3>Next</h3>
+          <p>Polishing from everyday use. Ideas and wishes are welcome in the
+            <a href="https://github.com/cyryllo/LamaDeck/issues">issues</a>.</p>
         </div>
       </div>
     </div>
