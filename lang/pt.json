@@ -738,7 +738,6 @@
   "Skopiowano": "Copiado",
   "Skopiowano: {adres}": "Copiado: {adres}",
   "Szukaj w internecie: {stan}": "Pesquisar na internet: {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "Esta conversa usa uma pasta de trabalho - por agora, o trabalho com ficheiros só é possível no programa.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "Este modelo não está em nenhum host online - escolha outro.",
   "Tej rozmowy już nie ma.": "Esta conversa já não existe.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "O mesmo chat do programa - os mesmos modelos e conversas guardadas - num endereço do navegador, por ex. no telemóvel. Funciona enquanto o programa estiver em execução (também escondido na área de notificação).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "o número no endereço da página; altere-o se outro programa o usar",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "o telemóvel e outros computadores desta rede - depois de iniciar sessão com a palavra-passe definida abaixo",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "definida - alterá-la termina a sessão em todos os dispositivos",
-  "za duże zapytanie": "pedido demasiado grande"
+  "za duże zapytanie": "pedido demasiado grande",
+  "Bez katalogu roboczego": "Sem pasta de trabalho",
+  "Dołączony plik wygasł - dołącz go ponownie.": "O ficheiro anexado expirou - anexe-o de novo.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "Uma pasta nova escolhe-se no programa - com o botão de pasta do chat.",
+  "Odepnij katalog": "Desanexar a pasta",
+  "Otwórz stronę w nowej karcie": "Abrir a página num novo separador",
+  "Pliku już nie ma.": "O ficheiro já não existe.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Aguarde um momento - o ficheiro ainda está a ser enviado.",
+  "Ta rozmowa nie ma katalogu roboczego.": "Esta conversa não tem pasta de trabalho.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "Esta pasta não foi escolhida no programa - escolha-a primeiro lá.",
+  "wysyłam...": "a enviar..."
 }

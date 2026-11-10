@@ -738,7 +738,6 @@
   "Skopiowano": "Copié",
   "Skopiowano: {adres}": "Copié : {adres}",
   "Szukaj w internecie: {stan}": "Rechercher sur internet : {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "Cette conversation utilise un dossier de travail - pour l'instant, le travail sur les fichiers se fait uniquement dans l'application.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "Ce modèle n'est sur aucun hôte en ligne - choisissez-en un autre.",
   "Tej rozmowy już nie ma.": "Cette conversation n'existe plus.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "Le même chat que dans l'application - les mêmes modèles et conversations enregistrées - à une adresse dans le navigateur, par ex. sur votre téléphone. Il fonctionne tant que l'application tourne (même cachée dans la zone de notification).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "le numéro dans l'adresse de la page ; changez-le si un autre programme l'utilise",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "le téléphone et les autres ordinateurs de ce réseau - après connexion avec le mot de passe défini ci-dessous",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "défini - le changer déconnecte tous les appareils",
-  "za duże zapytanie": "requête trop volumineuse"
+  "za duże zapytanie": "requête trop volumineuse",
+  "Bez katalogu roboczego": "Sans dossier de travail",
+  "Dołączony plik wygasł - dołącz go ponownie.": "Le fichier joint a expiré - joignez-le à nouveau.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "Un nouveau dossier se choisit dans l'application - avec le bouton dossier du chat.",
+  "Odepnij katalog": "Détacher le dossier",
+  "Otwórz stronę w nowej karcie": "Ouvrir la page dans un nouvel onglet",
+  "Pliku już nie ma.": "Le fichier n'existe plus.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Patientez - le fichier est encore en cours d'envoi.",
+  "Ta rozmowa nie ma katalogu roboczego.": "Cette conversation n'a pas de dossier de travail.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "Ce dossier n'a pas été choisi dans l'application - choisissez-le d'abord là-bas.",
+  "wysyłam...": "envoi..."
 }

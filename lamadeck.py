@@ -46,7 +46,8 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs, quote, unquote
+import mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
@@ -4424,6 +4425,47 @@ def ustaw_tryb_zapisu_katalogu(katalog, tryb):
     _ustawienia().setValue("czat/zapis_katalogow", json.dumps(tryby))
 
 
+def tryb_zapisu_katalogu(katalog):
+    # WHAT: (tryb, czy_wybrany_dla_katalogu) - wybór projektu albo domyślny z Ustawień.
+    wlasny = tryby_zapisu_katalogow().get(katalog)
+    return (wlasny, True) if wlasny else (tryb_zapisu_domyslny(), False)
+
+
+# WHAT: stan katalogu roboczego do końca programu - WSPÓLNY dla okna i czatu w przeglądarce.
+# WHY:  "Zezwalaj w tej sesji" dane w oknie działa też w przeglądarce (i odwrotnie), a widok
+#       "Zmiany" w obu miejscach porównuje z tą samą wersją sprzed pierwszej zmiany modelu.
+_KATALOGI_SESJI = set()     # katalogi z zapisem bez pytania do zamknięcia programu
+_PRZED_ZMIANAMI = {}        # pełna ścieżka pliku -> treść sprzed pierwszej zmiany (None = nowy plik)
+
+
+def zapamietaj_katalog_roboczy(katalog):
+    # WHAT: ostatnio wybierane w programie katalogi robocze (najnowszy pierwszy, do 15).
+    # WHY:  czat w przeglądarce dostaje TYLKO katalogi wybrane wcześniej w programie (decyzja
+    #       użytkownika) - z telefonu nie da się wskazać dowolnego miejsca na dysku.
+    try:
+        lista = json.loads(_ustawienia().value("czat/katalogi_ostatnie", "") or "[]")
+    except ValueError:
+        lista = []
+    lista = [katalog] + [k for k in lista if k != katalog]
+    _ustawienia().setValue("czat/katalogi_ostatnie", json.dumps(lista[:15]))
+
+
+def katalogi_robocze_znane(rozmowy=None):
+    # WHAT: katalogi, które użytkownik wybrał kiedyś w programie: ostatnie, z zapisanych rozmów
+    #       i te z własnym trybem zapisu - tylko istniejące.
+    try:
+        lista = json.loads(_ustawienia().value("czat/katalogi_ostatnie", "") or "[]")
+    except ValueError:
+        lista = []
+    lista += [r["katalog"] for r in (rozmowy if rozmowy is not None else lista_rozmow()) if r.get("katalog")]
+    lista += list(tryby_zapisu_katalogow())
+    wynik = []
+    for k in lista:
+        if isinstance(k, str) and k not in wynik and Path(k).is_dir():
+            wynik.append(k)
+    return wynik
+
+
 def opis_kroku(krok):
     # WHAT: krok pracy modelu na plikach jako krótki tekst dla człowieka ("przeczytał plik: a.py").
     # WHY:  tłumaczony przy wyświetlaniu - zapisana rozmowa przeżywa zmianę języka.
@@ -4739,7 +4781,7 @@ def rozmowa_do_markdown(dane):
 
 def _wpis_listy_rozmow(id_rozmowy, dane):
     return {"id": id_rozmowy, "tytul": dane.get("tytul", ""), "zmieniono": dane.get("zmieniono", 0),
-            "tytul_wlasny": dane.get("tytul_wlasny", False),
+            "tytul_wlasny": dane.get("tytul_wlasny", False), "katalog": dane.get("katalog"),
             "model": dane.get("model", ""), "szukaj": _tekst_do_szukania(dane)}
 
 
@@ -6624,9 +6666,16 @@ _WWW_PLIKI = {
 _WWW_PLIKI.update({f"/fonts/{nazwa}": (Path(__file__).resolve().parent / "fonts" / nazwa, "font/ttf")
                    for nazwa in ("Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf",
                                  "Inter-Bold.ttf", "JetBrainsMono-Regular.ttf")})
-_WWW_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            "font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; "
+_WWW_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
+            "font-src 'self'; connect-src 'self'; manifest-src 'self'; frame-src 'self'; base-uri 'none'; "
             "form-action 'none'; frame-ancestors 'none'")
+# WHAT: strona z katalogu roboczego (podgląd) - zawsze w piaskownicy: bez dostępu do ciasteczek i API czatu
+#       (osobne, "nieprzezroczyste" pochodzenie), ale skrypty działają (gry), a biblioteki może brać z https.
+# WHY:  dyrektywa sandbox w nagłówku działa też, gdy ktoś otworzy adres podglądu wprost w karcie.
+_WWW_CSP_PODGLADU = ("sandbox allow-scripts allow-forms allow-modals allow-pointer-lock allow-popups; "
+                     "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'")
+_WWW_MAKS_PLIKU = _MAKS_PLIK_DOKUMENTU + 1024 * 1024   # WHY: przesyłany załącznik - jak dokument w oknie
+_WWW_MAKS_PODGLADU = 2 * 1024 * 1024                    # WHY: widok "Kod" - większy plik i tak by się nie czytał
 
 
 def www_ustawienie(klucz, domyslnie=None, typ=None):
@@ -6693,19 +6742,19 @@ def _wiadomosc_dla_strony(w):
     # WHY: get zamiast "in" + [] - wątek odpowiedzi może w tej chwili zdjąć klucz (np. "etap")
     wynik = {}
     for k in ("rola", "tresc", "kto", "myslenie", "stat", "kontekst", "zrodla_www", "zrodla", "przerwano",
-              "trwa", "etap", "laduje", "szuka", "gb"):
+              "trwa", "etap", "laduje", "szuka", "gb", "pliki"):
         wartosc = w.get(k)
         if wartosc is not None:
             wynik[k] = wartosc
-    if w.get("_start"):
-        wynik["start"] = w["_start"]
-    if w.get("_uwagi"):
-        wynik["uwagi"] = w["_uwagi"]
+    for klucz, nazwa in (("_start", "start"), ("_uwagi", "uwagi"), ("_ostatni", "ostatni"), ("_prosba", "prosba")):
+        if w.get(klucz):
+            wynik[nazwa] = w[klucz]
     if w.get("zalaczniki"):
-        wynik["zalaczniki"] = [{"nazwa": z.get("nazwa", ""), "typ": z.get("typ", ""), "url": z.get("url")}
-                               for z in w["zalaczniki"]]
+        wynik["zalaczniki"] = [{"nazwa": z.get("nazwa", ""), "typ": z.get("typ", ""), "url": z.get("url"),
+                                "rozmiar": z.get("rozmiar")} for z in list(w["zalaczniki"])]
     if w.get("narzedzia"):
-        wynik["narzedzia"] = [{"opis": opis_kroku(k), "stan": k.get("stan", "ok")} for k in w["narzedzia"]]
+        wynik["narzedzia"] = [{"opis": opis_kroku(k), "stan": k.get("stan", "ok"), "nazwa": k.get("nazwa", ""),
+                               "sciezka": k.get("sciezka", "")} for k in list(w["narzedzia"])]
     return wynik
 
 
@@ -6718,17 +6767,20 @@ class OdpowiedzWWW:
          czyta postęp przez /api/strumien - wersja rośnie przy każdej zmianie.
     """
 
-    def __init__(self, serwer, id_rozmowy, dane, model, host, myslenie, szukaj):
+    def __init__(self, serwer, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None):
         self.serwer = serwer
         self.id = id_rozmowy
         self.dane = dane                    # WHY: cała rozmowa z pliku; ostatnia wiadomość = pytanie
         self.model, self.host = model, host
         self.myslenie, self.szukaj = myslenie, szukaj
+        self.katalog = katalog              # WHY: katalog roboczy = model dostaje narzędzia do plików
         self.warunek = threading.Condition()
         self.wersja = 0
         self.koniec = False
         self._worker = None
         self._anuluj = False
+        self._uwagi = []
+        self._nr_prosby = 0
 
     @property
     def ostatnia(self):
@@ -6742,7 +6794,7 @@ class OdpowiedzWWW:
     def anuluj(self):
         self._anuluj = True
         if self._worker is not None:
-            self._worker.anuluj()
+            self._worker.anuluj()  # WHY: budzi też wątek czekający na zgodę na zapis
 
     def start(self):
         threading.Thread(target=self._praca, name=f"www-{self.id}", daemon=True).start()
@@ -6751,6 +6803,7 @@ class OdpowiedzWWW:
     def _fragment(self, tresc, myslenie):
         self.ostatnia["tresc"] += tresc
         self.ostatnia["myslenie"] += myslenie
+        self.ostatnia["_ostatni"] = time.time()
         self._zmiana()
 
     def _ladowanie(self):
@@ -6771,11 +6824,48 @@ class OdpowiedzWWW:
         self.ostatnia["zrodla"] = zrodla
         self._zmiana()
 
+    def _narzedzie(self, krok):
+        self.ostatnia.setdefault("narzedzia", []).append(krok)
+        self.ostatnia["_ostatni"] = time.time()
+        self._zmiana()
+
+    def _prosba_zapisu(self, zmiana):
+        # WHAT: model chce zapisać plik - zgoda zapamiętana dla katalogu albo pytanie w przeglądarce.
+        # WHY:  wołane w wątku odpowiedzi tuż przed tym, jak CzatWorker zaczyna czekać na decyzję;
+        #       pytanie siedzi w wiadomości (strumień), więc przeglądarka, która się rozłączyła,
+        #       po powrocie znowu je pokaże. Decyzja przychodzi przez /api/zgoda (metoda zgoda()).
+        _PRZED_ZMIANAMI.setdefault(zmiana["plik"], zmiana["stara"])
+        tryb, _wlasny = tryb_zapisu_katalogu(self.katalog)
+        if tryb == "zawsze" or self.katalog in _KATALOGI_SESJI:
+            self._worker.odpowiedz_na_zapis(True)
+            return
+        self._nr_prosby += 1
+        self.ostatnia["_prosba"] = {"nr": self._nr_prosby, "sciezka": zmiana["sciezka"],
+                                    "nowy": zmiana["stara"] is None, "katalog": self.katalog,
+                                    "roznica": roznica_zmiany(zmiana)[:300000]}
+        self._zmiana()
+
+    def zgoda(self, nr, wybor):
+        # WHAT: decyzja z przeglądarki: "raz", "sesja", "zawsze" albo None (odrzuć) - jak w oknie.
+        prosba = self.ostatnia.get("_prosba")
+        if not prosba or prosba["nr"] != nr or self._worker is None:
+            return False
+        tryb, _wlasny = tryb_zapisu_katalogu(self.katalog)
+        # WHY: tryb "raz na sesję" - pierwsza zgoda otwiera zapis bez pytania do zamknięcia programu
+        if wybor == "sesja" or (wybor == "raz" and tryb == "sesja"):
+            _KATALOGI_SESJI.add(self.katalog)
+        elif wybor == "zawsze":
+            ustaw_tryb_zapisu_katalogu(self.katalog, "zawsze")
+        self.ostatnia.pop("_prosba", None)
+        self._zmiana()
+        self._worker.odpowiedz_na_zapis(wybor in ("raz", "sesja", "zawsze"))
+        return True
+
     def _koniec(self, sukces, wynik):
         self._wynik = (sukces, wynik)
 
     def _dolacz_strony(self, pytanie):
-        # WHAT: linki z pytania -> strony jako załączniki pytania (jak w oknie), duże przez RAG.
+        # WHAT: linki z pytania -> strony jako załączniki pytania (jak w oknie).
         # WHY:  błąd strony nie zatrzymuje pytania (w oknie użytkownik decyduje, tu nie ma kogo
         #       zapytać w trakcie) - uwaga pod odpowiedzią mówi, czego zabrakło.
         dolaczone = {z.get("url") for z in pytanie.get("zalaczniki", [])}
@@ -6783,51 +6873,65 @@ class OdpowiedzWWW:
         if not linki:
             return
         self._etap(_("Pobieram: {linki}...").format(linki=", ".join(_nazwa_strony(l) for l in linki)))
-        uwagi = []
         for link in linki:
             if self._anuluj:
                 return
             try:
-                z = pobierz_strone(link)
-                if z["typ"] == "dokument":
-                    self._przygotuj_dokument(z)
-                pytanie.setdefault("zalaczniki", []).append(z)
+                pytanie.setdefault("zalaczniki", []).append(pobierz_strone(link))
             except Exception as e:
-                uwagi.append(str(e))
-        if uwagi:
-            self.ostatnia["_uwagi"] = uwagi
+                self._uwagi.append(str(e))
+        self.ostatnia.pop("etap", None)
+        self._zmiana()
+
+    def _przygotuj_dokumenty(self, pytanie):
+        # WHAT: duże pliki i strony z pytania (ponad 100 KB) -> fragmenty + wektory (jak RagWorker).
+        # WHY:  bez modelu embeddingów (albo przy błędzie) plik zostaje przy pytaniu tylko z nazwy,
+        #       a uwaga pod odpowiedzią mówi dlaczego.
+        for z in pytanie.get("zalaczniki", []):
+            if z.get("typ") != "dokument" or z.get("gotowy") or "tekst" not in z or self._anuluj:
+                continue
+            try:
+                self._przygotuj_dokument(z)
+            except Exception as e:
+                z.pop("tekst", None)
+                z["bez_wyszukiwania"] = True
+                self._uwagi.append(str(e))
         self.ostatnia.pop("etap", None)
         self._zmiana()
 
     def _przygotuj_dokument(self, z):
-        # WHAT: duża strona -> fragmenty + wektory (to samo co RagWorker, tylko w tym wątku).
         wybor = model_embeddingow(self.serwer.modele(), self.host["adres"])
         if not wybor:
             raise ValueError(_("{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model "
                                "embeddingów. Zalecany pobierzesz jednym przyciskiem w \"Ustawieniach\" (karta "
                                "\"Czat\").").format(nazwa=z["nazwa"]))
-        z["model_emb"], z["adres_emb"] = wybor
-        fragmenty = _podziel_na_fragmenty(z.pop("tekst"))
+        fragmenty = _podziel_na_fragmenty(z["tekst"])
         wektory = []
         for i in range(0, len(fragmenty), 32):
             if self._anuluj:
                 raise ValueError(_("przerwano"))
             self._etap(_("Przygotowuję {nazwa} do wyszukiwania ({gotowe}/{wszystkie})...").format(
                 nazwa=z["nazwa"], gotowe=i, wszystkie=len(fragmenty)))
-            wektory += ollama_embeddingi(z["adres_emb"], z["model_emb"], [f[0] for f in fragmenty[i:i + 32]])
+            wektory += ollama_embeddingi(wybor[1], wybor[0], [f[0] for f in fragmenty[i:i + 32]])
         if len(wektory) != len(fragmenty):
             raise RuntimeError(_("model embeddingów zwrócił złą liczbę wektorów"))
-        z.update({"fragmenty": fragmenty, "wektory": wektory, "gotowy": True})
+        z.pop("tekst", None)
+        z.update({"model_emb": wybor[0], "adres_emb": wybor[1], "fragmenty": fragmenty, "wektory": wektory,
+                  "gotowy": True})
 
     def _praca(self):
         czat = self.dane["wiadomosci"]
         pytanie = czat[-1]
         self._wynik = (False, _("nieznany błąd"))
         czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(self.model["nazwa"]), "tresc": "",
-                     "myslenie": "", "trwa": True, "_start": time.time(), "gb": self.model["rozmiar"] / 1024 ** 3})
+                     "myslenie": "", "trwa": True, "_start": time.time(), "gb": self.model["rozmiar"] / 1024 ** 3,
+                     "pliki": bool(self.katalog)})
         self._zmiana()
         try:
             self._dolacz_strony(pytanie)
+            self._przygotuj_dokumenty(pytanie)
+            if self._uwagi:
+                self.ostatnia["_uwagi"] = self._uwagi
             wyszukiwanie = None
             zrodlo = wyszukiwanie_ustawienie("zrodlo", "wylaczone")
             if self.szukaj and zrodlo != "wylaczone":
@@ -6840,11 +6944,12 @@ class OdpowiedzWWW:
                 self.ostatnia["szuka"] = True
             if not self._anuluj:
                 worker = CzatWorker(self.host["adres"], self.model["nazwa"], historia_dla_modelu(czat), dokumenty,
-                                    parametr_myslenia(self.model, self.myslenie), wyszukiwanie)
+                                    parametr_myslenia(self.model, self.myslenie), wyszukiwanie, self.katalog)
                 bezposrednio = Qt.ConnectionType.DirectConnection
                 for sygnal, slot in ((worker.fragment, self._fragment), (worker.ladowanie, self._ladowanie),
                                      (worker.etap, self._etap), (worker.zrodla_www, self._zrodla_www),
-                                     (worker.zrodla, self._zrodla), (worker.zakonczono, self._koniec)):
+                                     (worker.zrodla, self._zrodla), (worker.narzedzie, self._narzedzie),
+                                     (worker.prosba_zapisu, self._prosba_zapisu), (worker.zakonczono, self._koniec)):
                     sygnal.connect(slot, bezposrednio)
                 self._worker = worker
                 if self._anuluj:
@@ -6857,6 +6962,7 @@ class OdpowiedzWWW:
         sukces, wynik = self._wynik
         if self._anuluj and sukces is False:
             sukces, wynik = True, {"anulowano": True}
+        self.ostatnia.pop("_prosba", None)
         zakoncz_wiadomosc(self.ostatnia, sukces, wynik)
         if not sukces:
             self.serwer.wpis.emit(_("Czat w przeglądarce: błąd - {blad}").format(blad=wynik), "BŁĄD")
@@ -6885,6 +6991,8 @@ class SerwerCzatu(QObject):
         self._modele = ([], 0.0)            # WHY: (lista, kiedy) - hostów nie odpytujemy przy każdym kliknięciu
         self._modele_blokada = threading.Lock()
         self._nieudane = {}                 # WHY: IP -> czasy błędnych haseł (limit prób)
+        self._podglady = {}                 # WHY: losowy token -> katalog roboczy (adresy /podglad/...)
+        self._wyslane = {}                  # WHY: token -> (załącznik, kiedy) - pliki przesłane przed pytaniem
 
     # --- start / stop ---
     @property
@@ -6932,7 +7040,7 @@ class SerwerCzatu(QObject):
         with self._blokada:
             return self._odpowiedzi.get(id_rozmowy)
 
-    def rozpocznij(self, id_rozmowy, dane, model, host, myslenie, szukaj):
+    def rozpocznij(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None):
         # WHAT: zapisuje rozmowę z pytaniem i startuje odpowiedź; False = w tej rozmowie
         #       właśnie pisze ktoś inny.
         # WHY:  zapis PRZED startem wątku - potem wątek zmienia te same słowniki; pytanie od
@@ -6940,11 +7048,42 @@ class SerwerCzatu(QObject):
         if not zajmij_rozmowe(id_rozmowy, "www"):
             return False
         self.zapisz(id_rozmowy, dane)
-        odp = OdpowiedzWWW(self, id_rozmowy, dane, model, host, myslenie, szukaj)
+        odp = OdpowiedzWWW(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog)
         with self._blokada:
             self._odpowiedzi[id_rozmowy] = odp
         odp.start()
         return True
+
+    def token_podgladu(self, katalog):
+        # WHAT: losowy token adresu /podglad/<token>/... dla katalogu (ten sam do końca pracy serwera).
+        # WHY:  strona z katalogu działa w odizolowanej ramce (bez ciasteczek), więc nie może
+        #       logować się hasłem - zamiast tego adres, którego nie da się zgadnąć, a dostaje go
+        #       tylko zalogowana przeglądarka (/api/plik).
+        with self._blokada:
+            for token, k in self._podglady.items():
+                if k == katalog:
+                    return token
+            token = secrets.token_urlsafe(18)
+            self._podglady[token] = katalog
+            return token
+
+    def katalog_podgladu(self, token):
+        with self._blokada:
+            return self._podglady.get(token)
+
+    def dodaj_zalacznik(self, z):
+        # WHAT: plik przesłany z przeglądarki czeka (do godziny) na pytanie, z którym pójdzie.
+        with self._blokada:
+            teraz = time.time()
+            self._wyslane = {t: (zz, kiedy) for t, (zz, kiedy) in self._wyslane.items() if teraz - kiedy < 3600}
+            token = secrets.token_urlsafe(12)
+            self._wyslane[token] = (z, teraz)
+            return token
+
+    def wez_zalacznik(self, token):
+        with self._blokada:
+            wpis = self._wyslane.pop(str(token), None)
+        return wpis[0] if wpis else None
 
     def zakonczono_odpowiedz(self, odp):
         with self._blokada:
@@ -7006,7 +7145,7 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         pass  # WHY: bez wpisu w terminalu przy każdym zapytaniu
 
     # --- odpowiedzi ---
-    def _naglowki(self, kod, typ, dlugosc=None, dodatkowe=()):
+    def _naglowki(self, kod, typ, dlugosc=None, dodatkowe=(), podglad=False):
         self.send_response(kod)
         self.send_header("Content-Type", typ)
         if dlugosc is not None:
@@ -7014,8 +7153,8 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", _WWW_CSP)
+        self.send_header("X-Frame-Options", "SAMEORIGIN" if podglad else "DENY")
+        self.send_header("Content-Security-Policy", _WWW_CSP_PODGLADU if podglad else _WWW_CSP)
         for nazwa, wartosc in dodatkowe:
             self.send_header(nazwa, wartosc)
         self.end_headers()
@@ -7089,6 +7228,8 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
             return self._naglowki(200, typ, len(tresc)) or self.wfile.write(tresc)
         if sciezka == "/api/stan":
             return self._json(self._stan())
+        if sciezka.startswith("/podglad/"):
+            return self._strona_podgladu(sciezka[len("/podglad/"):])
         if not self._zalogowany():
             return self._blad(401, _("Zaloguj się"))
         id_rozmowy = (parametry.get("id") or [""])[0]
@@ -7101,6 +7242,13 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
                 return self._json(self._rozmowa(id_rozmowy))
             if sciezka == "/api/eksport":
                 return self._eksport(id_rozmowy)
+            if sciezka == "/api/katalogi":
+                return self._json(self._katalogi())
+            if sciezka == "/api/plik":
+                return self._json(self._plik(id_rozmowy, (parametry.get("sciezka") or [""])[0],
+                                             (parametry.get("meta") or [""])[0] == "1"))
+            if sciezka == "/api/obraz":
+                return self._obraz(id_rozmowy, parametry)
             if sciezka == "/api/strumien":
                 return self._strumien(id_rozmowy)
         except (OSError, ValueError) as e:
@@ -7112,6 +7260,14 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         if not self._host_dozwolony() or not self._origin_nasz():
             return self._blad(403, "Origin")
         sciezka = urlparse(self.path).path
+        if sciezka == "/api/zalacznik":
+            # WHY: surowe bajty pliku, nie JSON - osobna droga przed odczytem ciała
+            if not self._zalogowany():
+                return self._blad(401, _("Zaloguj się"))
+            try:
+                return self._json(self._przyjmij_zalacznik())
+            except (OSError, ValueError) as e:
+                return self._blad(400, str(e))
         try:
             dane = self._cialo()
         except ValueError as e:
@@ -7136,6 +7292,12 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if sciezka == "/api/nazwa":
                 return self._zmien_nazwe(dane)
+            if sciezka == "/api/zgoda":
+                odp = self.serwer.odpowiedz(self._sprawdz_id(dane.get("id")))
+                wybor = dane.get("wybor") if dane.get("wybor") in ("raz", "sesja", "zawsze") else None
+                return self._json({"ok": bool(odp and odp.zgoda(int(dane.get("nr") or 0), wybor))})
+            if sciezka == "/api/tryb_zapisu":
+                return self._tryb_zapisu(dane)
             if sciezka == "/api/usun":
                 return self._usun(dane)
         except (OSError, ValueError) as e:
@@ -7169,7 +7331,8 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
     def _lista_modeli(self, odswiez):
         pary = []
         for m in self.serwer.modele(odswiez):
-            if not umie_rozmawiac(m):
+            # WHY: modele OCR tylko ze zdjęciem w pytaniu (jak w oknie) - strona chowa je bez zdjęcia
+            if not umie_rozmawiac(m, ze_zdjeciem=True):
                 continue
             for h in m["hosty"]:
                 pary.append({"id": f"{h['adres']}|{m['nazwa']}", "nazwa": m["nazwa"],
@@ -7177,15 +7340,17 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
                              "w_pamieci": h["w_pamieci"], "rozmiar": m["rozmiar"],
                              "parametry": m.get("parametry") or "", "kwantyzacja": m.get("kwantyzacja") or "",
                              "mysli": "thinking" in m.get("mozliwosci", []),
-                             "zdjecia": "vision" in m.get("mozliwosci", [])})
+                             "zdjecia": "vision" in m.get("mozliwosci", []),
+                             "narzedzia": "tools" in m.get("mozliwosci", []),
+                             "tylko_ze_zdjeciem": not umie_rozmawiac(m)})
         return {"modele": pary, "domyslny": _ustawienia().value("czat/model", ""),
                 "kilka_hostow": len({p["host"] for p in pary}) > 1}
 
-    def _znajdz_model(self, id_modelu):
+    def _znajdz_model(self, id_modelu, ze_zdjeciem=False):
         adres, _s, nazwa = str(id_modelu or "").partition("|")
         model = next((m for m in self.serwer.modele() if m["nazwa"] == nazwa), None)
         host = next((h for h in (model or {}).get("hosty", []) if h["adres"] == adres), None)
-        if not model or not host or not umie_rozmawiac(model):
+        if not model or not host or not umie_rozmawiac(model, ze_zdjeciem):
             raise ValueError(_("Tego modelu nie ma na hostach online - wybierz inny."))
         return model, host
 
@@ -7206,17 +7371,29 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         odp = self.serwer.odpowiedz(id_rozmowy)
         dane = odp.dane if odp is not None else wczytaj_rozmowe(id_rozmowy)
         return {"id": id_rozmowy, "tytul": dane.get("tytul", ""), "model": dane.get("model", ""),
-                "host": dane.get("host", ""), "katalog": bool(dane.get("katalog")),
+                "host": dane.get("host", ""), "katalog": dane.get("katalog"),
                 "wiadomosci": [_wiadomosc_dla_strony(w) for w in dane.get("wiadomosci", [])],
                 "trwa": odp is not None, "w_programie": kto_prowadzi_rozmowe(id_rozmowy) == "okno"}
 
     def _wyslij(self, dane):
+        # WHAT: nowe pytanie (z przesłanymi wcześniej plikami) -> odpowiedź w tle; zwraca id rozmowy.
+        # WHY:  pliki odbieramy z przechowalni dopiero po wszystkich sprawdzeniach - przy odmowie
+        #       (zajęta rozmowa, model bez zdjęć) zostają i to samo pytanie można wysłać ponownie.
         tekst = str(dane.get("tekst", "")).strip()
-        if not tekst:
+        tokeny = [str(t) for t in (dane.get("zalaczniki") or [])][:20]
+        if not tekst and not tokeny:
             raise ValueError(_("Puste pytanie."))
         if len(tekst) > _WWW_ZNAKOW_PYTANIA:
             raise ValueError(_("Pytanie jest za długie."))
-        model, host = self._znajdz_model(dane.get("model"))
+        with self.serwer._blokada:
+            czekajace = [self.serwer._wyslane.get(t) for t in tokeny]
+        if None in czekajace:
+            raise ValueError(_("Dołączony plik wygasł - dołącz go ponownie."))
+        model, host = self._znajdz_model(dane.get("model"), any(z["typ"] == "obraz" for z, _k in czekajace))
+        katalog = self._sprawdz_katalog(dane.get("katalog"), model)
+        if any(z["typ"] == "obraz" for z, _k in czekajace) and "vision" not in model.get("mozliwosci", []):
+            raise ValueError(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
+                               "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])))
         id_rozmowy = dane.get("id")
         if id_rozmowy:
             id_rozmowy = self._sprawdz_id(id_rozmowy)
@@ -7226,12 +7403,35 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         else:
             id_rozmowy = nowe_id_rozmowy()
             rozmowa = {"utworzono": time.time(), "wiadomosci": []}
+        zalaczniki = [self.serwer.wez_zalacznik(t) for t in tokeny]
+        if None in zalaczniki:  # WHY: ta sama wysyłka z dwóch kart naraz
+            raise ValueError(_("Dołączony plik wygasł - dołącz go ponownie."))
         rozmowa.update({"model": model["nazwa"], "host": host["adres"]})
-        rozmowa["wiadomosci"].append({"rola": "user", "tresc": tekst, "zalaczniki": []})
+        self._ustaw_katalog(rozmowa, katalog)
+        rozmowa["wiadomosci"].append({"rola": "user", "tresc": tekst, "zalaczniki": zalaczniki})
         if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
-                                      bool(dane.get("szukaj"))):
+                                      bool(dane.get("szukaj")), katalog):
             return self._blad(409, self._zajeta(id_rozmowy))
         return self._json({"id": id_rozmowy})
+
+    @staticmethod
+    def _ustaw_katalog(rozmowa, katalog):
+        if katalog:
+            rozmowa["katalog"] = katalog
+        else:
+            rozmowa.pop("katalog", None)
+
+    def _sprawdz_katalog(self, katalog, model):
+        # WHAT: katalog roboczy z przeglądarki - tylko taki, który wybrano kiedyś w programie.
+        if not katalog:
+            return None
+        if katalog not in katalogi_robocze_znane():
+            raise ValueError(_("Ten katalog nie był wybrany w programie - wybierz go najpierw tam."))
+        if "tools" not in model.get("mozliwosci", []):
+            raise ValueError(_("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model "
+                               "z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.").format(
+                                   model=_skroc_nazwe_modelu_hf(model["nazwa"])))
+        return katalog
 
     def _akcja(self, dane):
         # WHAT: "ponow" - ostatnia odpowiedź od nowa (wybranym teraz modelem); "popraw" - ostatnie
@@ -7244,16 +7444,18 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         if len(czat) < 2 or czat[-2]["rola"] != "user":
             raise ValueError(_("nieprawidłowe zapytanie"))
         if dane.get("akcja") == "ponow":
-            model, host = self._znajdz_model(dane.get("model"))
-            if any(z.get("typ") == "obraz" for z in czat[-2].get("zalaczniki", [])) and \
-                    "vision" not in model.get("mozliwosci", []):
+            ze_zdjeciem = any(z.get("typ") == "obraz" for z in czat[-2].get("zalaczniki", []))
+            model, host = self._znajdz_model(dane.get("model"), ze_zdjeciem)
+            if ze_zdjeciem and "vision" not in model.get("mozliwosci", []):
                 raise ValueError(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
                                    "(np. gemma3, qwen2.5vl, llava).").format(
                                        model=_skroc_nazwe_modelu_hf(model["nazwa"])))
+            katalog = self._sprawdz_katalog(dane.get("katalog"), model)
             czat.pop()
             rozmowa.update({"model": model["nazwa"], "host": host["adres"]})
+            self._ustaw_katalog(rozmowa, katalog)
             if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
-                                          bool(dane.get("szukaj"))):
+                                          bool(dane.get("szukaj")), katalog):
                 return self._blad(409, self._zajeta(id_rozmowy))
             return self._json({"id": id_rozmowy})
         if dane.get("akcja") == "popraw":
@@ -7267,6 +7469,120 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
                 self.serwer.rozmowa_zmieniona.emit(id_rozmowy)
             return self._json({"id": id_rozmowy if czat else None, "tekst": pytanie.get("tresc", "")})
         raise ValueError(_("nieprawidłowe zapytanie"))
+
+    def _katalogi(self):
+        wynik = []
+        for k in katalogi_robocze_znane():
+            tryb, wlasny = tryb_zapisu_katalogu(k)
+            wynik.append({"sciezka": k, "krotko": k.replace(str(Path.home()), "~", 1), "tryb": tryb,
+                          "wlasny": wlasny, "sesja": k in _KATALOGI_SESJI})
+        return {"katalogi": wynik, "domyslny": tryb_zapisu_domyslny()}
+
+    def _tryb_zapisu(self, dane):
+        # WHAT: tryb zapisu dla projektu z przeglądarki (null = jak w Ustawieniach) - jak menu w oknie.
+        katalog = dane.get("katalog")
+        if katalog not in katalogi_robocze_znane():
+            raise ValueError(_("nieprawidłowe zapytanie"))
+        tryb = dane.get("tryb") if dane.get("tryb") in TRYBY_ZAPISU else None
+        ustaw_tryb_zapisu_katalogu(katalog, tryb)
+        _KATALOGI_SESJI.discard(katalog)  # WHY: zmiana trybu cofa zgodę "w tej sesji" (jak w oknie)
+        return self._json(self._katalogi())
+
+    def _katalog_rozmowy(self, id_rozmowy):
+        id_rozmowy = self._sprawdz_id(id_rozmowy)
+        odp = self.serwer.odpowiedz(id_rozmowy)
+        dane = odp.dane if odp is not None else wczytaj_rozmowe(id_rozmowy)
+        katalog = dane.get("katalog")
+        if not katalog or katalog not in katalogi_robocze_znane():
+            raise ValueError(_("Ta rozmowa nie ma katalogu roboczego."))
+        return katalog
+
+    def _plik(self, id_rozmowy, wzgledna, meta=False):
+        # WHAT: podgląd pliku z katalogu roboczego rozmowy: treść (widok Kod), zmiany względem wersji
+        #       sprzed pierwszej zmiany modelu (widok Zmiany) i adres strony (widok Strona).
+        katalog = self._katalog_rozmowy(id_rozmowy)
+        korzen, plik = _sciezka_w_katalogu(katalog, wzgledna)
+        if not plik.is_file():
+            raise ValueError(_("Pliku już nie ma."))
+        stat = plik.stat()
+        if meta:
+            return {"mtime": stat.st_mtime}  # WHY: co 1,5 s strona pyta tylko, czy plik się zmienił
+        with open(plik, "rb") as f:
+            dane = f.read(_WWW_MAKS_PODGLADU + 1)
+        binarny = b"\0" in dane[:8192]
+        sciezka = str(plik.relative_to(korzen))
+        wynik = {"sciezka": sciezka, "rozmiar": stat.st_size, "mtime": stat.st_mtime, "binarny": binarny,
+                 "uciete": len(dane) > _WWW_MAKS_PODGLADU, "tekst": None, "roznica": None, "strona": None}
+        if not binarny:
+            tekst = dane[:_WWW_MAKS_PODGLADU].decode("utf-8", errors="replace")
+            wynik["tekst"] = tekst
+            if str(plik) in _PRZED_ZMIANAMI:
+                wynik["roznica"] = roznica_zmiany({"sciezka": sciezka, "stara": _PRZED_ZMIANAMI[str(plik)],
+                                                   "nowa": tekst}) or _("(bez zmian względem wersji sprzed zmian modelu)")
+        if plik.suffix.lower() in (".html", ".htm", ".svg"):
+            wynik["strona"] = f"/podglad/{self.serwer.token_podgladu(katalog)}/{quote(sciezka)}"
+        return wynik
+
+    def _strona_podgladu(self, reszta):
+        # WHAT: plik z katalogu roboczego pod /podglad/<token>/<ścieżka> - strona, jej skrypty i obrazy.
+        token, _s, wzgledna = reszta.partition("/")
+        katalog = self.serwer.katalog_podgladu(token)
+        if not katalog:
+            return self._blad(404, _("brak pliku"))
+        try:
+            _korzen, plik = _sciezka_w_katalogu(katalog, unquote(wzgledna))
+        except ValueError:
+            return self._blad(403, _("brak pliku"))
+        if not plik.is_file():
+            return self._blad(404, _("brak pliku"))
+        typ = mimetypes.guess_type(plik.name)[0] or "application/octet-stream"
+        if typ.startswith("text/") or typ in ("application/javascript", "application/json", "image/svg+xml"):
+            typ += "; charset=utf-8"
+        try:
+            tresc = plik.read_bytes()
+        except OSError:
+            return self._blad(404, _("brak pliku"))
+        self._naglowki(200, typ, len(tresc), podglad=True)
+        self.wfile.write(tresc)
+
+    def _przyjmij_zalacznik(self):
+        # WHAT: plik z przeglądarki (surowe bajty, nazwa w X-Nazwa) -> załącznik jak w oknie
+        #       (zdjęcie / tekst / dokument z tekstem wyciągniętym od razu); czeka na pytanie.
+        dlugosc = int(self.headers.get("Content-Length") or 0)
+        if dlugosc > _WWW_MAKS_PLIKU:
+            raise ValueError(_("plik jest za duży na czat (ponad 100 MB)"))
+        nazwa = Path(unquote(self.headers.get("X-Nazwa") or "")).name.strip()[:200]
+        if nazwa in ("", ".", ".."):
+            nazwa = "plik"
+        with tempfile.TemporaryDirectory(prefix="lamadeck-") as tymczasowy:
+            sciezka = Path(tymczasowy) / nazwa
+            with open(sciezka, "wb") as f:
+                zostalo = dlugosc
+                while zostalo > 0:
+                    kawalek = self.rfile.read(min(zostalo, 1024 * 1024))
+                    if not kawalek:
+                        break
+                    f.write(kawalek)
+                    zostalo -= len(kawalek)
+            z = wczytaj_zalacznik(sciezka)
+            if z["typ"] == "do_odczytu":
+                z = odczytaj_dokument(sciezka)  # WHY: tekst wyciągamy od razu - plik tymczasowy zaraz zniknie
+        z.pop("sciezka", None)
+        return {"token": self.serwer.dodaj_zalacznik(z), "nazwa": z["nazwa"], "typ": z["typ"],
+                "rozmiar": z.get("rozmiar", 0)}
+
+    def _obraz(self, id_rozmowy, parametry):
+        # WHAT: zdjęcie dołączone do pytania (miniatura w rozmowie) - z zapisanej rozmowy.
+        id_rozmowy = self._sprawdz_id(id_rozmowy)
+        odp = self.serwer.odpowiedz(id_rozmowy)
+        dane = odp.dane if odp is not None else wczytaj_rozmowe(id_rozmowy)
+        try:
+            z = dane["wiadomosci"][int(parametry["w"][0])]["zalaczniki"][int(parametry["z"][0])]
+            tresc = base64.b64decode(z["b64"])
+        except (KeyError, IndexError, ValueError, TypeError):
+            return self._blad(404, _("brak pliku"))
+        self._naglowki(200, "image/jpeg", len(tresc))
+        self.wfile.write(tresc)
 
     def _zajeta(self, id_rozmowy):
         if kto_prowadzi_rozmowe(id_rozmowy) == "okno":
@@ -7339,7 +7655,12 @@ def _qrcodegen():
         import importlib.util
         spec = importlib.util.spec_from_file_location("qrcodegen", _KATALOG_VENDOR / "qrcodegen.py")
         modul = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modul)
+        # WHY: bez __pycache__ obok pliku - w /usr/share (pakiet .deb) zostawałby po odinstalowaniu
+        poprzednio, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+        try:
+            spec.loader.exec_module(modul)
+        finally:
+            sys.dont_write_bytecode = poprzednio
         _MODUL_QR = modul
     return _MODUL_QR
 
@@ -7404,8 +7725,8 @@ class MainWindow(QMainWindow):
         self._linki_nieudane = set()    # WHY: linki z pytania, których strony nie dało się pobrać
         self._szukaj_w_internecie = False  # WHY: przycisk z globusem w czacie - przeżywa przebudowę okna
         self._katalog_roboczy = None    # WHY: katalog, w którym model czatu może czytać i zapisywać pliki
-        self._katalogi_sesji = set()    # WHY: katalogi z zapisem bez pytania do zamknięcia programu
-        self._przed_zmianami = {}       # WHY: treść pliku sprzed pierwszej zmiany modelu (widok "Zmiany")
+        self._katalogi_sesji = _KATALOGI_SESJI  # WHY: zapis bez pytania do zamknięcia programu - wspólne z przeglądarką
+        self._przed_zmianami = _PRZED_ZMIANAMI  # WHY: treść sprzed pierwszej zmiany modelu (widok "Zmiany") - wspólne
         self._podglad = None            # WHY: {"sciezka", "plik", "tryb", "mtime"} - otwarty podgląd pliku
         self._wyslij_po_stronach = False  # WHY: pytanie czeka na pobranie/przygotowanie stron z linków
         self._czat_id = None            # WHY: plik bieżącej rozmowy (nazwa bez .json); None = jeszcze nie zapisana
@@ -10890,6 +11211,7 @@ class MainWindow(QMainWindow):
         self._katalog_roboczy = katalog
         self._odswiez_katalog_roboczy()
         if katalog:
+            zapamietaj_katalog_roboczy(katalog)  # WHY: tylko takie katalogi dostanie czat w przeglądarce
             model, _host = self._wybrany_model_czatu()
             if model and "tools" not in model.get("mozliwosci", []):
                 self._uwaga_czatu(_("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model "
@@ -10902,9 +11224,7 @@ class MainWindow(QMainWindow):
                 "zawsze": _("Zezwalaj zawsze")}[tryb]
 
     def _tryb_zapisu(self, katalog):
-        # WHAT: (tryb, czy_wybrany_dla_katalogu) - wybór projektu albo domyślny z Ustawień.
-        wlasny = tryby_zapisu_katalogow().get(katalog)
-        return (wlasny, True) if wlasny else (tryb_zapisu_domyslny(), False)
+        return tryb_zapisu_katalogu(katalog)
 
     def _zapis_bez_pytania(self, katalog):
         tryb, _wlasny = self._tryb_zapisu(katalog)

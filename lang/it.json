@@ -738,7 +738,6 @@
   "Skopiowano": "Copiato",
   "Skopiowano: {adres}": "Copiato: {adres}",
   "Szukaj w internecie: {stan}": "Cerca su internet: {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "Questa conversazione usa una cartella di lavoro - per ora il lavoro sui file è possibile solo nel programma.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "Questo modello non è su nessun host online - scegline un altro.",
   "Tej rozmowy już nie ma.": "Questa conversazione non esiste più.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "La stessa chat del programma - gli stessi modelli e le conversazioni salvate - a un indirizzo nel browser, ad es. sul telefono. Funziona finché il programma è in esecuzione (anche nascosto nell'area di notifica).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "il numero nell'indirizzo della pagina; cambialo se lo usa un altro programma",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "il telefono e gli altri computer di questa rete - dopo l'accesso con la password impostata qui sotto",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "impostata - cambiarla disconnette tutti i dispositivi",
-  "za duże zapytanie": "richiesta troppo grande"
+  "za duże zapytanie": "richiesta troppo grande",
+  "Bez katalogu roboczego": "Senza cartella di lavoro",
+  "Dołączony plik wygasł - dołącz go ponownie.": "Il file allegato è scaduto - allegalo di nuovo.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "Una nuova cartella si sceglie nel programma - con il pulsante cartella della chat.",
+  "Odepnij katalog": "Scollega la cartella",
+  "Otwórz stronę w nowej karcie": "Apri la pagina in una nuova scheda",
+  "Pliku już nie ma.": "Il file non esiste più.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Attendi un attimo - il file si sta ancora caricando.",
+  "Ta rozmowa nie ma katalogu roboczego.": "Questa conversazione non ha una cartella di lavoro.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "Questa cartella non è stata scelta nel programma - sceglila prima lì.",
+  "wysyłam...": "caricamento..."
 }

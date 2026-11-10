@@ -39,6 +39,10 @@ const IKONY = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   pobierz: '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+  spinacz: '<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  zamknij: '<path d="M6 6l12 12M18 6L6 18"/>',
+  otworz: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
 };
 
 function ikona(nazwa) {
@@ -74,6 +78,12 @@ const S = {
   szukaj: false,       // przycisk z globusem
   szukane: "",
   kody: [],            // treść bloków kodu pod przyciskami "kopiuj"
+  katalogi: [],        // katalogi robocze wybrane kiedyś w programie (/api/katalogi)
+  domyslnyTryb: "pytaj",
+  katalog: null,       // wybrany katalog roboczy (ścieżka) albo null
+  zalaczniki: [],      // pliki do wysłania: {nazwa, typ, rozmiar, token, stan: "wysyla"|"gotowy"|"blad", blad}
+  podglad: null,       // otwarty podgląd pliku: {sciezka, tryb, dane, mtime}
+  prosbaNr: null,      // numer pokazanej prośby o zapis
 };
 const E = {};          // elementy strony
 
@@ -136,7 +146,7 @@ async function start() {
   }
   zbudujUklad();
   S.szukaj = false;
-  await Promise.all([wczytajModele(), wczytajRozmowy()]);
+  await Promise.all([wczytajModele(), wczytajRozmowy(), wczytajKatalogi()]);
   const id = (location.hash.match(/^#r=([\w-]+)$/) || [])[1];
   if (id) otworzRozmowe(id); else pokazRozmowe();
 }
@@ -255,7 +265,20 @@ function zbudujUklad() {
   E.uwaga = el("div", "uwaga-czatu");
   E.uwaga.hidden = true;
 
+  E.chipy = el("div", "chipy");
+  E.chipy.hidden = true;
+  E.ramkaKatalogu = el("div", "ramka-katalogu");
+  E.ramkaKatalogu.hidden = true;
   const pole = el("form", "pole");
+  E.plik = el("input");
+  E.plik.type = "file";
+  E.plik.multiple = true;
+  E.plik.hidden = true;
+  E.plik.addEventListener("change", () => { dodajPliki(E.plik.files); E.plik.value = ""; });
+  E.zalacz = przyciskIkona("spinacz", _("Dołącz zdjęcie, dokument (PDF, Word, Excel, PowerPoint, LibreOffice, EPUB) albo plik tekstowy (kod, .txt, .md, .csv...). Możesz też przeciągnąć plik do okna albo wkleić zrzut ekranu (Ctrl+V)."), "przycisk ikona");
+  E.zalacz.addEventListener("click", () => E.plik.click());
+  E.katalogPrzycisk = przyciskIkona("folder", _("Katalog roboczy: model może przeglądać i czytać pliki w wybranym folderze, a zapisywać je tylko po Twojej zgodzie. Wymaga modelu z tagiem \"narzędzia\"."), "przycisk ikona");
+  E.katalogPrzycisk.addEventListener("click", () => menuKatalogow(E.katalogPrzycisk));
   E.internet = przyciskIkona("swiat", "", "przycisk ikona");
   E.internet.hidden = !S.stan.szukanie;
   E.internet.addEventListener("click", () => {
@@ -277,14 +300,28 @@ function zbudujUklad() {
   E.wyslij = el("button", "przycisk glowny", _("Wyślij"));
   E.wyslij.type = "submit";
   pole.addEventListener("submit", (z) => { z.preventDefault(); wyslij(); });
-  pole.append(E.internet, E.pytanie, E.wyslij);
-  glowna.append(gora, E.rozmowa, E.uwaga, pole);
+  E.pytanie.addEventListener("paste", (z) => {
+    // WHY: zrzut ekranu ze schowka (Ctrl+V) jak w programie
+    if (z.clipboardData && z.clipboardData.files.length) {
+      z.preventDefault();
+      dodajPliki(z.clipboardData.files);
+    }
+  });
+  pole.append(E.plik, E.zalacz, E.katalogPrzycisk, E.internet, E.pytanie, E.wyslij);
+  glowna.append(gora, E.rozmowa, E.uwaga, E.chipy, E.ramkaKatalogu, pole);
+  glowna.addEventListener("dragover", (z) => { if (z.dataTransfer.types.includes("Files")) z.preventDefault(); });
+  glowna.addEventListener("drop", (z) => {
+    if (!z.dataTransfer.files.length) return;
+    z.preventDefault();
+    dodajPliki(z.dataTransfer.files);
+  });
+  E.podglad = zbudujPodglad();
 
   const zaslona = el("div", "zaslona");
   zaslona.addEventListener("click", zamknijMenu);
   E.zaslona = zaslona;
   zaslona.hidden = true;
-  uklad.append(pasek, glowna, zaslona);
+  uklad.append(pasek, glowna, E.podglad, zaslona);
   app.replaceChildren(uklad);
   new MutationObserver(() => { zaslona.hidden = !uklad.classList.contains("menu-otwarte"); })
     .observe(uklad, { attributes: true, attributeFilter: ["class"] });
@@ -351,7 +388,9 @@ async function wczytajModele(odswiez) {
     if (e.kod !== 401) uwaga(e.message, "error");
   }
   E.model.replaceChildren();
-  for (const m of S.modele) {
+  // WHY: modele OCR tylko ze zdjęciem w pytaniu (jak w programie) - bez niego powtarzają pytanie
+  const zeZdjeciem = S.zalaczniki.some((z) => z.typ === "obraz");
+  for (const m of S.modele.filter((m) => zeZdjeciem || !m.tylko_ze_zdjeciem)) {
     const o = el("option", "", m.krotka + (S.kilkaHostow ? "  ·  " + m.host : ""));
     o.value = m.id;
     o.title = m.nazwa + " → " + m.host;
@@ -479,6 +518,7 @@ async function usunRozmowe(r) {
 // --- Rozmowa ---
 function nowaRozmowa() {
   zamknijStrumien();
+  zamknijPodglad();
   S.rozmowa = null;
   history.replaceState(null, "", location.pathname);
   uwaga("");
@@ -501,7 +541,11 @@ async function otworzRozmowe(id, cicho) {
   S.rozmowa = r;
   if (inna) {
     zamknijStrumien();
+    zamknijPodglad();
     uwaga("");
+    // WHY: katalog roboczy wraca razem z rozmową (jak w programie)
+    S.katalog = r.katalog || null;
+    pokazKatalog();
     history.replaceState(null, "", "#r=" + id);
     // WHY: dalej rozmawiamy tym samym modelem - o ile jest na liście (jak w programie)
     const dotychczasowy = r.host + "|" + r.model;
@@ -514,7 +558,7 @@ async function otworzRozmowe(id, cicho) {
   pokazRozmowe(inna || naDole);
   pokazListe();
   if (r.w_programie) uwaga(_("W tej rozmowie pisze się teraz odpowiedź w programie - poczekaj, aż się skończy."), "warn");
-  else if (r.katalog && inna) uwaga(_("Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie."), "");
+  pokazProsbe(r.trwa ? r.wiadomosci[r.wiadomosci.length - 1].prosba : null);
   if (r.trwa) sluchaj(id);
 }
 
@@ -573,6 +617,7 @@ function wiadomoscElement(w, i, wszystkie) {
     }
   }
   const dymek = el("div", "dymek");
+  dymek.dataset.indeks = i;
   wypelnijDymek(dymek, w);
   blok.append(glowka, dymek);
   return blok;
@@ -599,10 +644,19 @@ function wypelnijDymek(dymek, w) {
     dymek.append(document.createTextNode(w.tresc || ""));
     if (w.zalaczniki && w.zalaczniki.length) {
       const z = el("div", "zalaczniki");
-      for (const zal of w.zalaczniki) {
+      w.zalaczniki.forEach((zal, nr) => {
+        if (zal.typ === "obraz" && S.rozmowa && dymek.dataset.indeks !== undefined) {
+          const img = el("img", "miniatura");
+          img.alt = zal.nazwa;
+          img.title = zal.nazwa;
+          img.loading = "lazy";
+          img.src = "/api/obraz?id=" + encodeURIComponent(S.rozmowa.id) + "&w=" + dymek.dataset.indeks + "&z=" + nr;
+          z.append(img);
+          return;
+        }
         const opis = zal.url ? "🔗 " + zal.url : (zal.typ === "obraz" ? "🖼 " : "📎 ") + zal.nazwa;
         z.append(el("span", "zalacznik", opis));
-      }
+      });
       dymek.append(z);
     }
     return;
@@ -628,10 +682,31 @@ function wypelnijDymek(dymek, w) {
     tresc.innerHTML = markdown(odpowiedz);
     dymek.append(tresc);
   }
+  // WHAT: pliki zapisane w tej odpowiedzi - klik otwiera podgląd (jak w programie)
+  const zapisane = [...new Set((w.narzedzia || []).filter((k) => (k.nazwa === "write_file" || k.nazwa === "edit_file")
+    && k.stan === "ok").map((k) => k.sciezka))];
+  if (zapisane.length && !w.trwa) {
+    const linia = el("div", "zapisane");
+    linia.append(el("b", "", _("Zapisane pliki:")), " ");
+    zapisane.forEach((sciezka, n) => {
+      if (n) linia.append(" · ");
+      const b = el("button", "link-pliku", sciezka);
+      b.type = "button";
+      b.dataset.plik = sciezka;
+      b.title = _("Pokaż podgląd obok rozmowy");
+      linia.append(b);
+    });
+    dymek.append(linia);
+  }
   if (w.trwa) {
     const stan = el("div", "stan");
     stan.dataset.start = w.start || "";
+    if (w.pliki) {
+      stan.dataset.pliki = "1";
+      stan.dataset.ostatni = w.ostatni || w.start || "";
+    }
     stan.dataset.tekst = tekstStanu(w, odpowiedz);
+    stan.dataset.etap = w.etap || "";
     stan.textContent = stan.dataset.tekst;
     dymek.append(stan);
     odswiezLicznik();
@@ -656,7 +731,7 @@ function wypelnijDymek(dymek, w) {
     });
     dymek.append(zr);
   }
-  if (!w.trwa && !odpowiedz.trim() && !myslenie.trim() && !w.narzedzia) {
+  if (!w.trwa && !odpowiedz.trim() && !myslenie.trim() && !w.narzedzia && !zapisane.length) {
     dymek.append(el("div", "stan", w.stat || "…"));
   }
 }
@@ -677,6 +752,12 @@ function odswiezLicznik() {
   // WHAT: licznik sekund przy "czekam na odpowiedź" - widać, że program żyje.
   for (const stan of document.querySelectorAll(".stan[data-start]")) {
     const start = Number(stan.dataset.start);
+    // WHY: zapis długiego pliku Ollama oddaje dopiero w całości - minuty bez żadnego tekstu
+    const cisza = Math.floor(Date.now() / 1000 - Number(stan.dataset.ostatni || 0));
+    if (stan.dataset.pliki && stan.dataset.ostatni && cisza >= 5 && !/\S/.test(stan.dataset.etap || "")) {
+      stan.textContent = _f("Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; potem pojawi się okienko z podglądem zmian.", { s: cisza });
+      continue;
+    }
     if (!start || !stan.dataset.tekst) {
       stan.textContent = stan.dataset.tekst || "";
       continue;
@@ -784,15 +865,23 @@ async function wyslij() {
     return;
   }
   const tekst = E.pytanie.value.trim();
-  if (!tekst || !wybranyModel()) return;
+  const gotowe = S.zalaczniki.filter((z) => z.stan === "gotowy");
+  if ((!tekst && !gotowe.length) || !wybranyModel()) return;
+  if (S.zalaczniki.some((z) => z.stan === "wysyla")) {
+    uwaga(_("Poczekaj chwilę - plik jeszcze się wysyła."), "warn");
+    return;
+  }
   uwaga("");
   E.wyslij.disabled = true;
   try {
     const wynik = await api("/api/wyslij", {
       id: S.rozmowa ? S.rozmowa.id : null, model: S.model, tekst: tekst,
-      myslenie: E.myslenie.checked, szukaj: S.szukaj,
+      myslenie: E.myslenie.checked, szukaj: S.szukaj, katalog: S.katalog,
+      zalaczniki: gotowe.map((z) => z.token),
     });
     E.pytanie.value = "";
+    S.zalaczniki = [];
+    pokazChipy();
     dopasujPole();
     await otworzRozmowe(wynik.id);
     przewinNaDol();
@@ -830,11 +919,14 @@ function sluchaj(id) {
       zaplanowane = null;
       odswiezOstatnia();
     });
+    pokazProsbe(w.prosba);
   };
   zrodlo.addEventListener("koniec", async () => {
     if (S.zrodlo !== zrodlo) return;
     zamknijStrumien();
+    pokazProsbe(null);
     if (S.rozmowa && S.rozmowa.id === id) await otworzRozmowe(id, true);
+    if (S.podglad) wczytajPodglad(true);
     wczytajRozmowy();
     wczytajModele();  // WHY: model jest teraz w pamięci - widać to w opisie
   });
@@ -864,11 +956,16 @@ async function klikWRozmowie(z) {
     kopiuj(S.kody[Number(przycisk.dataset.kopiuj)] || "");
     return;
   }
+  if (przycisk.dataset.plik !== undefined) {
+    otworzPodglad(przycisk.dataset.plik);
+    return;
+  }
   const akcja = przycisk.dataset.akcja;
   if (!akcja || !S.rozmowa || pisze()) return;
   try {
     const wynik = await api("/api/akcja", {
       id: S.rozmowa.id, akcja: akcja, model: S.model, myslenie: E.myslenie.checked, szukaj: S.szukaj,
+      katalog: S.katalog,
     });
     if (akcja === "popraw") {
       E.pytanie.value = wynik.tekst || "";
@@ -911,6 +1008,323 @@ function kopiujStarymSposobem(tekst, gotowe) {
   } finally {
     pole.remove();
   }
+}
+
+// --- Katalog roboczy ---
+async function wczytajKatalogi() {
+  try {
+    const wynik = await api("/api/katalogi");
+    S.katalogi = wynik.katalogi;
+    S.domyslnyTryb = wynik.domyslny;
+  } catch (e) {
+    return;
+  }
+  pokazKatalog();
+}
+
+function nazwaTrybu(tryb) {
+  return { pytaj: _("Pytaj za każdym razem"), sesja: _("Pytaj raz na sesję"), zawsze: _("Zezwalaj zawsze") }[tryb] || tryb;
+}
+
+function menuKatalogow(przy) {
+  // WHAT: wybór katalogu roboczego - tylko z wybranych kiedyś w programie (decyzja użytkownika).
+  const zaslona = el("div", "zaslona przezroczysta");
+  const menu = el("div", "menu");
+  const zamknij = () => { menu.remove(); zaslona.remove(); };
+  zaslona.addEventListener("click", zamknij);
+  const pozycja = (tekst, akcja, wybrana) => {
+    const b = el("button", wybrana ? "wybrana" : "", tekst);
+    b.type = "button";
+    b.addEventListener("click", () => { zamknij(); akcja(); });
+    menu.append(b);
+  };
+  pozycja(_("Bez katalogu roboczego"), () => ustawKatalog(null), !S.katalog);
+  for (const k of S.katalogi) pozycja(k.krotko, () => ustawKatalog(k.sciezka), S.katalog === k.sciezka);
+  menu.append(el("p", "menu-uwaga", _("Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.")));
+  document.body.append(zaslona, menu);
+  const p = przy.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(p.left, window.innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top = Math.max(8, p.top - menu.offsetHeight - 6) + "px";
+}
+
+function ustawKatalog(katalog) {
+  S.katalog = katalog;
+  pokazKatalog();
+  const m = wybranyModel();
+  if (katalog && m && !m.narzedzia) {
+    uwaga(_f("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.",
+      { model: m.krotka }), "warn");
+  }
+}
+
+function pokazKatalog() {
+  if (!E.ramkaKatalogu) return;
+  E.katalogPrzycisk.classList.toggle("wlaczony", Boolean(S.katalog));
+  E.ramkaKatalogu.replaceChildren();
+  E.ramkaKatalogu.hidden = !S.katalog;
+  if (!S.katalog) return;
+  const k = S.katalogi.find((x) => x.sciezka === S.katalog);
+  const krotko = k ? k.krotko : S.katalog;
+  E.ramkaKatalogu.append(ikonaElement("folder"), el("span", "sciezka-katalogu", _f("Katalog roboczy: {katalog}", { katalog: krotko })));
+  // WHAT: tryb zapisu dla tego projektu - jak menu "Zapis: ..." w programie
+  const wybor = el("select");
+  wybor.setAttribute("aria-label", _("Zapis w katalogu roboczym"));
+  const jak = el("option", "", _f("Jak w Ustawieniach ({tryb})", { tryb: nazwaTrybu(S.domyslnyTryb).toLowerCase() }));
+  jak.value = "";
+  wybor.append(jak);
+  for (const tryb of ["pytaj", "sesja", "zawsze"]) {
+    const o = el("option", "", nazwaTrybu(tryb));
+    o.value = tryb;
+    wybor.append(o);
+  }
+  wybor.value = k && k.wlasny ? k.tryb : "";
+  wybor.addEventListener("change", async () => {
+    try {
+      const wynik = await api("/api/tryb_zapisu", { katalog: S.katalog, tryb: wybor.value || null });
+      S.katalogi = wynik.katalogi;
+    } catch (e) {
+      uwaga(e.message, "warn");
+    }
+    pokazKatalog();
+  });
+  const odepnij = przyciskIkona("zamknij", _("Odepnij katalog"));
+  odepnij.addEventListener("click", () => ustawKatalog(null));
+  E.ramkaKatalogu.append(wybor, odepnij);
+}
+
+function ikonaElement(nazwa) {
+  const s = el("span", "ikona-w-tekscie");
+  s.innerHTML = ikona(nazwa);
+  return s;
+}
+
+// --- Zgoda na zapis pliku (jak okienko w programie) ---
+function pokazProsbe(prosba) {
+  const stary = document.getElementById("prosba");
+  if (!prosba) {
+    if (stary) stary.remove();
+    S.prosbaNr = null;
+    return;
+  }
+  if (stary && S.prosbaNr === prosba.nr) return;
+  if (stary) stary.remove();
+  S.prosbaNr = prosba.nr;
+  const zaslona = el("div", "okno-zaslona");
+  zaslona.id = "prosba";
+  const okno = el("div", "okno");
+  okno.setAttribute("role", "dialog");
+  okno.setAttribute("aria-modal", "true");
+  okno.append(el("h2", "", prosba.nowy ? _("Model chce utworzyć plik") : _("Model chce zmienić plik")),
+    el("div", "mono", prosba.nowy ? _f("Nowy plik: {sciezka}", { sciezka: prosba.sciezka })
+      : _f("Zmiana pliku: {sciezka}", { sciezka: prosba.sciezka })));
+  const k = S.katalogi.find((x) => x.sciezka === prosba.katalog);
+  okno.append(el("p", "wyciszony", _f("Katalog roboczy: {katalog}", { katalog: k ? k.krotko : prosba.katalog })));
+  okno.append(roznicaElement(prosba.roznica));
+  const przyciski = el("div", "przyciski");
+  const decyzja = (wybor) => async () => {
+    for (const b of przyciski.querySelectorAll("button")) b.disabled = true;
+    try {
+      await api("/api/zgoda", { id: S.rozmowa.id, nr: prosba.nr, wybor: wybor });
+    } catch (e) {
+      uwaga(e.message, "warn");
+    }
+    zaslona.remove();
+    if (wybor === "sesja" || wybor === "zawsze") wczytajKatalogi();
+  };
+  const odrzuc = el("button", "przycisk", _("Odrzuć"));
+  odrzuc.type = "button";
+  odrzuc.addEventListener("click", decyzja(null));
+  przyciski.append(odrzuc, el("span", "odstep"));
+  for (const [tekst, wybor, dymek, klasa] of [
+    [_("Zezwalaj zawsze dla tego katalogu"), "zawsze", _("Kolejne zapisy w tym katalogu bez pytania - także po ponownym uruchomieniu programu. Zmienisz to na pasku katalogu w czacie (\"Zapis: ...\")."), ""],
+    [_("Zezwalaj w tej sesji"), "sesja", _("Kolejne zapisy w tym katalogu bez pytania, dopóki nie zamkniesz programu."), ""],
+    [_("Zapisz"), "raz", _("Tylko ta jedna zmiana."), "glowny"]]) {
+    const b = el("button", "przycisk " + klasa, tekst);
+    b.type = "button";
+    b.title = dymek;
+    b.addEventListener("click", decyzja(wybor));
+    przyciski.append(b);
+  }
+  okno.append(przyciski);
+  zaslona.append(okno);
+  document.body.append(zaslona);
+}
+
+function roznicaElement(tekst) {
+  // WHAT: unified diff z kolorami linii (dodane / usunięte / nagłówki) - jak podgląd zmian w programie.
+  const pre = el("pre", "roznica");
+  for (const linia of (tekst || "").split("\n")) {
+    const klasa = linia.startsWith("+++") || linia.startsWith("---") || linia.startsWith("@@") ? "naglowek"
+      : linia.startsWith("+") ? "dodane" : linia.startsWith("-") ? "usuniete" : "";
+    pre.append(el("span", klasa, linia + "\n"));
+  }
+  return pre;
+}
+
+// --- Załączniki ---
+async function dodajPliki(lista) {
+  for (const plik of Array.from(lista)) {
+    const z = { nazwa: plik.name || "zrzut.png", typ: "", rozmiar: plik.size, stan: "wysyla" };
+    S.zalaczniki.push(z);
+    pokazChipy();
+    try {
+      const odp = await fetch("/api/zalacznik", {
+        method: "POST", credentials: "same-origin", body: plik,
+        headers: { "Content-Type": "application/octet-stream", "X-Nazwa": encodeURIComponent(z.nazwa) },
+      });
+      const wynik = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(wynik.blad || ("HTTP " + odp.status));
+      Object.assign(z, { token: wynik.token, typ: wynik.typ, rozmiar: wynik.rozmiar, nazwa: wynik.nazwa, stan: "gotowy" });
+    } catch (e) {
+      z.stan = "blad";
+      z.blad = e.message;
+    }
+    if (!S.zalaczniki.includes(z)) continue;  // WHY: usunięty w trakcie wysyłania
+    pokazChipy();
+    if (z.typ === "obraz") wczytajModele();  // WHY: ze zdjęciem lista pokazuje też modele OCR
+  }
+}
+
+function pokazChipy() {
+  E.chipy.replaceChildren();
+  E.chipy.hidden = !S.zalaczniki.length;
+  for (const z of S.zalaczniki) {
+    let opis = z.nazwa + "  ·  ";
+    if (z.stan === "wysyla") opis += _("wysyłam...");
+    else if (z.stan === "blad") opis = z.blad;
+    else if (z.typ === "obraz") opis += _("zdjęcie");
+    else opis += Math.max(1, Math.round(z.rozmiar / 1024)) + " KB" + (z.typ === "dokument" ? "  ·  " + _("wyszukiwanie fragmentów") : "");
+    const chip = el("span", "chip" + (z.stan === "blad" ? " blad" : ""), opis);
+    const usun = przyciskIkona("zamknij", _("Usuń załącznik"));
+    usun.addEventListener("click", () => {
+      S.zalaczniki = S.zalaczniki.filter((x) => x !== z);
+      pokazChipy();
+      if (z.typ === "obraz") wczytajModele();
+    });
+    chip.append(usun);
+    E.chipy.append(chip);
+  }
+}
+
+// --- Podgląd pliku (Kod / Zmiany / Strona) ---
+function zbudujPodglad() {
+  const panel = el("section", "podglad");
+  panel.hidden = true;
+  const gora = el("div", "podglad-gora");
+  E.podgladNazwa = el("b", "mono", "");
+  E.podgladChipy = {};
+  const chipy = el("div", "przelacznik-widokow");
+  for (const [tryb, tekst, opis] of [["kod", _("Kod"), _("Treść pliku z numerami linii")],
+    ["zmiany", _("Zmiany"), _("Co zmienił model - względem wersji sprzed pierwszej zmiany w tej sesji")],
+    ["strona", _("Strona"), _("Strona tak, jak w przeglądarce - także gry z JavaScriptem")]]) {
+    const b = el("button", "chip-widoku", tekst);
+    b.type = "button";
+    b.title = opis;
+    b.addEventListener("click", () => { S.podglad.tryb = tryb; pokazPodglad(); });
+    E.podgladChipy[tryb] = b;
+    chipy.append(b);
+  }
+  E.podgladOtworz = el("a", "przycisk ikona");
+  E.podgladOtworz.innerHTML = ikona("otworz");
+  E.podgladOtworz.target = "_blank";
+  E.podgladOtworz.rel = "noopener noreferrer";
+  E.podgladOtworz.title = _("Otwórz stronę w nowej karcie");
+  const zamknij = przyciskIkona("zamknij", _("Zamknij podgląd"), "przycisk ikona");
+  zamknij.addEventListener("click", zamknijPodglad);
+  gora.append(E.podgladNazwa, chipy, E.podgladOtworz, zamknij);
+  E.podgladInfo = el("div", "podglad-info");
+  E.podgladTresc = el("div", "podglad-tresc");
+  panel.append(gora, E.podgladInfo, E.podgladTresc);
+  return panel;
+}
+
+async function otworzPodglad(sciezka) {
+  S.podglad = { sciezka: sciezka, tryb: null, dane: null, mtime: null };
+  E.podglad.hidden = false;
+  E.uklad.classList.add("z-podgladem");
+  E.podgladNazwa.textContent = sciezka;
+  await wczytajPodglad();
+  clearInterval(S.zegarPodgladu);
+  S.zegarPodgladu = setInterval(sprawdzPodglad, 1500);
+}
+
+function zamknijPodglad() {
+  clearInterval(S.zegarPodgladu);
+  S.podglad = null;
+  if (!E.podglad) return;
+  E.podglad.hidden = true;
+  E.uklad.classList.remove("z-podgladem");
+  E.podgladTresc.replaceChildren();
+}
+
+async function wczytajPodglad(cicho) {
+  const p = S.podglad;
+  if (!p || !S.rozmowa) return;
+  try {
+    p.dane = await api("/api/plik?id=" + encodeURIComponent(S.rozmowa.id) + "&sciezka=" + encodeURIComponent(p.sciezka));
+    p.mtime = p.dane.mtime;
+  } catch (e) {
+    if (!cicho) {
+      E.podgladInfo.textContent = e.message;
+      E.podgladTresc.replaceChildren();
+    }
+    return;
+  }
+  if (!p.tryb) p.tryb = p.dane.strona ? "strona" : "kod";
+  pokazPodglad();
+}
+
+async function sprawdzPodglad() {
+  // WHAT: co 1,5 s - czy plik się zmienił (model zapisał nową wersję); tak = podgląd od nowa.
+  const p = S.podglad;
+  if (!p || !S.rozmowa || document.visibilityState !== "visible") return;
+  try {
+    const meta = await api("/api/plik?meta=1&id=" + encodeURIComponent(S.rozmowa.id) + "&sciezka=" + encodeURIComponent(p.sciezka));
+    if (S.podglad === p && meta.mtime !== p.mtime) wczytajPodglad(true);
+  } catch (e) { /* plik zniknął albo brak połączenia - spróbujemy za chwilę */ }
+}
+
+function pokazPodglad() {
+  const p = S.podglad;
+  const d = p.dane;
+  if (p.tryb === "zmiany" && !d.roznica) p.tryb = "kod";
+  if (p.tryb === "strona" && !d.strona) p.tryb = "kod";
+  for (const [tryb, b] of Object.entries(E.podgladChipy)) {
+    b.classList.toggle("wybrany", tryb === p.tryb);
+    b.disabled = (tryb === "zmiany" && !d.roznica) || (tryb === "strona" && !d.strona);
+  }
+  E.podgladOtworz.hidden = !d.strona;
+  if (d.strona) E.podgladOtworz.href = d.strona;
+  const godzina = new Date(d.mtime * 1000).toLocaleTimeString(S.stan.jezyk);
+  E.podgladInfo.textContent = d.binarny ? _("plik binarny - użyj \"Otwórz\" albo \"Strona\"")
+    : _f("{kb} KB · zmieniony {godzina} · odświeża się sam", { kb: Math.max(1, Math.round(d.rozmiar / 1024)), godzina: godzina });
+  const ramka = E.podgladTresc.querySelector("iframe");
+  if (p.tryb === "strona") {
+    // WHY: piaskownica bez allow-same-origin - skrypt strony nie dostanie się do czatu ani ciasteczek
+    const adres = d.strona + "?t=" + d.mtime;
+    if (ramka) {
+      if (ramka.dataset.adres !== adres) { ramka.src = adres; ramka.dataset.adres = adres; }
+      return;
+    }
+    const nowa = el("iframe", "strona");
+    nowa.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-pointer-lock allow-popups");
+    nowa.src = adres;
+    nowa.dataset.adres = adres;
+    nowa.title = p.sciezka;
+    E.podgladTresc.replaceChildren(nowa);
+    return;
+  }
+  if (p.tryb === "zmiany") {
+    E.podgladTresc.replaceChildren(roznicaElement(d.roznica));
+    return;
+  }
+  const pre = el("pre", "kod-pliku");
+  if (d.tekst !== null) {
+    const linie = d.tekst.split("\n");
+    const szerokosc = String(linie.length).length;
+    pre.textContent = linie.map((l, n) => String(n + 1).padStart(szerokosc, " ") + " │ " + l).join("\n");
+  }
+  E.podgladTresc.replaceChildren(pre);
 }
 
 start();

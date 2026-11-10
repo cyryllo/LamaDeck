@@ -738,7 +738,6 @@
   "Skopiowano": "Copied",
   "Skopiowano: {adres}": "Copied: {adres}",
   "Szukaj w internecie: {stan}": "Search the web: {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "This conversation uses a working folder - for now, work on files is only possible in the app.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "This model isn't on any online host - choose another.",
   "Tej rozmowy już nie ma.": "This conversation no longer exists.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "The same chat as in the app - the same models and saved conversations - at an address in your browser, e.g. on your phone. It works as long as the app runs (also hidden in the tray).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "the number in the page address; change it if another program uses it",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "your phone and other computers on this network - after signing in with the password set below",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "set - changing it signs out all devices",
-  "za duże zapytanie": "request too large"
+  "za duże zapytanie": "request too large",
+  "Bez katalogu roboczego": "No working folder",
+  "Dołączony plik wygasł - dołącz go ponownie.": "The attached file has expired - attach it again.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "You choose a new folder in the app - with the folder button in the chat.",
+  "Odepnij katalog": "Detach the folder",
+  "Otwórz stronę w nowej karcie": "Open the page in a new tab",
+  "Pliku już nie ma.": "The file no longer exists.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Wait a moment - the file is still uploading.",
+  "Ta rozmowa nie ma katalogu roboczego.": "This conversation has no working folder.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "This folder wasn't chosen in the app - choose it there first.",
+  "wysyłam...": "uploading..."
 }

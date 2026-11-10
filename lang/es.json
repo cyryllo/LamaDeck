@@ -738,7 +738,6 @@
   "Skopiowano": "Copiado",
   "Skopiowano: {adres}": "Copiado: {adres}",
   "Szukaj w internecie: {stan}": "Buscar en internet: {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "Esta conversación usa una carpeta de trabajo - por ahora el trabajo con archivos solo es posible en el programa.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "Este modelo no está en ningún host en línea - elige otro.",
   "Tej rozmowy już nie ma.": "Esta conversación ya no existe.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "El mismo chat que en el programa - los mismos modelos y conversaciones guardadas - en una dirección del navegador, p. ej. en el móvil. Funciona mientras el programa esté en marcha (también oculto en la bandeja).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "el número en la dirección de la página; cámbialo si lo usa otro programa",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "el móvil y otros ordenadores de esta red - tras iniciar sesión con la contraseña de abajo",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "configurada - cambiarla cierra la sesión en todos los dispositivos",
-  "za duże zapytanie": "solicitud demasiado grande"
+  "za duże zapytanie": "solicitud demasiado grande",
+  "Bez katalogu roboczego": "Sin carpeta de trabajo",
+  "Dołączony plik wygasł - dołącz go ponownie.": "El archivo adjunto ha caducado - vuelve a adjuntarlo.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "Una carpeta nueva se elige en el programa - con el botón de carpeta del chat.",
+  "Odepnij katalog": "Quitar la carpeta",
+  "Otwórz stronę w nowej karcie": "Abrir la página en una pestaña nueva",
+  "Pliku już nie ma.": "El archivo ya no existe.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Espera un momento - el archivo aún se está enviando.",
+  "Ta rozmowa nie ma katalogu roboczego.": "Esta conversación no tiene carpeta de trabajo.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "Esta carpeta no se eligió en el programa - elígela primero allí.",
+  "wysyłam...": "enviando..."
 }

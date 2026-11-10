@@ -738,7 +738,6 @@
   "Skopiowano": "Kopiert",
   "Skopiowano: {adres}": "Kopiert: {adres}",
   "Szukaj w internecie: {stan}": "Im Internet suchen: {stan}",
-  "Ta rozmowa korzysta z katalogu roboczego - pracę na plikach na razie zrobisz tylko w programie.": "Dieses Gespräch nutzt einen Arbeitsordner - die Arbeit mit Dateien geht vorerst nur im Programm.",
   "Tego modelu nie ma na hostach online - wybierz inny.": "Dieses Modell ist auf keinem erreichbaren Host - wähle ein anderes.",
   "Tej rozmowy już nie ma.": "Dieses Gespräch gibt es nicht mehr.",
   "Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany w zasobniku).": "Derselbe Chat wie im Programm - dieselben Modelle und gespeicherten Gespräche - unter einer Adresse im Browser, z. B. auf dem Handy. Er funktioniert, solange das Programm läuft (auch im Systembereich versteckt).",
@@ -768,5 +767,15 @@
   "numer w adresie strony; zmień, jeśli zajmuje go inny program": "die Nummer in der Seitenadresse; ändern, wenn ein anderes Programm sie belegt",
   "telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej": "Handy und andere Computer in diesem Netz - nach Anmeldung mit dem unten festgelegten Passwort",
   "ustawione - zmiana wyloguje wszystkie urządzenia": "festgelegt - eine Änderung meldet alle Geräte ab",
-  "za duże zapytanie": "Anfrage zu groß"
+  "za duże zapytanie": "Anfrage zu groß",
+  "Bez katalogu roboczego": "Ohne Arbeitsordner",
+  "Dołączony plik wygasł - dołącz go ponownie.": "Die angehängte Datei ist abgelaufen - hänge sie erneut an.",
+  "Nowy katalog wybierzesz w programie - przyciskiem z folderem w czacie.": "Einen neuen Ordner wählst du im Programm - mit dem Ordner-Knopf im Chat.",
+  "Odepnij katalog": "Ordner lösen",
+  "Otwórz stronę w nowej karcie": "Seite in neuem Tab öffnen",
+  "Pliku już nie ma.": "Die Datei gibt es nicht mehr.",
+  "Poczekaj chwilę - plik jeszcze się wysyła.": "Einen Moment - die Datei wird noch hochgeladen.",
+  "Ta rozmowa nie ma katalogu roboczego.": "Dieses Gespräch hat keinen Arbeitsordner.",
+  "Ten katalog nie był wybrany w programie - wybierz go najpierw tam.": "Dieser Ordner wurde nicht im Programm gewählt - wähle ihn zuerst dort.",
+  "wysyłam...": "wird hochgeladen..."
 }

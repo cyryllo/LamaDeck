@@ -27,6 +27,9 @@
   --dymek-ty: #1d3a4f;
   --dymek-model: #2c3138;
   --kod: #15181b;
+  --strona: #ffffff;
+  --dodane: #5fd38d;
+  --usuniete: #f47c84;
   --cien: rgba(0, 0, 0, 0.45);
   --zaslona: rgba(10, 12, 14, 0.6);
   --promien: 12px;
@@ -200,6 +203,71 @@ select:focus, input:focus, textarea:focus { border-color: var(--akcent); }
   background: var(--karta); border: 1px solid var(--ramka); border-radius: 8px; padding: 8px 14px; font-size: 13px;
 }
 
+/* --- Załączniki i katalog roboczy nad polem pytania --- */
+.chipy { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 20px 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 2px 4px 2px 12px; border: 1px solid var(--ramka); border-radius: 999px; font-size: 13px;
+  background: var(--wiersz); overflow-wrap: anywhere;
+}
+.chip.blad { color: var(--blad); border-color: var(--blad); }
+.ramka-katalogu {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 20px 0; padding: 6px 6px 6px 12px;
+  border: 1px solid var(--karta-ramka); border-radius: 8px; font-size: 13px; background: var(--karta);
+}
+.ramka-katalogu select { padding: 4px 8px; font-size: 13px; margin-left: auto; }
+.sciezka-katalogu { overflow-wrap: anywhere; }
+.ikona-w-tekscie { display: inline-grid; color: var(--wyciszony); }
+.ikona-w-tekscie svg { width: 16px; height: 16px; }
+.menu button.wybrana { color: var(--akcent); }
+.menu-uwaga { margin: 6px 10px 4px; color: var(--wyciszony); font-size: 12px; max-width: 280px; }
+.zapisane { margin-top: 10px; font-size: 14px; }
+.zapisane b { font-weight: 600; color: var(--wyciszony); }
+.link-pliku { background: none; border: none; padding: 0; color: var(--akcent); cursor: pointer; text-decoration: underline; font: inherit; }
+.miniatura { max-width: 260px; max-height: 260px; border-radius: 8px; display: block; }
+
+/* --- Okienko zgody na zapis pliku --- */
+.okno-zaslona { position: fixed; inset: 0; z-index: 50; background: var(--zaslona); display: grid; place-items: center; padding: 16px; }
+.okno {
+  width: min(900px, 100%); max-height: 90vh; display: flex; flex-direction: column; gap: 8px; padding: 20px;
+  background: var(--karta); border: 1px solid var(--ramka); border-radius: var(--promien); box-shadow: 0 12px 40px var(--cien);
+}
+.okno h2 { margin: 0; font-size: 18px; }
+.okno .wyciszony { margin: 0; color: var(--wyciszony); font-size: 13px; }
+.przyciski { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.przyciski .odstep { flex: 1; }
+.roznica {
+  margin: 0; flex: 1; min-height: 120px; overflow: auto; padding: 10px 12px; background: var(--kod);
+  border-radius: 8px; font-size: 12.5px; white-space: pre;
+}
+.roznica .dodane { color: var(--dodane); }
+.roznica .usuniete { color: var(--usuniete); }
+.roznica .naglowek { color: var(--akcent); }
+
+/* --- Podgląd pliku obok rozmowy --- */
+.podglad {
+  flex: 0 0 48%; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 12px 16px;
+  background: var(--karta); border-left: 1px solid var(--karta-ramka);
+}
+.uklad.z-podgladem .pasek { display: none; }
+.podglad-gora { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.podglad-gora b { margin-right: auto; overflow-wrap: anywhere; }
+.przelacznik-widokow { display: flex; gap: 4px; }
+.chip-widoku { border: 1px solid var(--ramka); border-radius: 999px; background: transparent; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.chip-widoku.wybrany { background: var(--akcent); border-color: var(--akcent); color: var(--tlo); font-weight: 600; }
+.chip-widoku:disabled { opacity: .4; cursor: default; }
+.podglad-info { color: var(--wyciszony); font-size: 12px; }
+.podglad-tresc { flex: 1; min-height: 0; display: flex; }
+.podglad-tresc > * { flex: 1; min-width: 0; }
+.kod-pliku { margin: 0; overflow: auto; padding: 10px 12px; background: var(--kod); border-radius: 8px; font-size: 12.5px; }
+.podglad-tresc .roznica { min-height: 0; }
+/* WHY: strona z katalogu ma własne kolory - jak w przeglądarce, na jej własnym tle */
+iframe.strona { border: 1px solid var(--karta-ramka); border-radius: 8px; background: var(--strona); width: 100%; height: 100%; }
+@media (max-width: 1100px) {
+  .podglad { position: fixed; inset: 0; z-index: 35; flex: none; border-left: none; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .uklad.z-podgladem .pasek { display: flex; }
+}
+
 /* --- Telefon: lista rozmów chowa się w menu --- */
 @media (max-width: 860px) {
   body { font-size: 15px; }
@@ -216,5 +284,6 @@ select:focus, input:focus, textarea:focus { border-color: var(--akcent); }
   .kontekst { min-width: 110px; flex: 1; margin-left: auto; }
   .rozmowa { padding: 16px; }
   .pole { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
-  .uwaga-czatu { margin: 0 16px; }
+  .uwaga-czatu, .chipy, .ramka-katalogu { margin-left: 16px; margin-right: 16px; }
+  .uklad.z-podgladem .pasek { display: flex; }
 }
