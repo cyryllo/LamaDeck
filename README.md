@@ -4,7 +4,8 @@ A control panel for your local AI stack — a desktop app (PyQt6) for KDE. It st
 simple [Ollama](https://ollama.com) service manager and grew into one place for the whole
 stack: multi-host model management, a model aggregator (LiteLLM) that exposes one
 OpenAI-compatible endpoint for tools like Continue/VS Code, a browser chat UI (Open WebUI) and
-a built-in chat that can search the web and cite its sources. No terminal, no Docker, no cloud —
+a built-in chat that can search the web, cite its sources and work with your files — also in your
+web browser, on your phone too. No terminal, no Docker, no cloud —
 everything runs on your LAN.
 
 > **LamaDeck was called "Ollama Manager" until version 0.9.** It's an independent project, not
@@ -16,8 +17,8 @@ everything runs on your LAN.
 **New here? The [user guide](docs/GUIDE.md) shows every screen with screenshots — what each feature
 does and how to turn it on** (also on the [project page](https://cyryllo.github.io/LamaDeck/guide/)).
 
-> **Status: 1.1 — stable.** Daily driver on my own setup. Next: polishing the chat and its working
-> folder (1.1.x), then the same chat in your web browser (1.2) — see the [Roadmap](#roadmap).
+> **Status: 1.2 — stable.** Daily driver on my own setup. New in 1.2: the chat in your web
+> browser — the same chat, models and conversations, on your phone too — see the [Roadmap](#roadmap).
 > [Bug reports and feedback](../../issues) are welcome. Project page: https://cyryllo.github.io/LamaDeck/
 
 ![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)
@@ -221,6 +222,24 @@ fonts are bundled, so it looks the same everywhere).
 
 ![Working folder: the model adds a button to index.html](screenshots/lamadeck-folder.png)
 
+**Chat in the browser** (1.2)
+- The same chat in your web browser — the same models and the same saved conversations — at
+  `http://localhost:11500`; start at the computer, carry on from your phone. Answers as they're
+  written, web search, links, attachments (paperclip, drag and drop, pasted screenshots), the
+  working folder with the approval window, saved files and the file preview
+- *Settings → Chat in the browser*: on/off, port, access from the home network, the address and a
+  **QR code** for your phone. **Open in the browser** on the Chat screen opens the current
+  conversation
+- Off by default and only on this computer; the home network needs a password (stored as a hash,
+  limited sign-in attempts). In the browser you can only use working folders chosen in the app; a
+  page from the folder runs in a sandbox. While an answer is being written in one place, the
+  other only reads that conversation — nothing gets overwritten
+- No new dependencies: a small web server inside the app, a plain HTML/JS page; Markdown via the
+  bundled [marked](https://github.com/markedjs/marked), the QR code via the bundled
+  [qrcodegen](https://www.nayuki.io/page/qr-code-generator-library) (both MIT)
+
+![Chat in the browser](screenshots/lamadeck-web.png)
+
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
 - Settings: open the browser after start, require login (only switchable off while there are no
@@ -278,20 +297,13 @@ fonts are bundled, so it looks the same everywhere).
 - [x] **1.0** — web search in the chat with sources (SearXNG or Ollama's web search); own APT
   repository, `.deb`, AppImage
 - [x] **1.1** — working folder in the chat: the model works with your files, every change approved
+- [x] **1.1.x** — default write permission per project, saved files under the answer, a file preview
+  in the app that refreshes by itself (web pages and games too)
+- [x] **1.2** — the chat in your web browser with the same features and conversations as in the
+  window: answers as they're written, web search, attachments, working folder and file preview.
+  Only this computer by default; the home network with a password and a QR code
 
-**Next — 1.1.x, polishing the working folder:**
-
-- [x] Default write permission for new folders in Settings (ask every time / ask once per session /
-  always allow), changeable per project on the folder bar
-- [x] A list of the files the model saved under its answer — click one to preview it
-- [x] A file preview inside the app that refreshes by itself as the model changes the file,
-  including web pages (e.g. a game) shown as in a browser
-
-**Then — 1.2, the chat in your web browser:**
-
-- [ ] LamaDeck serves its chat on a port, with the same features as in the window and the same
-  saved conversations — start on the computer, continue on your phone. Only this computer by
-  default; other devices on your network only after you turn it on, with a password
+**Next:** polishing from everyday use. Ideas and wishes are welcome in the [issues](../../issues).
 
 ## Notes
 

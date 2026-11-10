@@ -4,7 +4,8 @@ Panel sterowania lokalnym stosem AI — aplikacja desktopowa (PyQt6) pod KDE. Za
 prosty manager usługi [Ollamy](https://ollama.com), a wyrosła w jedno miejsce dla całego
 stosu: zarządzanie modelami na wielu hostach naraz, agregator modeli (LiteLLM) wystawiający
 jeden endpoint zgodny z API OpenAI dla narzędzi typu Continue/VS Code, panel czatu
-w przeglądarce (Open WebUI) i wbudowany czat, który umie szukać w internecie i podawać źródła.
+w przeglądarce (Open WebUI) i wbudowany czat, który umie szukać w internecie, podawać źródła
+i pracować na Twoich plikach — także w przeglądarce, również na telefonie.
 Bez terminala, bez Dockera, bez chmury —
 wszystko działa lokalnie, w Twoim LAN.
 
@@ -12,8 +13,8 @@ wszystko działa lokalnie, w Twoim LAN.
 > z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
 > przenosi przy pierwszym uruchomieniu.
 
-> **Status: 1.1 — stabilna.** Używam jej na co dzień na własnym sprzęcie. Dalej: dopracowanie
-> czatu i katalogu roboczego (1.1.x), potem ten sam czat w przeglądarce (1.2) — patrz [Plan](#plan).
+> **Status: 1.2 — stabilna.** Używam jej na co dzień na własnym sprzęcie. Nowość w 1.2: czat
+> w przeglądarce — ten sam czat, modele i rozmowy, także na telefonie — patrz [Plan](#plan).
 > [Zgłoszenia błędów i uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
 **Pierwszy raz? [Instrukcja](docs/PRZEWODNIK.md) pokazuje każdy ekran na zrzutach — co robi każda
@@ -217,6 +218,23 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 ![Katalog roboczy: model dodaje przycisk do index.html](screenshots/lamadeck-folder_pl.png)
 
+**Czat w przeglądarce** (1.2)
+- Ten sam czat w przeglądarce — te same modele i te same zapisane rozmowy — pod adresem
+  `http://localhost:11500`; zaczynasz przy komputerze, kończysz na telefonie. Odpowiedź pisana na
+  bieżąco, wyszukiwanie w internecie, linki, załączniki (spinacz, przeciągnięcie, wklejony zrzut),
+  katalog roboczy z okienkiem zgody, zapisane pliki i podgląd pliku
+- *Ustawienia → Czat w przeglądarce*: włączenie, port, dostęp z sieci domowej, adres i **kod QR**
+  dla telefonu. **Otwórz w przeglądarce** na ekranie Czat otwiera bieżącą rozmowę
+- Domyślnie wyłączony i tylko na tym komputerze; sieć domowa wymaga hasła (zapisany tylko jego
+  skrót, limit prób logowania). W przeglądarce działają tylko katalogi robocze wybrane w programie;
+  strona z katalogu działa w piaskownicy. Gdy w jednym miejscu pisze się odpowiedź, drugie tylko
+  czyta tę rozmowę — nic się nie nadpisuje
+- Bez nowych zależności: mały serwer WWW w programie i zwykła strona HTML/JS; Markdown przez
+  dołączony [marked](https://github.com/markedjs/marked), kod QR przez dołączony
+  [qrcodegen](https://www.nayuki.io/page/qr-code-generator-library) (oba MIT)
+
+![Czat w przeglądarce](screenshots/lamadeck-web_pl.png)
+
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
 - Ustawienia: otwieranie przeglądarki po starcie, wymaganie logowania (wyłączyć da się tylko,
@@ -274,20 +292,14 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] **1.0** — wyszukiwanie w internecie w czacie ze źródłami (SearXNG albo wyszukiwarka Ollamy);
   własne repozytorium APT, `.deb`, AppImage
 - [x] **1.1** — katalog roboczy w czacie: model pracuje na Twoich plikach, każda zmiana za zgodą
+- [x] **1.1.x** — domyślne uprawnienia zapisu dla projektów, zapisane pliki pod odpowiedzią, podgląd
+  pliku w programie, który sam się odświeża (także strony i gry)
+- [x] **1.2** — czat w przeglądarce z tymi samymi funkcjami i rozmowami co w oknie: odpowiedź na
+  bieżąco, wyszukiwanie w internecie, załączniki, katalog roboczy i podgląd plików. Domyślnie tylko
+  ten komputer; sieć domowa z hasłem i kodem QR
 
-**Dalej — 1.1.x, dopracowanie katalogu roboczego:**
-
-- [x] Domyślne uprawnienia zapisu dla nowych katalogów w Ustawieniach (pytaj za każdym razem /
-  pytaj raz na sesję / zezwalaj zawsze), do zmiany dla konkretnego projektu na pasku katalogu
-- [x] Lista plików zapisanych przez model pod jego odpowiedzią — kliknięcie otwiera podgląd
-- [x] Podgląd pliku w programie, który sam się odświeża, gdy model go zmienia — także strony WWW
-  (np. gra) pokazane tak jak w przeglądarce
-
-**Potem — 1.2, czat w przeglądarce:**
-
-- [ ] LamaDeck udostępnia swój czat na porcie, z tymi samymi funkcjami co w oknie i tymi samymi
-  zapisanymi rozmowami — zaczynasz na komputerze, kończysz na telefonie. Domyślnie tylko ten
-  komputer; inne urządzenia w sieci domowej dopiero po włączeniu, z hasłem
+**Dalej:** dopracowanie po codziennym używaniu. Pomysły i życzenia mile widziane w
+[zgłoszeniach](../../issues).
 
 ## Uwagi
 

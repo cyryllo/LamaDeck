@@ -27,12 +27,13 @@
 
 <main>
   <div class="wrap intro">
-    <span class="status">Wersja 1.1 · wolne i otwarte oprogramowanie (GPL-3.0)</span>
+    <span class="status">Wersja 1.2 · wolne i otwarte oprogramowanie (GPL-3.0)</span>
     <h1>Panel sterowania lokalnym stosem AI</h1>
     <p class="lead">LamaDeck to program na KDE, który obsługuje Ollamę na każdym komputerze
       w domowej sieci, łączy wszystkie ich modele pod jednym adresem dla VS Code i innych
-      narzędzi, a do tego ma własny czat, który umie szukać w internecie i podawać źródła. Bez
-      terminala, bez Dockera, bez chmury.</p>
+      narzędzi, a do tego ma własny czat, który umie szukać w internecie, podawać źródła i pracować
+      na Twoich plikach - także w przeglądarce, również na telefonie. Bez terminala, bez Dockera,
+      bez chmury.</p>
     <div class="actions">
       <a class="button primary" href="#instalacja">Zainstaluj na Debianie / Ubuntu</a>
       <a class="button" href="guide/">Instrukcja</a>
@@ -126,6 +127,27 @@
   <section>
     <div class="wrap-wide split tray">
       <div>
+        <h2>Ten sam czat w przeglądarce - także na telefonie</h2>
+        <ul style="margin-top:1.25rem">
+          <li>LamaDeck sam udostępnia swój czat pod adresem <code>http://localhost:11500</code>: te
+            same modele i te same zapisane rozmowy co w oknie. Zaczynasz przy komputerze, kończysz
+            na kanapie.</li>
+          <li>Wszystko jak w oknie: odpowiedź pisana na bieżąco, wyszukiwanie w internecie ze
+            źródłami, załączniki oraz katalog roboczy ze zgodą, zapisanymi plikami i podglądem.</li>
+          <li>Domyślnie wyłączony i tylko na tym komputerze. Sieć domowa dopiero po włączeniu,
+            z hasłem - w ustawieniach jest kod QR dla telefonu.</li>
+          <li>Bez kont, bez bazy, bez dodatkowej usługi: mały serwer WWW w samym programie.</li>
+        </ul>
+      </div>
+      <figure class="shot" style="max-width:18rem">
+        <img src="img/lamadeck-web-phone_pl.png" alt="Czat LamaDeck w przeglądarce telefonu: plan wycieczki z tabelką" width="460" height="943" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide split tray">
+      <div>
         <h2>Albo w zasobniku</h2>
         <ul style="margin-top:1.25rem">
           <li>Małe okienko przy zegarze: przełączniki usług, CPU, VRAM i RAM oraz modele
@@ -207,22 +229,22 @@ cd LamaDeck
             <li><span class="done">1.0:</span> wyszukiwanie w internecie w czacie ze źródłami;
               repozytorium APT, .deb i AppImage</li>
             <li><span class="done">1.1:</span> katalog roboczy w czacie - model pracuje na Twoich
-              plikach, każda zmiana za zgodą</li>
+              plikach, każda zmiana za zgodą; zapisane pliki i podgląd na żywo, także strony i gry</li>
           </ul>
         </div>
         <div class="milestone now">
-          <h3>1.1.x · teraz: dopracowanie katalogu roboczego</h3>
+          <h3>1.2 · zrobione: czat w przeglądarce</h3>
           <ul>
-            <li><span class="done">1.1.4:</span> domyślne uprawnienia zapisu dla nowych katalogów, do zmiany dla każdego projektu</li>
-            <li><span class="done">1.1.5:</span> pliki zapisane przez model, wypisane pod odpowiedzią, z podglądem</li>
-            <li><span class="done">1.1.6:</span> podgląd sam się odświeża i pokazuje strony WWW i gry jak w przeglądarce</li>
+            <li><span class="done">1.2.0:</span> ten sam czat i rozmowy w przeglądarce, także na
+              telefonie; sieć domowa z hasłem i kodem QR</li>
+            <li><span class="done">1.2.1:</span> załączniki, katalog roboczy ze zgodą i podgląd plików
+              w przeglądarce</li>
           </ul>
         </div>
         <div class="milestone">
-          <h3>1.2 · czat w przeglądarce</h3>
-          <p>LamaDeck udostępnia swój czat na porcie, z tymi samymi funkcjami i tymi samymi
-            zapisanymi rozmowami - zaczynasz na komputerze, kończysz na telefonie. Domyślnie tylko
-            ten komputer; sieć domowa dopiero po włączeniu, z hasłem.</p>
+          <h3>Dalej</h3>
+          <p>Dopracowanie po codziennym używaniu. Pomysły i życzenia mile widziane w
+            <a href="https://github.com/cyryllo/LamaDeck/issues">zgłoszeniach</a>.</p>
         </div>
       </div>
     </div>

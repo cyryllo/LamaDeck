@@ -215,6 +215,49 @@ you to pick one that can.
   take a large part of the model's context.
 - The folder is saved with the conversation and comes back when you open it.
 
+## Chat in the browser
+
+The same chat as in the window — the same models and the same saved conversations — at an address
+in your web browser. Start a conversation at the computer and carry on from your phone.
+
+![Chat in the browser](img/en/www.png)
+
+**Turning it on** — *Settings → Chat in the browser*:
+
+![Chat in the browser in Settings](img/en/ustawienia-www.png)
+
+1. Switch **Chat in the browser** on. It works at `http://localhost:11500`, on this computer only.
+   **Open in the browser** at the top of the Chat screen (and *Chat in the browser* in the tray
+   menu) opens it with the conversation you have open.
+2. For your phone or another computer at home: set a **Password** (at least 8 characters), then
+   switch **Access from the home network** on. The card shows the address with this computer's IP
+   and a QR code — scan it with the phone's camera and sign in.
+
+**What you can do in the browser** — everything from the [Chat](#chat) screen: answers as they're
+written, statistics and context, thinking on/off, web search with sources, links in a question,
+attachments (paperclip, drag and drop, paste a screenshot), copy, regenerate and edit, rename,
+export to Markdown and delete. Also the [Working folder](#working-folder): the folder button, the
+approval window before every write, **Saved files** under the answer and the preview next to the
+conversation (Code, Changes, Page). On a phone the conversation list is behind the ☰ button:
+
+![On a phone](img/en/www-telefon.png)
+
+**Good to know:**
+
+- The chat works as long as LamaDeck runs — also hidden in the tray (with *Start the program after
+  login* it's always there).
+- One conversation can't be answered in two places at once. While an answer is being written in the
+  window, the browser can only read that conversation, and the other way round. Afterwards both
+  show the whole conversation.
+- In the browser you can only pick a working folder that was chosen in the app before (recent ones
+  and those of saved conversations) — nobody can point at an arbitrary folder from a phone.
+  *Allow for this session* given in the window also works in the browser, and the other way round.
+- Security: off by default; without the home network it only listens on this computer. On the home
+  network every device needs the password, and changing it signs out all devices. The connection
+  is plain HTTP (not encrypted), so turn it on only in a trusted home network. A page from the
+  working folder runs in a sandbox and can't reach the chat.
+- Settings, models and services are managed in the app only.
+
 ## LiteLLM Router
 
 ![LiteLLM Router](img/en/router.png)
@@ -273,6 +316,8 @@ log in again).
 
 ![Chat settings](img/en/ustawienia-czat.png)
 
+- **Chat in the browser** — on/off, port, access from the home network with a password, the address
+  and a QR code (see [Chat in the browser](#chat-in-the-browser)).
 - **Ollama environment variables** (lower on the same screen) — each with a short description.
   **Apply recommended values** fills in a starting set (16k-token context, 30 minutes in memory,
   two models at once, Vulkan for AMD graphics) — it only fills the form, so look it over first.
@@ -286,7 +331,8 @@ Turn on *Settings → System tray icon*. Then:
 
 - left click on the icon — this small panel: service switches, CPU / VRAM / RAM, models in memory,
   **Open chat** and **Open the control panel**,
-- middle click — the main window, right click — the menu with **Quit**,
+- middle click — the main window, right click — the menu with **Quit** (and **Chat in the browser**
+  when it's on),
 - closing the window only hides it in the tray; quit with **Quit** in the icon's menu,
 - **Start the program after login** starts LamaDeck already hidden in the tray.
 
@@ -295,7 +341,7 @@ Turn on *Settings → System tray icon*. Then:
 | What | Where |
 |---|---|
 | Settings | `~/.config/LamaDeck/LamaDeck.conf` |
-| Chat conversations | `~/.local/share/LamaDeck/czaty/` |
+| Chat conversations (the window and the browser share them) | `~/.local/share/LamaDeck/czaty/` |
 | SearXNG | `~/.local/share/LamaDeck/searxng/`, settings in `~/.config/LamaDeck/searxng/` |
 | Router settings | `~/.config/LamaDeck/litellm_config.yaml` |
 | Open WebUI | `~/.local/share/uv/tools/open-webui/` |
@@ -313,6 +359,11 @@ searches you turn on yourself.
   chat model. With `OLLAMA_MAX_LOADED_MODELS=2` (one of the recommended values) both stay in memory.
 - **A web search gives no results** — press *Test search* in Settings; SearXNG may be stopped.
   Some search engines occasionally ask for a captcha; SearXNG then uses the others.
+
+- **The phone can't open the chat in the browser** — the phone must be on the same network and
+  *Access from the home network* must be on. A firewall on the computer (e.g. `ufw`) may block the
+  port — allow `11500/tcp`. If the card says *Did not start*, another program uses the port —
+  change **Port**.
 
 - **The model shows code in the chat instead of saving it** — check that the folder bar is visible
   (the folder is chosen) and that the model is tagged *tools*. Smaller models sometimes ignore the

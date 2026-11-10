@@ -214,6 +214,49 @@ co się zmieni (dodane linie na zielono, usunięte na czerwono):
   wyszukiwania zajmują dużą część kontekstu modelu.
 - Katalog zapisuje się razem z rozmową i wraca, gdy ją otworzysz.
 
+## Czat w przeglądarce
+
+Ten sam czat co w oknie — te same modele i te same zapisane rozmowy — pod adresem w przeglądarce.
+Zaczynasz rozmowę przy komputerze, a kończysz na telefonie.
+
+![Czat w przeglądarce](img/pl/www.png)
+
+**Jak włączyć** — *Ustawienia → Czat w przeglądarce*:
+
+![Czat w przeglądarce w Ustawieniach](img/pl/ustawienia-www.png)
+
+1. Włącz **Czat w przeglądarce**. Działa pod adresem `http://localhost:11500`, tylko na tym
+   komputerze. **Otwórz w przeglądarce** u góry ekranu Czat (i *Czat w przeglądarce* w menu ikony
+   w zasobniku) otwiera go z rozmową, którą masz otwartą.
+2. Dla telefonu albo innego komputera w domu: ustaw **Hasło** (co najmniej 8 znaków), potem włącz
+   **Dostęp z sieci domowej**. Karta pokaże adres z IP tego komputera i kod QR — zeskanuj go
+   aparatem telefonu i zaloguj się.
+
+**Co działa w przeglądarce** — wszystko z ekranu [Czat](#czat): odpowiedź pisana na bieżąco,
+statystyki i kontekst, myślenie wł./wył., wyszukiwanie w internecie ze źródłami, linki w pytaniu,
+załączniki (spinacz, przeciągnięcie pliku, wklejony zrzut ekranu), kopiowanie, „ponów” i „popraw”,
+zmiana nazwy, eksport do Markdown i usuwanie. Do tego [Katalog roboczy](#katalog-roboczy): przycisk
+z folderem, okienko zgody przed każdym zapisem, **Zapisane pliki** pod odpowiedzią i podgląd obok
+rozmowy (Kod, Zmiany, Strona). Na telefonie lista rozmów jest pod przyciskiem ☰:
+
+![Na telefonie](img/pl/www-telefon.png)
+
+**Warto wiedzieć:**
+
+- Czat działa, dopóki działa LamaDeck — także schowany w zasobniku (z *Uruchamiaj program po
+  zalogowaniu* jest zawsze pod ręką).
+- W jednej rozmowie odpowiedź nie pisze się w dwóch miejscach naraz. Gdy pisze się w oknie,
+  przeglądarka może tę rozmowę tylko czytać, i odwrotnie. Po zakończeniu oba miejsca pokazują całą
+  rozmowę.
+- W przeglądarce wybierzesz tylko katalog roboczy wybrany wcześniej w programie (ostatnie i te
+  z zapisanych rozmów) — z telefonu nikt nie wskaże dowolnego miejsca na dysku. *Zezwalaj w tej
+  sesji* dane w oknie działa też w przeglądarce, i odwrotnie.
+- Bezpieczeństwo: domyślnie wyłączony; bez sieci domowej słucha tylko na tym komputerze. W sieci
+  domowej każde urządzenie potrzebuje hasła, a jego zmiana wylogowuje wszystkie urządzenia.
+  Połączenie to zwykłe HTTP (bez szyfrowania), więc włączaj to tylko w zaufanej sieci domowej.
+  Strona z katalogu roboczego działa w piaskownicy i nie dostanie się do czatu.
+- Ustawienia, modele i usługi zmieniasz tylko w programie.
+
 ## Router LiteLLM
 
 ![Router LiteLLM](img/pl/router.png)
@@ -274,6 +317,8 @@ zalogowaniu).
 
 ![Ustawienia czatu](img/pl/ustawienia-czat.png)
 
+- **Czat w przeglądarce** — włączenie, port, dostęp z sieci domowej z hasłem, adres i kod QR
+  (patrz [Czat w przeglądarce](#czat-w-przeglądarce)).
 - **Zmienne środowiskowe Ollamy** (niżej na tym samym ekranie) — każda z krótkim opisem.
   **Zastosuj zalecane wartości** wypełnia formularz punktem startowym (kontekst 16k tokenów,
   30 minut w pamięci, dwa modele naraz, Vulkan dla grafiki AMD) — tylko wypełnia, więc najpierw go
@@ -287,7 +332,8 @@ Włącz *Ustawienia → Ikona w zasobniku systemowym*. Wtedy:
 
 - lewy klik na ikonie — to małe okienko: przełączniki usług, CPU / VRAM / RAM, modele w pamięci,
   **Otwórz czat** i **Otwórz panel zarządzania**,
-- środkowy klik — główne okno, prawy — menu z **Zakończ**,
+- środkowy klik — główne okno, prawy — menu z **Zakończ** (i **Czat w przeglądarce**, gdy jest
+  włączony),
 - zamknięcie okna tylko chowa je do zasobnika; program kończysz przez **Zakończ** w menu ikony,
 - **Uruchamiaj program po zalogowaniu** startuje LamaDeck od razu schowany w zasobniku.
 
@@ -296,7 +342,7 @@ Włącz *Ustawienia → Ikona w zasobniku systemowym*. Wtedy:
 | Co | Gdzie |
 |---|---|
 | Ustawienia | `~/.config/LamaDeck/LamaDeck.conf` |
-| Rozmowy z czatu | `~/.local/share/LamaDeck/czaty/` |
+| Rozmowy z czatu (wspólne dla okna i przeglądarki) | `~/.local/share/LamaDeck/czaty/` |
 | SearXNG | `~/.local/share/LamaDeck/searxng/`, ustawienia w `~/.config/LamaDeck/searxng/` |
 | Ustawienia routera | `~/.config/LamaDeck/litellm_config.yaml` |
 | Open WebUI | `~/.local/share/uv/tools/open-webui/` |
@@ -315,6 +361,10 @@ wyszukiwaniem w internecie, które włączasz sam.
 - **Wyszukiwanie nie daje wyników** — naciśnij *Sprawdź wyszukiwanie* w Ustawieniach; SearXNG mógł
   zostać zatrzymany. Niektóre wyszukiwarki czasem pytają o captchę — SearXNG korzysta wtedy
   z pozostałych.
+
+- **Telefon nie otwiera czatu w przeglądarce** — telefon musi być w tej samej sieci, a *Dostęp
+  z sieci domowej* włączony. Zapora na komputerze (np. `ufw`) może blokować port — zezwól na
+  `11500/tcp`. Gdy karta pokazuje *Nie wystartował*, port zajmuje inny program — zmień **Port**.
 
 - **Model pokazuje kod w czacie zamiast go zapisać** — sprawdź, czy widać pasek katalogu (katalog
   jest wybrany) i czy model ma tag *narzędzia*. Mniejsze modele czasem ignorują polecenie; wtedy
