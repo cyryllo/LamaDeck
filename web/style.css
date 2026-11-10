@@ -1,0 +1,220 @@
+/*
+ * LamaDeck - czat w przeglądarce.
+ * WHAT: wygląd strony czatu - te same kolory co okno programu (theme.qss, ciemny Breeze z makiet).
+ * WHY:  kolory tylko tutaj, jako zmienne; app.js nie wpisuje żadnego koloru.
+ *       Strona jest zawsze ciemna - jak okno programu, niezależnie od motywu systemu.
+ */
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Medium.ttf") format("truetype"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/fonts/JetBrainsMono-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+
+:root {
+  --tlo: #1b1e22;
+  --karta: #262a30;
+  --karta-ramka: #353b43;
+  --wiersz: #2c3138;
+  --ramka: #444c56;
+  --tekst: #e8eaed;
+  --wyciszony: #a3abb5;
+  --akcent: #3daee9;
+  --akcent-ciemny: #1d3a4f;
+  --ok: #5fd38d;
+  --uwaga: #f0b453;
+  --blad: #f47c84;
+  --ty: #7cc8f0;
+  --dymek-ty: #1d3a4f;
+  --dymek-model: #2c3138;
+  --kod: #15181b;
+  --cien: rgba(0, 0, 0, 0.45);
+  --zaslona: rgba(10, 12, 14, 0.6);
+  --promien: 12px;
+  --pasek: 300px;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  background: var(--tlo);
+  color: var(--tekst);
+  font: 15px/1.5 "Inter", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--akcent); }
+code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-ligatures: none; }
+[hidden] { display: none !important; }
+
+/* --- Przyciski i pola --- */
+.przycisk {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 38px; padding: 0 14px;
+  background: var(--wiersz); border: 1px solid var(--ramka); border-radius: 8px;
+  cursor: pointer; white-space: nowrap;
+}
+.przycisk:hover { border-color: var(--akcent); }
+.przycisk:disabled { opacity: 0.5; cursor: default; border-color: var(--ramka); }
+.przycisk.glowny { background: var(--akcent); border-color: var(--akcent); color: var(--tlo); font-weight: 600; }
+.przycisk.ikona { width: 38px; padding: 0; }
+.przycisk.wlaczony { background: var(--akcent-ciemny); border-color: var(--akcent); }
+.przycisk svg { width: 18px; height: 18px; }
+select, input[type="text"], input[type="password"], input[type="search"], textarea {
+  background: var(--tlo); border: 1px solid var(--ramka); border-radius: 8px; padding: 8px 10px; outline: none;
+}
+select:focus, input:focus, textarea:focus { border-color: var(--akcent); }
+
+/* --- Logowanie --- */
+.logowanie { min-height: 100%; display: grid; place-items: center; padding: 16px; overflow: auto; height: 100%; }
+.logowanie form {
+  width: min(360px, 100%); display: grid; gap: 12px; padding: 28px;
+  background: var(--karta); border: 1px solid var(--karta-ramka); border-radius: var(--promien);
+}
+.logowanie img { width: 72px; height: 72px; justify-self: center; }
+.logowanie h1 { margin: 0; text-align: center; font-size: 22px; }
+.logowanie p { margin: 0; color: var(--wyciszony); text-align: center; font-size: 13px; }
+
+/* --- Układ --- */
+.uklad { display: flex; height: 100%; }
+.pasek {
+  width: var(--pasek); flex: none; display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; background: var(--karta); border-right: 1px solid var(--karta-ramka);
+}
+.marka { display: flex; align-items: center; gap: 10px; }
+.marka img { width: 40px; height: 40px; }
+.marka b { font-size: 17px; display: block; }
+.marka small { color: var(--wyciszony); font-size: 12px; }
+.lista-rozmow { flex: 1; overflow-y: auto; display: grid; align-content: start; gap: 4px; margin: 0 -6px; padding: 0 6px; }
+.rozmowa-poz {
+  position: relative; display: block; width: 100%; text-align: left; padding: 9px 36px 9px 12px;
+  background: transparent; border: 1px solid transparent; border-radius: 8px; cursor: pointer;
+}
+.rozmowa-poz:hover { background: var(--wiersz); }
+.rozmowa-poz.wybrana { background: var(--akcent-ciemny); border-color: var(--akcent); }
+.rozmowa-poz .tytul { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; }
+.rozmowa-poz .opis { color: var(--wyciszony); font-size: 12px; }
+.rozmowa-poz .wiecej {
+  position: absolute; right: 4px; top: 6px; width: 28px; height: 28px; border: none; border-radius: 6px;
+  background: transparent; color: var(--wyciszony); cursor: pointer; font-size: 18px; line-height: 1;
+}
+.rozmowa-poz .wiecej:hover { background: var(--karta); color: var(--tekst); }
+.pusto { color: var(--wyciszony); font-size: 13px; padding: 8px 4px; }
+.stopka { color: var(--wyciszony); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+.stopka button { background: none; border: none; color: var(--akcent); cursor: pointer; padding: 0; font-size: 12px; }
+
+.glowna { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gora {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 20px; border-bottom: 1px solid var(--karta-ramka);
+}
+.gora select { max-width: min(380px, 100%); min-width: 0; flex: 0 1 auto; }
+.menu-przycisk { display: none; }
+.opis-modelu { color: var(--wyciszony); font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag { border: 1px solid var(--ramka); border-radius: 999px; padding: 1px 8px; font-size: 11px; color: var(--wyciszony); }
+.tag.ok { color: var(--ok); border-color: var(--ok); }
+.przelacznik { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; }
+.przelacznik input { appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--ramka); position: relative; margin: 0; cursor: pointer; }
+.przelacznik input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--tekst); transition: left .15s; }
+.przelacznik input:checked { background: var(--akcent); }
+.przelacznik input:checked::after { left: 17px; }
+.przelacznik input:disabled { opacity: .45; cursor: default; }
+.przelacznik:has(input:disabled) { color: var(--wyciszony); cursor: default; }
+.kontekst { margin-left: auto; min-width: 150px; display: grid; gap: 3px; font-size: 12px; color: var(--wyciszony); }
+.kontekst .liczby { text-align: right; font-family: "JetBrains Mono", monospace; }
+.miernik { height: 5px; background: var(--wiersz); border-radius: 3px; overflow: hidden; }
+.miernik div { height: 100%; width: 0; background: var(--akcent); }
+.kontekst.warn .miernik div { background: var(--uwaga); }
+.kontekst.error .miernik div { background: var(--blad); }
+
+/* --- Rozmowa --- */
+.rozmowa { flex: 1; overflow-y: auto; padding: 20px max(20px, calc((100% - 900px) / 2)); }
+.wiadomosc { margin: 0 0 18px; }
+.naglowek { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; font-size: 13px; }
+.naglowek b { font-weight: 600; }
+.naglowek .ty { color: var(--ty); }
+.naglowek .stat { color: var(--wyciszony); }
+.mala-ikona {
+  width: 26px; height: 26px; display: inline-grid; place-items: center; border: none; border-radius: 6px;
+  background: transparent; color: var(--wyciszony); cursor: pointer; padding: 0;
+}
+.mala-ikona:hover { background: var(--wiersz); color: var(--tekst); }
+.mala-ikona svg { width: 15px; height: 15px; }
+.dymek { padding: 10px 14px; border-radius: 10px; background: var(--dymek-model); overflow-wrap: anywhere; }
+.wiadomosc.user .dymek { background: var(--dymek-ty); white-space: pre-wrap; }
+.wiadomosc.blad .dymek { color: var(--blad); white-space: pre-wrap; }
+.dymek > :first-child { margin-top: 0; }
+.dymek > :last-child { margin-bottom: 0; }
+.dymek p { margin: 0 0 10px; }
+.dymek ul, .dymek ol { margin: 0 0 10px; padding-left: 24px; }
+.dymek h1, .dymek h2, .dymek h3, .dymek h4 { margin: 14px 0 8px; line-height: 1.3; }
+.dymek h1 { font-size: 20px; } .dymek h2 { font-size: 18px; } .dymek h3 { font-size: 16px; } .dymek h4 { font-size: 15px; }
+.dymek blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 3px solid var(--ramka); color: var(--wyciszony); }
+.dymek table { border-collapse: collapse; margin: 0 0 10px; display: block; overflow-x: auto; }
+.dymek th, .dymek td { border: 1px solid var(--ramka); padding: 4px 8px; }
+.dymek :not(pre) > code { background: var(--kod); border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+.dymek hr { border: none; border-top: 1px solid var(--ramka); }
+.kod { margin: 0 0 10px; background: var(--kod); border-radius: 8px; overflow: hidden; }
+.kod-gora { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 2px 12px; color: var(--wyciszony); font-size: 12px; }
+.kod pre { margin: 0; padding: 4px 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.zalaczniki { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.zalacznik { font-size: 12px; color: var(--wyciszony); border: 1px solid var(--ramka); border-radius: 999px; padding: 1px 10px; white-space: normal; }
+.stan { color: var(--wyciszony); font-style: italic; }
+.mysl { margin: 0 0 10px; color: var(--wyciszony); font-size: 13px; }
+.mysl summary { cursor: pointer; font-weight: 600; }
+.mysl div { white-space: pre-wrap; margin-top: 6px; }
+.dopisek { color: var(--wyciszony); font-size: 13px; font-style: italic; margin-top: 8px; }
+.dopisek.warn { color: var(--uwaga); }
+.zrodla { margin-top: 10px; font-size: 13px; display: grid; gap: 2px; }
+.zrodla b { font-weight: 600; }
+.kroki { color: var(--wyciszony); font-size: 13px; font-style: italic; margin-bottom: 8px; }
+.kroki .blad { color: var(--blad); }
+.powitanie { color: var(--wyciszony); text-align: center; margin-top: 18vh; padding: 0 16px; }
+.powitanie img { width: 84px; height: 84px; opacity: .9; }
+
+/* --- Pole pytania --- */
+.uwaga-czatu { margin: 0 20px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: var(--wiersz); }
+.uwaga-czatu.warn { color: var(--uwaga); }
+.uwaga-czatu.error { color: var(--blad); }
+.pole {
+  display: flex; gap: 8px; align-items: flex-end;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+}
+.pole textarea { flex: 1; min-height: 44px; max-height: 40vh; resize: none; line-height: 1.45; }
+.pole .przycisk { min-height: 44px; }
+.pole .przycisk.ikona { width: 44px; }
+
+/* --- Menu rozmowy --- */
+.menu {
+  position: fixed; z-index: 30; min-width: 200px; padding: 6px;
+  background: var(--karta); border: 1px solid var(--ramka); border-radius: 10px; box-shadow: 0 8px 24px var(--cien);
+}
+.menu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; border-radius: 6px; background: transparent; cursor: pointer; }
+.menu button:hover { background: var(--wiersz); }
+.menu button.niebezpieczne { color: var(--blad); }
+.zaslona { position: fixed; inset: 0; z-index: 10; background: var(--zaslona); }
+.zaslona.przezroczysta { z-index: 25; background: transparent; }
+.dymek-info {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 40;
+  background: var(--karta); border: 1px solid var(--ramka); border-radius: 8px; padding: 8px 14px; font-size: 13px;
+}
+
+/* --- Telefon: lista rozmów chowa się w menu --- */
+@media (max-width: 860px) {
+  body { font-size: 15px; }
+  .pasek {
+    position: fixed; z-index: 20; top: 0; bottom: 0; left: 0; width: min(86vw, 330px);
+    transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 30px var(--cien);
+  }
+  .uklad.menu-otwarte .pasek { transform: none; }
+  .menu-przycisk { display: inline-flex; }
+  .gora { padding: 10px 16px; gap: 8px; }
+  .gora select { flex: 1 1 0; }
+  /* WHY: przełącznik myślenia i kontekst w jednym wierszu - więcej miejsca na rozmowę */
+  .opis-modelu { width: 100%; }
+  .kontekst { min-width: 110px; flex: 1; margin-left: auto; }
+  .rozmowa { padding: 16px; }
+  .pole { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .uwaga-czatu { margin: 0 16px; }
+}

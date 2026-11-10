@@ -35,6 +35,8 @@ import shlex
 import socket
 import sqlite3
 import getpass
+import hashlib
+import hmac
 import grp
 import shutil
 import subprocess
@@ -44,7 +46,8 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, quote
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import requests  # WHY: czytelniejsze od urllib przy strumieniowaniu /api/pull
 
@@ -65,7 +68,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QComboBox, QMessageBox, QCheckBox,
     QDialog, QLineEdit, QScrollArea, QListWidgetItem,
     QFrame, QStackedWidget, QGridLayout, QSizePolicy, QAbstractButton, QButtonGroup, QMenu, QFileDialog,
-    QSystemTrayIcon, QTextBrowser, QToolTip, QInputDialog, QSplitter,
+    QSystemTrayIcon, QTextBrowser, QToolTip, QInputDialog, QSplitter, QSpinBox,
 )
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 # WHAT: silnik przeglądarki Qt - podgląd stron (np. gier) z katalogu roboczego w oknie programu.
@@ -6417,6 +6420,975 @@ class WierszDziennika(QFrame):
 # =============================================================================
 #  Główne okno - pasek boczny z siedmioma ekranami z makiet
 # =============================================================================
+# =============================================================================
+#  Logika czatu wspólna dla okna i czatu w przeglądarce
+# =============================================================================
+# WHY: od 1.2 te same kroki (historia dla modelu, statystyki, koniec odpowiedzi) wykonuje
+#      okno i serwer WWW - jedna funkcja zamiast dwóch kopii, które by się rozjechały.
+
+def umie_rozmawiac(model, ze_zdjeciem=False):
+    # WHAT: czy model obsługuje czat - możliwość "completion" z /api/show.
+    # WHY:  modele bez niej (embeddingi, rerankery, generatory obrazów) i tak
+    #       zwróciłyby błąd. Gdy Ollama nie podała możliwości (starsza wersja),
+    #       odrzucamy tylko embeddingi, jak wcześniej.
+    # WHY:  modele OCR (glm-ocr, deepseek-ocr, olmOCR) mają "completion", ale służą
+    #       do odczytu tekstu z obrazów - w rozmowie powtarzają pytanie (sprawdzone
+    #       na glm-ocr). Ollama nie ma flagi "model specjalistyczny", więc po nazwie
+    #       (zgłoszenie użytkownika). Ze zdjęciem w załącznikach wracają - to ich zadanie.
+    if "ocr" in model["nazwa"].lower() and not ze_zdjeciem:
+        return False
+    if model.get("mozliwosci"):
+        return "completion" in model["mozliwosci"]
+    return model["rodzaj"] != "embedding"
+
+
+def parametr_myslenia(model, wlaczone):
+    # WHAT: wartość "think" do /api/chat albo None (nie wysyłać wcale).
+    # WHY:  tylko dla modeli z "thinking" - innym Ollama mogłaby odpowiedzieć błędem.
+    #       gpt-oss nie umie myśleć wcale - zna tylko poziomy low/medium/high, więc
+    #       "wyłączone" = "low" (wg dokumentacji Ollamy; NIE sprawdzone na żywo).
+    if "thinking" not in model.get("mozliwosci", []):
+        return None
+    if model["nazwa"].startswith("gpt-oss"):
+        return "medium" if wlaczone else "low"
+    return bool(wlaczone)
+
+
+def modele_embeddingow(modele):
+    # WHAT: [(nazwa, adres, nazwa hosta)] - modele embeddingów na hostach online.
+    return [(m["nazwa"], h["adres"], h["nazwa"]) for m in modele
+            if "embedding" in m.get("mozliwosci", []) or m["rodzaj"] == "embedding" for h in m["hosty"]]
+
+
+def model_embeddingow(modele, adres_hosta_czatu=None):
+    # WHAT: (model, adres) do embeddingów - wybrany w Ustawieniach, a przy "Automatycznie"
+    #       (albo gdy wybrany host jest offline) najlepiej na hoście modelu czatu.
+    # WHY:  Ollama liczy wektory tylko modelem typu "embedding"; ten sam model musi
+    #       potem liczyć wektor pytania, więc zapamiętujemy go przy dokumencie.
+    kandydaci = [(nazwa, adres) for nazwa, adres, _h in modele_embeddingow(modele)]
+    wybrany = _ustawienia().value("czat/model_rag", "")
+    for nazwa, adres in kandydaci:
+        if f"{adres}|{nazwa}" == wybrany:
+            return nazwa, adres
+    for nazwa, adres in kandydaci:
+        if adres_hosta_czatu and adres == adres_hosta_czatu:
+            return nazwa, adres
+    return kandydaci[0] if kandydaci else None
+
+
+def historia_dla_modelu(czat):
+    # WHAT: rozmowa programu -> wiadomości dla /api/chat.
+    # WHY:  bez błędów i bez rozumowania (model go nie potrzebuje, a zjadałoby kontekst);
+    #       zdjęcia zostają przy swoich pytaniach, żeby model pamiętał je w dalszej
+    #       rozmowie ("a co jest w lewym rogu?")
+    historia = []
+    for w in czat:
+        if w["rola"] == "user":
+            wpis = {"role": "user", "content": _tresc_dla_modelu(w)}
+            obrazy = [z["b64"] for z in w.get("zalaczniki", []) if z["typ"] == "obraz" and z.get("b64")]
+            if obrazy:
+                wpis["images"] = obrazy
+            historia.append(wpis)
+        elif w["rola"] == "assistant" and not w.get("przerwano") and not w.get("trwa"):
+            historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
+    return historia
+
+
+def dokumenty_rozmowy(czat):
+    # WHAT: duże pliki z CAŁEJ rozmowy gotowe do wyszukiwania (z wektorami) - dla CzatWorker.
+    # WHY:  można dopytywać o dokument dołączony wcześniej.
+    return [{"nazwa": z["nazwa"], "fragmenty": z["fragmenty"], "wektory": z["wektory"],
+             "model_emb": z["model_emb"], "adres_emb": z["adres_emb"]}
+            for w in czat if w["rola"] == "user"
+            for z in w.get("zalaczniki", []) if z["typ"] == "dokument" and z.get("gotowy")]
+
+
+def tokeny_na_sekunde(d):
+    # WHAT: (generowanie, pytanie) w tokenach na sekundę z ostatniej linii strumienia Ollamy.
+    # WHY:  liczby podaje sama Ollama (czasy w nanosekundach) - bez własnego stopera, więc
+    #       nie wlicza się w nie czas sieci ani rysowania.
+    def na_sekunde(tokeny, ns):
+        return tokeny / (ns / 1e9) if tokeny and ns else None
+    return (na_sekunde(d.get("eval_count"), d.get("eval_duration")),
+            na_sekunde(d.get("prompt_eval_count"), d.get("prompt_eval_duration")))
+
+
+def opis_statystyk(d):
+    # WHAT: "14.4 tok/s · 1433 tokenów · 107.7 s" - linia pod odpowiedzią.
+    gen, _prompt = tokeny_na_sekunde(d)
+    czesci = []
+    if gen:
+        czesci.append(_("{n:.1f} tok/s").format(n=gen))
+    if d.get("eval_count"):
+        czesci.append(_("{n} tokenów").format(n=d["eval_count"]))
+    czesci.append(f"{(d.get('total_duration') or 0) / 1e9:.1f} s")
+    return " · ".join(czesci)
+
+
+def zakoncz_wiadomosc(ostatnia, sukces, wynik):
+    # WHAT: odpowiedź skończona - statystyki, kontekst albo błąd z prostym wyjaśnieniem.
+    ostatnia["trwa"] = False
+    for klucz in ("etap", "laduje", "szuka"):
+        ostatnia.pop(klucz, None)
+    if not sukces:
+        if ostatnia["tresc"].strip():
+            ostatnia["stat"] = _("błąd: {blad}").format(blad=wynik)
+        else:
+            # WHY: surowy błąd + proste wyjaśnienie, jak na ekranie Dziennik
+            wyjasnienie = wyjasnij_blad(wynik)
+            ostatnia.update({"rola": "blad", "tresc": wynik + (f"\n\n{wyjasnienie}" if wyjasnienie else "")})
+    elif wynik.get("anulowano"):
+        ostatnia["stat"] = _("przerwano")
+        ostatnia["przerwano"] = not ostatnia["tresc"].strip()
+    else:
+        ostatnia["stat"] = opis_statystyk(wynik)
+        # WHY: prompt_eval_count to CAŁA historia (sprawdzone: także gdy Ollama ma ją
+        #      w pamięci podręcznej - ta część jest osobno w prompt_eval_cached_count)
+        ostatnia["kontekst"] = [(wynik.get("prompt_eval_count") or 0) + (wynik.get("eval_count") or 0),
+                                wynik.get("okno_kontekstu")]
+
+
+def nowe_id_rozmowy():
+    return time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(2)
+
+
+# --- Kto właśnie prowadzi rozmowę ---
+# WHAT: rozmowy, w których właśnie pisze się odpowiedź: id -> "okno" albo "www".
+# WHY:  okno i przeglądarka zapisują te same pliki. Gdy jedno z nich pisze odpowiedź,
+#       drugie nie może dopisać pytania do tej rozmowy - inaczej któryś zapis zgubiłby
+#       wiadomości drugiego (decyzja użytkownika: w trakcie tylko do odczytu).
+_ZAJETE_ROZMOWY = {}
+_ZAJETE_BLOKADA = threading.Lock()
+
+
+def zajmij_rozmowe(id_rozmowy, kto):
+    # WHAT: True = rozmowa jest teraz nasza; False = pisze w niej ktoś inny.
+    if not id_rozmowy:
+        return True  # WHY: nowa rozmowa nie ma jeszcze pliku - nikt inny jej nie ma
+    with _ZAJETE_BLOKADA:
+        if _ZAJETE_ROZMOWY.get(id_rozmowy, kto) != kto:
+            return False
+        _ZAJETE_ROZMOWY[id_rozmowy] = kto
+        return True
+
+
+def zwolnij_rozmowe(id_rozmowy, kto):
+    with _ZAJETE_BLOKADA:
+        if _ZAJETE_ROZMOWY.get(id_rozmowy) == kto:
+            del _ZAJETE_ROZMOWY[id_rozmowy]
+
+
+def kto_prowadzi_rozmowe(id_rozmowy):
+    with _ZAJETE_BLOKADA:
+        return _ZAJETE_ROZMOWY.get(id_rozmowy)
+
+
+# =============================================================================
+#  Czat w przeglądarce (1.2) - LamaDeck sam serwuje swój czat na porcie
+# =============================================================================
+# WHAT: ten sam czat co w oknie (te same modele, zapisane rozmowy, wyszukiwanie w internecie)
+#       pod adresem http://localhost:11500 - zaczynasz na komputerze, kończysz na telefonie.
+# WHY:  bez nowych bibliotek Pythona: ThreadingHTTPServer z biblioteki standardowej, odpowiedź
+#       strumieniem przez Server-Sent Events (zwykły GET, który długo trwa - bez WebSocketów),
+#       strona w web/ (HTML + JS + CSS, bez budowania). Serwer żyje w procesie programu, więc
+#       z zasobnikiem i autostartem działa w tle.
+# BEZPIECZEŃSTWO (plan zatwierdzony przez użytkownika):
+#   - domyślnie wyłączony; po włączeniu tylko 127.0.0.1 (ten komputer),
+#   - sieć domowa dopiero po osobnym włączeniu i z hasłem (PBKDF2 w ustawieniach, sesja
+#     w ciasteczku HttpOnly + SameSite=Strict, limit prób logowania),
+#   - nagłówek Host musi być adresem IP albo nazwą tego komputera (chroni przed "DNS
+#     rebinding" - obca strona w przeglądarce nie dobierze się do czatu przez swoją domenę),
+#   - polecenia (POST) tylko z naszej strony: nagłówek Origin = nasz adres (chroni przed
+#     wysłaniem pytania przez obcą stronę otwartą w tej samej przeglądarce),
+#   - Content-Security-Policy bez skryptów z zewnątrz i bez obrazków z internetu (odpowiedź
+#     modelu nie wyśle niczego na obcy serwer ani nie uruchomi skryptu).
+WWW_PORT_DOMYSLNY = 11500
+_KATALOG_WWW = Path(__file__).resolve().parent / "web"
+_KATALOG_VENDOR = Path(__file__).resolve().parent / "vendor"
+_WWW_ZNAKOW_PYTANIA = 100000          # WHY: pytanie bez załączników - 100 tys. znaków to i tak dużo
+_WWW_MAKS_ZAPYTANIA = 1024 * 1024     # WHY: ciało POST - same polecenia JSON, bez plików (1.2.0)
+_WWW_SESJA_DNI = 30                   # WHY: telefon nie musi logować się codziennie
+_WWW_PROBY_LOGOWANIA = 5              # WHY: tyle błędnych haseł w 5 minut, potem minuta przerwy
+_WWW_ITERACJE_HASLA = 240000          # WHY: PBKDF2-SHA256 - zalecenie OWASP to 600 tys., ale logujemy
+                                      #      się rzadko, a słabsze komputery (BC-250) też to liczą
+_WWW_CIASTECZKO = "lamadeck_sesja"
+# WHAT: pliki strony - tylko te (żadnych ścieżek z zapytania na dysku).
+_WWW_PLIKI = {
+    "/": (_KATALOG_WWW / "index.html", "text/html; charset=utf-8"),
+    "/app.js": (_KATALOG_WWW / "app.js", "text/javascript; charset=utf-8"),
+    "/style.css": (_KATALOG_WWW / "style.css", "text/css; charset=utf-8"),
+    "/marked.js": (_KATALOG_WWW / "vendor" / "marked.umd.js", "text/javascript; charset=utf-8"),
+    "/logo.png": (Path(__file__).resolve().parent / "logo.png", "image/png"),
+}
+# WHY: czcionki programu (fonts/ obok skryptu) - strona wygląda jak okno, także na telefonie
+_WWW_PLIKI.update({f"/fonts/{nazwa}": (Path(__file__).resolve().parent / "fonts" / nazwa, "font/ttf")
+                   for nazwa in ("Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf",
+                                 "Inter-Bold.ttf", "JetBrainsMono-Regular.ttf")})
+_WWW_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; "
+            "form-action 'none'; frame-ancestors 'none'")
+
+
+def www_ustawienie(klucz, domyslnie=None, typ=None):
+    if typ is None:
+        return _ustawienia().value(f"www/{klucz}", domyslnie)
+    return _ustawienia().value(f"www/{klucz}", domyslnie, type=typ)
+
+
+def www_zapisz(klucz, wartosc):
+    _ustawienia().setValue(f"www/{klucz}", wartosc)
+
+
+def www_port():
+    try:
+        port = int(www_ustawienie("port", WWW_PORT_DOMYSLNY))
+    except (TypeError, ValueError):
+        port = WWW_PORT_DOMYSLNY
+    return port if 1024 <= port <= 65535 else WWW_PORT_DOMYSLNY
+
+
+def www_ustaw_haslo(haslo):
+    # WHAT: zapisuje skrót hasła (PBKDF2-SHA256 z losową solą) - samego hasła nigdzie nie ma.
+    # WHY:  zmiana hasła wylogowuje wszystkie urządzenia (sesje kasujemy).
+    sol = secrets.token_bytes(16)
+    skrot = hashlib.pbkdf2_hmac("sha256", haslo.encode("utf-8"), sol, _WWW_ITERACJE_HASLA)
+    www_zapisz("haslo", f"pbkdf2_sha256${_WWW_ITERACJE_HASLA}${sol.hex()}${skrot.hex()}")
+    www_zapisz("sesje", "{}")
+
+
+def www_jest_haslo():
+    return bool(www_ustawienie("haslo", ""))
+
+
+def www_sprawdz_haslo(haslo):
+    try:
+        _rodzaj, iteracje, sol, skrot = str(www_ustawienie("haslo", "")).split("$")
+        wynik = hashlib.pbkdf2_hmac("sha256", haslo.encode("utf-8"), bytes.fromhex(sol), int(iteracje))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(wynik.hex(), skrot)
+
+
+def www_adresy(port=None):
+    # WHAT: {"lokalny": "http://localhost:11500", "lan": "http://192.168.0.10:11500" albo None}.
+    port = port or www_port()
+    ip = _adres_ip_lan()
+    return {"lokalny": f"http://localhost:{port}", "lan": f"http://{ip}:{port}" if ip else None}
+
+
+def _klucze_tlumaczen_www():
+    # WHAT: teksty z app.js do tłumaczenia (polskie klucze z _("...")) - strona dostaje tylko te.
+    # WHY:  cały słownik programu to ok. 70 KB, strona potrzebuje kilku procent z niego.
+    try:
+        kod = (_KATALOG_WWW / "app.js").read_text(encoding="utf-8")
+    except OSError:
+        return []
+    # WHY: _("...") i _f("...", {...}) - przy _f po cudzysłowie jest przecinek, nie nawias
+    return [json.loads(f'"{k}"') for k in re.findall(r'\b_f?\("((?:[^"\\]|\\.)*)"', kod)]
+
+
+def _wiadomosc_dla_strony(w):
+    # WHAT: wiadomość rozmowy w postaci dla przeglądarki - bez zdjęć (base64), tekstu plików
+    #       i wektorów (tylko nazwy załączników), z gotowym opisem kroków na plikach.
+    # WHY: get zamiast "in" + [] - wątek odpowiedzi może w tej chwili zdjąć klucz (np. "etap")
+    wynik = {}
+    for k in ("rola", "tresc", "kto", "myslenie", "stat", "kontekst", "zrodla_www", "zrodla", "przerwano",
+              "trwa", "etap", "laduje", "szuka", "gb"):
+        wartosc = w.get(k)
+        if wartosc is not None:
+            wynik[k] = wartosc
+    if w.get("_start"):
+        wynik["start"] = w["_start"]
+    if w.get("_uwagi"):
+        wynik["uwagi"] = w["_uwagi"]
+    if w.get("zalaczniki"):
+        wynik["zalaczniki"] = [{"nazwa": z.get("nazwa", ""), "typ": z.get("typ", ""), "url": z.get("url")}
+                               for z in w["zalaczniki"]]
+    if w.get("narzedzia"):
+        wynik["narzedzia"] = [{"opis": opis_kroku(k), "stan": k.get("stan", "ok")} for k in w["narzedzia"]]
+    return wynik
+
+
+class OdpowiedzWWW:
+    """Jedna odpowiedź modelu zamówiona z przeglądarki - w zwykłym wątku Pythona.
+
+    WHY: używa tego samego CzatWorker co okno, ale wywołuje jego run() wprost w swoim
+         wątku (bez QThread), a sygnały idą bezpośrednio do metod tej klasy
+         (Qt.DirectConnection - sprawdzone: wołane w tym samym wątku). Przeglądarka
+         czyta postęp przez /api/strumien - wersja rośnie przy każdej zmianie.
+    """
+
+    def __init__(self, serwer, id_rozmowy, dane, model, host, myslenie, szukaj):
+        self.serwer = serwer
+        self.id = id_rozmowy
+        self.dane = dane                    # WHY: cała rozmowa z pliku; ostatnia wiadomość = pytanie
+        self.model, self.host = model, host
+        self.myslenie, self.szukaj = myslenie, szukaj
+        self.warunek = threading.Condition()
+        self.wersja = 0
+        self.koniec = False
+        self._worker = None
+        self._anuluj = False
+
+    @property
+    def ostatnia(self):
+        return self.dane["wiadomosci"][-1]
+
+    def _zmiana(self):
+        with self.warunek:
+            self.wersja += 1
+            self.warunek.notify_all()
+
+    def anuluj(self):
+        self._anuluj = True
+        if self._worker is not None:
+            self._worker.anuluj()
+
+    def start(self):
+        threading.Thread(target=self._praca, name=f"www-{self.id}", daemon=True).start()
+
+    # --- sygnały CzatWorker (wołane w wątku tej odpowiedzi) ---
+    def _fragment(self, tresc, myslenie):
+        self.ostatnia["tresc"] += tresc
+        self.ostatnia["myslenie"] += myslenie
+        self._zmiana()
+
+    def _ladowanie(self):
+        self.ostatnia["laduje"] = True
+        self._zmiana()
+
+    def _etap(self, tekst):
+        self.ostatnia["etap"] = tekst
+        self._zmiana()
+
+    def _zrodla_www(self, zrodla):
+        self.ostatnia.pop("etap", None)
+        self.ostatnia["zrodla_www"] = zrodla
+        self._zmiana()
+
+    def _zrodla(self, zrodla):
+        self.ostatnia["szuka"] = False
+        self.ostatnia["zrodla"] = zrodla
+        self._zmiana()
+
+    def _koniec(self, sukces, wynik):
+        self._wynik = (sukces, wynik)
+
+    def _dolacz_strony(self, pytanie):
+        # WHAT: linki z pytania -> strony jako załączniki pytania (jak w oknie), duże przez RAG.
+        # WHY:  błąd strony nie zatrzymuje pytania (w oknie użytkownik decyduje, tu nie ma kogo
+        #       zapytać w trakcie) - uwaga pod odpowiedzią mówi, czego zabrakło.
+        dolaczone = {z.get("url") for z in pytanie.get("zalaczniki", [])}
+        linki = [l for l in linki_w_tekscie(pytanie.get("tresc", "")) if l not in dolaczone]
+        if not linki:
+            return
+        self._etap(_("Pobieram: {linki}...").format(linki=", ".join(_nazwa_strony(l) for l in linki)))
+        uwagi = []
+        for link in linki:
+            if self._anuluj:
+                return
+            try:
+                z = pobierz_strone(link)
+                if z["typ"] == "dokument":
+                    self._przygotuj_dokument(z)
+                pytanie.setdefault("zalaczniki", []).append(z)
+            except Exception as e:
+                uwagi.append(str(e))
+        if uwagi:
+            self.ostatnia["_uwagi"] = uwagi
+        self.ostatnia.pop("etap", None)
+        self._zmiana()
+
+    def _przygotuj_dokument(self, z):
+        # WHAT: duża strona -> fragmenty + wektory (to samo co RagWorker, tylko w tym wątku).
+        wybor = model_embeddingow(self.serwer.modele(), self.host["adres"])
+        if not wybor:
+            raise ValueError(_("{nazwa} jest duży (ponad 100 KB) - do wyszukiwania w nim potrzebny jest model "
+                               "embeddingów. Zalecany pobierzesz jednym przyciskiem w \"Ustawieniach\" (karta "
+                               "\"Czat\").").format(nazwa=z["nazwa"]))
+        z["model_emb"], z["adres_emb"] = wybor
+        fragmenty = _podziel_na_fragmenty(z.pop("tekst"))
+        wektory = []
+        for i in range(0, len(fragmenty), 32):
+            if self._anuluj:
+                raise ValueError(_("przerwano"))
+            self._etap(_("Przygotowuję {nazwa} do wyszukiwania ({gotowe}/{wszystkie})...").format(
+                nazwa=z["nazwa"], gotowe=i, wszystkie=len(fragmenty)))
+            wektory += ollama_embeddingi(z["adres_emb"], z["model_emb"], [f[0] for f in fragmenty[i:i + 32]])
+        if len(wektory) != len(fragmenty):
+            raise RuntimeError(_("model embeddingów zwrócił złą liczbę wektorów"))
+        z.update({"fragmenty": fragmenty, "wektory": wektory, "gotowy": True})
+
+    def _praca(self):
+        czat = self.dane["wiadomosci"]
+        pytanie = czat[-1]
+        self._wynik = (False, _("nieznany błąd"))
+        czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(self.model["nazwa"]), "tresc": "",
+                     "myslenie": "", "trwa": True, "_start": time.time(), "gb": self.model["rozmiar"] / 1024 ** 3})
+        self._zmiana()
+        try:
+            self._dolacz_strony(pytanie)
+            wyszukiwanie = None
+            zrodlo = wyszukiwanie_ustawienie("zrodlo", "wylaczone")
+            if self.szukaj and zrodlo != "wylaczone":
+                # WHY: do zapytań sam tekst pytania - bez treści dołączonych stron
+                wyszukiwanie = {"zrodlo": zrodlo, "pytanie": pytanie.get("tresc", ""),
+                                "emb": model_embeddingow(self.serwer.modele(), self.host["adres"])}
+                self._etap(_("Układam zapytania do wyszukiwarki..."))
+            dokumenty = dokumenty_rozmowy(czat)
+            if dokumenty:
+                self.ostatnia["szuka"] = True
+            if not self._anuluj:
+                worker = CzatWorker(self.host["adres"], self.model["nazwa"], historia_dla_modelu(czat), dokumenty,
+                                    parametr_myslenia(self.model, self.myslenie), wyszukiwanie)
+                bezposrednio = Qt.ConnectionType.DirectConnection
+                for sygnal, slot in ((worker.fragment, self._fragment), (worker.ladowanie, self._ladowanie),
+                                     (worker.etap, self._etap), (worker.zrodla_www, self._zrodla_www),
+                                     (worker.zrodla, self._zrodla), (worker.zakonczono, self._koniec)):
+                    sygnal.connect(slot, bezposrednio)
+                self._worker = worker
+                if self._anuluj:
+                    worker.anuluj()
+                worker.run()
+            else:
+                self._wynik = (True, {"anulowano": True})
+        except Exception as e:
+            self._wynik = (False, str(e))
+        sukces, wynik = self._wynik
+        if self._anuluj and sukces is False:
+            sukces, wynik = True, {"anulowano": True}
+        zakoncz_wiadomosc(self.ostatnia, sukces, wynik)
+        if not sukces:
+            self.serwer.wpis.emit(_("Czat w przeglądarce: błąd - {blad}").format(blad=wynik), "BŁĄD")
+        self.serwer.zapisz(self.id, self.dane)
+        zwolnij_rozmowe(self.id, "www")
+        self.koniec = True
+        self.serwer.zakonczono_odpowiedz(self)
+        self._zmiana()
+
+
+class SerwerCzatu(QObject):
+    """Serwer czatu w przeglądarce: strona, polecenia JSON i strumień odpowiedzi.
+
+    WHY: QObject tylko dla sygnałów do okna - same zapytania obsługują wątki
+         ThreadingHTTPServer (jeden na połączenie; strumień odpowiedzi trzyma swój długo).
+    """
+    rozmowa_zmieniona = pyqtSignal(str)   # id rozmowy zapisanej albo usuniętej z przeglądarki
+    wpis = pyqtSignal(str, str)           # (tekst, poziom) do Dziennika - wołany z wątków serwera
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._httpd = None
+        self._lan = False
+        self._odpowiedzi = {}               # WHY: id rozmowy -> OdpowiedzWWW, która się pisze
+        self._blokada = threading.Lock()
+        self._modele = ([], 0.0)            # WHY: (lista, kiedy) - hostów nie odpytujemy przy każdym kliknięciu
+        self._modele_blokada = threading.Lock()
+        self._nieudane = {}                 # WHY: IP -> czasy błędnych haseł (limit prób)
+
+    # --- start / stop ---
+    @property
+    def dziala(self):
+        return self._httpd is not None
+
+    @property
+    def port(self):
+        return self._httpd.server_address[1] if self._httpd else None
+
+    @property
+    def lan(self):
+        return self._lan
+
+    def uruchom(self, port, lan):
+        # WHAT: start (albo restart z nowym portem/trybem); OSError = port zajęty itp.
+        self.zatrzymaj()
+        serwer = self
+
+        class Obsluga(_ObslugaWWW):
+            pass
+        Obsluga.serwer = serwer
+        httpd = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", port), Obsluga)
+        httpd.daemon_threads = True  # WHY: otwarty strumień w przeglądarce nie blokuje końca programu
+        self._httpd, self._lan = httpd, lan
+        threading.Thread(target=httpd.serve_forever, name="www-serwer", daemon=True).start()
+
+    def zatrzymaj(self):
+        httpd, self._httpd = self._httpd, None
+        if httpd is not None:
+            # WHY: shutdown() czeka na koniec serve_forever - wołane z wątku okna, nie serwera
+            httpd.shutdown()
+            httpd.server_close()
+
+    # --- dane wspólne dla zapytań (wołane w wątkach serwera) ---
+    def modele(self, odswiez=False):
+        with self._modele_blokada:
+            lista, kiedy = self._modele
+            if odswiez or time.time() - kiedy > 15:
+                lista, _hosty = zbierz_modele(_wczytaj_serwery())
+                self._modele = (lista, time.time())
+            return lista
+
+    def odpowiedz(self, id_rozmowy):
+        with self._blokada:
+            return self._odpowiedzi.get(id_rozmowy)
+
+    def rozpocznij(self, id_rozmowy, dane, model, host, myslenie, szukaj):
+        # WHAT: zapisuje rozmowę z pytaniem i startuje odpowiedź; False = w tej rozmowie
+        #       właśnie pisze ktoś inny.
+        # WHY:  zapis PRZED startem wątku - potem wątek zmienia te same słowniki; pytanie od
+        #       razu w pliku = lista rozmów w oknie i w innych kartach już je widzi.
+        if not zajmij_rozmowe(id_rozmowy, "www"):
+            return False
+        self.zapisz(id_rozmowy, dane)
+        odp = OdpowiedzWWW(self, id_rozmowy, dane, model, host, myslenie, szukaj)
+        with self._blokada:
+            self._odpowiedzi[id_rozmowy] = odp
+        odp.start()
+        return True
+
+    def zakonczono_odpowiedz(self, odp):
+        with self._blokada:
+            if self._odpowiedzi.get(odp.id) is odp:
+                del self._odpowiedzi[odp.id]
+
+    def zapisz(self, id_rozmowy, dane):
+        try:
+            zapisz_rozmowe(id_rozmowy, dane.get("utworzono") or time.time(), dane["wiadomosci"],
+                           dane.get("model", ""), dane.get("host", ""),
+                           dane.get("tytul") if dane.get("tytul_wlasny") else None, dane.get("katalog"))
+        except OSError as e:
+            self.wpis.emit(_("Nie udało się zapisać rozmowy: {blad}").format(blad=e), "BŁĄD")
+            return
+        self.rozmowa_zmieniona.emit(id_rozmowy)  # WHY: z innego wątku - Qt dostarczy to oknu w kolejce
+
+    # --- sesje (tylko w trybie "sieć domowa") ---
+    def _sesje(self):
+        try:
+            sesje = json.loads(www_ustawienie("sesje", "{}") or "{}")
+        except ValueError:
+            sesje = {}
+        teraz = time.time()
+        return {k: v for k, v in sesje.items() if isinstance(v, (int, float)) and v > teraz}
+
+    def nowa_sesja(self):
+        # WHY: w ustawieniach tylko skrót tokenu - kto przeczyta plik ustawień, nie zaloguje się nim
+        token = secrets.token_urlsafe(32)
+        sesje = self._sesje()
+        sesje[hashlib.sha256(token.encode()).hexdigest()] = time.time() + _WWW_SESJA_DNI * 86400
+        www_zapisz("sesje", json.dumps(sesje))
+        return token
+
+    def sesja_wazna(self, token):
+        return bool(token) and hashlib.sha256(token.encode()).hexdigest() in self._sesje()
+
+    def usun_sesje(self, token):
+        sesje = self._sesje()
+        sesje.pop(hashlib.sha256((token or "").encode()).hexdigest(), None)
+        www_zapisz("sesje", json.dumps(sesje))
+
+    def mozna_probowac(self, ip):
+        teraz = time.time()
+        proby = [t for t in self._nieudane.get(ip, []) if teraz - t < 300]
+        self._nieudane[ip] = proby
+        return len(proby) < _WWW_PROBY_LOGOWANIA or teraz - proby[-1] > 60
+
+    def nieudane_logowanie(self, ip):
+        self._nieudane.setdefault(ip, []).append(time.time())
+
+
+class _ObslugaWWW(BaseHTTPRequestHandler):
+    """Jedno zapytanie przeglądarki (każde w osobnym wątku ThreadingHTTPServer)."""
+    serwer = None                       # WHY: SerwerCzatu - ustawiany w podklasie przy starcie
+    server_version = NAZWA_PROGRAMU
+    sys_version = ""
+
+    def log_message(self, *_a):
+        pass  # WHY: bez wpisu w terminalu przy każdym zapytaniu
+
+    # --- odpowiedzi ---
+    def _naglowki(self, kod, typ, dlugosc=None, dodatkowe=()):
+        self.send_response(kod)
+        self.send_header("Content-Type", typ)
+        if dlugosc is not None:
+            self.send_header("Content-Length", str(dlugosc))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", _WWW_CSP)
+        for nazwa, wartosc in dodatkowe:
+            self.send_header(nazwa, wartosc)
+        self.end_headers()
+
+    def _json(self, dane, kod=200, dodatkowe=()):
+        tresc = json.dumps(dane, ensure_ascii=False).encode("utf-8")
+        self._naglowki(kod, "application/json; charset=utf-8", len(tresc), dodatkowe)
+        self.wfile.write(tresc)
+
+    def _blad(self, kod, tekst):
+        self._json({"blad": tekst}, kod)
+
+    # --- zabezpieczenia ---
+    def _host_dozwolony(self):
+        # WHAT: nagłówek Host = adres IP albo nazwa tego komputera (z dowolnym portem).
+        # WHY:  "DNS rebinding": obca domena przepięta na 127.0.0.1 wysłałaby Host ze swoją
+        #       nazwą - takie zapytanie odrzucamy, nawet jeśli przyszło z tego komputera.
+        host = (self.headers.get("Host") or "").strip().lower()
+        nazwa = host.rsplit(":", 1)[0] if not host.endswith("]") else host
+        nazwa = nazwa.strip("[]")
+        if nazwa in ("localhost", socket.gethostname().lower(), socket.gethostname().lower() + ".local"):
+            return True
+        try:
+            ipaddress.ip_address(nazwa)
+            return True
+        except ValueError:
+            return False
+
+    def _origin_nasz(self):
+        # WHY: przeglądarka zawsze dokleja Origin do POST z fetch(); musi to być nasz adres
+        origin = self.headers.get("Origin")
+        return bool(origin) and origin.lower() == f"http://{(self.headers.get('Host') or '').lower()}"
+
+    def _ciasteczko(self):
+        for czesc in (self.headers.get("Cookie") or "").split(";"):
+            nazwa, _s, wartosc = czesc.strip().partition("=")
+            if nazwa == _WWW_CIASTECZKO:
+                return wartosc
+        return None
+
+    def _wymaga_hasla(self):
+        return self.serwer.lan
+
+    def _zalogowany(self):
+        return not self._wymaga_hasla() or self.serwer.sesja_wazna(self._ciasteczko())
+
+    def _cialo(self):
+        dlugosc = int(self.headers.get("Content-Length") or 0)
+        if dlugosc > _WWW_MAKS_ZAPYTANIA:
+            raise ValueError(_("za duże zapytanie"))
+        try:
+            dane = json.loads(self.rfile.read(dlugosc) or b"{}")
+        except ValueError:
+            raise ValueError(_("nieprawidłowe zapytanie")) from None
+        if not isinstance(dane, dict):
+            raise ValueError(_("nieprawidłowe zapytanie"))
+        return dane
+
+    # --- GET ---
+    def do_GET(self):
+        if not self._host_dozwolony():
+            return self._blad(403, "Host")
+        adres = urlparse(self.path)
+        sciezka, parametry = adres.path, parse_qs(adres.query)
+        if sciezka in _WWW_PLIKI:
+            plik, typ = _WWW_PLIKI[sciezka]
+            try:
+                tresc = plik.read_bytes()
+            except OSError:
+                return self._blad(404, _("brak pliku"))
+            return self._naglowki(200, typ, len(tresc)) or self.wfile.write(tresc)
+        if sciezka == "/api/stan":
+            return self._json(self._stan())
+        if not self._zalogowany():
+            return self._blad(401, _("Zaloguj się"))
+        id_rozmowy = (parametry.get("id") or [""])[0]
+        try:
+            if sciezka == "/api/modele":
+                return self._json(self._lista_modeli((parametry.get("odswiez") or [""])[0] == "1"))
+            if sciezka == "/api/rozmowy":
+                return self._json(self._lista_rozmow((parametry.get("q") or [""])[0]))
+            if sciezka == "/api/rozmowa":
+                return self._json(self._rozmowa(id_rozmowy))
+            if sciezka == "/api/eksport":
+                return self._eksport(id_rozmowy)
+            if sciezka == "/api/strumien":
+                return self._strumien(id_rozmowy)
+        except (OSError, ValueError) as e:
+            return self._blad(400, str(e))
+        return self._blad(404, _("brak pliku"))
+
+    # --- POST ---
+    def do_POST(self):
+        if not self._host_dozwolony() or not self._origin_nasz():
+            return self._blad(403, "Origin")
+        sciezka = urlparse(self.path).path
+        try:
+            dane = self._cialo()
+        except ValueError as e:
+            return self._blad(400, str(e))
+        if sciezka == "/api/zaloguj":
+            return self._zaloguj(dane)
+        if sciezka == "/api/wyloguj":
+            self.serwer.usun_sesje(self._ciasteczko())
+            return self._json({"ok": True}, dodatkowe=[("Set-Cookie", f"{_WWW_CIASTECZKO}=; Max-Age=0; Path=/; "
+                                                                      "HttpOnly; SameSite=Strict")])
+        if not self._zalogowany():
+            return self._blad(401, _("Zaloguj się"))
+        try:
+            if sciezka == "/api/wyslij":
+                return self._wyslij(dane)
+            if sciezka == "/api/akcja":
+                return self._akcja(dane)
+            if sciezka == "/api/zatrzymaj":
+                odp = self.serwer.odpowiedz(str(dane.get("id", "")))
+                if odp is not None:
+                    odp.anuluj()
+                return self._json({"ok": True})
+            if sciezka == "/api/nazwa":
+                return self._zmien_nazwe(dane)
+            if sciezka == "/api/usun":
+                return self._usun(dane)
+        except (OSError, ValueError) as e:
+            return self._blad(400, str(e))
+        return self._blad(404, _("brak pliku"))
+
+    # --- obsługa poleceń ---
+    def _stan(self):
+        jezyk = _wczytaj_jezyk_zapisany()
+        tlumaczenia = {}
+        if jezyk != JEZYK_ZRODLOWY:
+            tlumaczenia = {k: _(k) for k in _klucze_tlumaczen_www() if _(k) != k}
+        return {"zalogowany": self._zalogowany(), "wymaga_hasla": self._wymaga_hasla(), "jezyk": jezyk,
+                "tlumaczenia": tlumaczenia, "wersja": WERSJA, "nazwa": NAZWA_PROGRAMU,
+                "szukanie": wyszukiwanie_ustawienie("zrodlo", "wylaczone") != "wylaczone"}
+
+    def _zaloguj(self, dane):
+        ip = self.client_address[0]
+        if not self._wymaga_hasla():
+            return self._json({"ok": True})
+        if not self.serwer.mozna_probowac(ip):
+            return self._blad(429, _("Za dużo prób - odczekaj minutę."))
+        if not www_sprawdz_haslo(str(dane.get("haslo", ""))):
+            self.serwer.nieudane_logowanie(ip)
+            return self._blad(401, _("Nieprawidłowe hasło."))
+        token = self.serwer.nowa_sesja()
+        return self._json({"ok": True}, dodatkowe=[(
+            "Set-Cookie", f"{_WWW_CIASTECZKO}={token}; Max-Age={_WWW_SESJA_DNI * 86400}; Path=/; HttpOnly; "
+                          "SameSite=Strict")])
+
+    def _lista_modeli(self, odswiez):
+        pary = []
+        for m in self.serwer.modele(odswiez):
+            if not umie_rozmawiac(m):
+                continue
+            for h in m["hosty"]:
+                pary.append({"id": f"{h['adres']}|{m['nazwa']}", "nazwa": m["nazwa"],
+                             "krotka": _skroc_nazwe_modelu_hf(m["nazwa"]), "host": h["nazwa"],
+                             "w_pamieci": h["w_pamieci"], "rozmiar": m["rozmiar"],
+                             "parametry": m.get("parametry") or "", "kwantyzacja": m.get("kwantyzacja") or "",
+                             "mysli": "thinking" in m.get("mozliwosci", []),
+                             "zdjecia": "vision" in m.get("mozliwosci", [])})
+        return {"modele": pary, "domyslny": _ustawienia().value("czat/model", ""),
+                "kilka_hostow": len({p["host"] for p in pary}) > 1}
+
+    def _znajdz_model(self, id_modelu):
+        adres, _s, nazwa = str(id_modelu or "").partition("|")
+        model = next((m for m in self.serwer.modele() if m["nazwa"] == nazwa), None)
+        host = next((h for h in (model or {}).get("hosty", []) if h["adres"] == adres), None)
+        if not model or not host or not umie_rozmawiac(model):
+            raise ValueError(_("Tego modelu nie ma na hostach online - wybierz inny."))
+        return model, host
+
+    @staticmethod
+    def _sprawdz_id(id_rozmowy):
+        # WHY: id trafia do nazwy pliku - tylko znaki z nowe_id_rozmowy (bez "/" i "..")
+        if not re.fullmatch(r"[0-9A-Za-z_-]{1,64}", id_rozmowy or ""):
+            raise ValueError(_("nieprawidłowe zapytanie"))
+        return id_rozmowy
+
+    def _lista_rozmow(self, szukane):
+        szukane = szukane.strip().lower()
+        return {"rozmowy": [{k: r[k] for k in ("id", "tytul", "zmieniono", "model")}
+                            for r in lista_rozmow() if not szukane or szukane in r["szukaj"]]}
+
+    def _rozmowa(self, id_rozmowy):
+        id_rozmowy = self._sprawdz_id(id_rozmowy)
+        odp = self.serwer.odpowiedz(id_rozmowy)
+        dane = odp.dane if odp is not None else wczytaj_rozmowe(id_rozmowy)
+        return {"id": id_rozmowy, "tytul": dane.get("tytul", ""), "model": dane.get("model", ""),
+                "host": dane.get("host", ""), "katalog": bool(dane.get("katalog")),
+                "wiadomosci": [_wiadomosc_dla_strony(w) for w in dane.get("wiadomosci", [])],
+                "trwa": odp is not None, "w_programie": kto_prowadzi_rozmowe(id_rozmowy) == "okno"}
+
+    def _wyslij(self, dane):
+        tekst = str(dane.get("tekst", "")).strip()
+        if not tekst:
+            raise ValueError(_("Puste pytanie."))
+        if len(tekst) > _WWW_ZNAKOW_PYTANIA:
+            raise ValueError(_("Pytanie jest za długie."))
+        model, host = self._znajdz_model(dane.get("model"))
+        id_rozmowy = dane.get("id")
+        if id_rozmowy:
+            id_rozmowy = self._sprawdz_id(id_rozmowy)
+            if self.serwer.odpowiedz(id_rozmowy) or kto_prowadzi_rozmowe(id_rozmowy):
+                return self._blad(409, self._zajeta(id_rozmowy))
+            rozmowa = wczytaj_rozmowe(id_rozmowy)
+        else:
+            id_rozmowy = nowe_id_rozmowy()
+            rozmowa = {"utworzono": time.time(), "wiadomosci": []}
+        rozmowa.update({"model": model["nazwa"], "host": host["adres"]})
+        rozmowa["wiadomosci"].append({"rola": "user", "tresc": tekst, "zalaczniki": []})
+        if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
+                                      bool(dane.get("szukaj"))):
+            return self._blad(409, self._zajeta(id_rozmowy))
+        return self._json({"id": id_rozmowy})
+
+    def _akcja(self, dane):
+        # WHAT: "ponow" - ostatnia odpowiedź od nowa (wybranym teraz modelem); "popraw" - ostatnie
+        #       pytanie wraca do pola, ono i odpowiedź znikają z rozmowy (jak ikony w oknie).
+        id_rozmowy = self._sprawdz_id(dane.get("id"))
+        if self.serwer.odpowiedz(id_rozmowy) or kto_prowadzi_rozmowe(id_rozmowy):
+            return self._blad(409, self._zajeta(id_rozmowy))
+        rozmowa = wczytaj_rozmowe(id_rozmowy)
+        czat = rozmowa.get("wiadomosci", [])
+        if len(czat) < 2 or czat[-2]["rola"] != "user":
+            raise ValueError(_("nieprawidłowe zapytanie"))
+        if dane.get("akcja") == "ponow":
+            model, host = self._znajdz_model(dane.get("model"))
+            if any(z.get("typ") == "obraz" for z in czat[-2].get("zalaczniki", [])) and \
+                    "vision" not in model.get("mozliwosci", []):
+                raise ValueError(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
+                                   "(np. gemma3, qwen2.5vl, llava).").format(
+                                       model=_skroc_nazwe_modelu_hf(model["nazwa"])))
+            czat.pop()
+            rozmowa.update({"model": model["nazwa"], "host": host["adres"]})
+            if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
+                                          bool(dane.get("szukaj"))):
+                return self._blad(409, self._zajeta(id_rozmowy))
+            return self._json({"id": id_rozmowy})
+        if dane.get("akcja") == "popraw":
+            czat.pop()
+            pytanie = czat.pop()
+            if czat:
+                self.serwer.zapisz(id_rozmowy, rozmowa)
+            else:
+                # WHY: rozmowa bez wiadomości nie ma po co zostawać na liście (jak w oknie)
+                (katalog_rozmow() / f"{id_rozmowy}.json").unlink(missing_ok=True)
+                self.serwer.rozmowa_zmieniona.emit(id_rozmowy)
+            return self._json({"id": id_rozmowy if czat else None, "tekst": pytanie.get("tresc", "")})
+        raise ValueError(_("nieprawidłowe zapytanie"))
+
+    def _zajeta(self, id_rozmowy):
+        if kto_prowadzi_rozmowe(id_rozmowy) == "okno":
+            return _("W tej rozmowie właśnie pisze się odpowiedź w programie - poczekaj, aż się skończy.")
+        return _("W tej rozmowie właśnie pisze się odpowiedź - poczekaj, aż się skończy.")
+
+    def _zmien_nazwe(self, dane):
+        id_rozmowy = self._sprawdz_id(dane.get("id"))
+        if self.serwer.odpowiedz(id_rozmowy) or kto_prowadzi_rozmowe(id_rozmowy):
+            return self._blad(409, self._zajeta(id_rozmowy))
+        tytul = str(dane.get("tytul", "")).strip()[:200]
+        wpis = zmien_nazwe_rozmowy(id_rozmowy, tytul)
+        self.serwer.rozmowa_zmieniona.emit(id_rozmowy)
+        return self._json({"tytul": wpis["tytul"]})
+
+    def _usun(self, dane):
+        id_rozmowy = self._sprawdz_id(dane.get("id"))
+        if self.serwer.odpowiedz(id_rozmowy) or kto_prowadzi_rozmowe(id_rozmowy):
+            return self._blad(409, self._zajeta(id_rozmowy))
+        (katalog_rozmow() / f"{id_rozmowy}.json").unlink(missing_ok=True)
+        self.serwer.rozmowa_zmieniona.emit(id_rozmowy)
+        return self._json({"ok": True})
+
+    def _eksport(self, id_rozmowy):
+        dane = wczytaj_rozmowe(self._sprawdz_id(id_rozmowy))
+        nazwa = re.sub(r"[^\w .-]+", " ", dane.get("tytul", ""), flags=re.UNICODE).strip()[:60] or "rozmowa"
+        tresc = rozmowa_do_markdown(dane).encode("utf-8")
+        # WHY: filename* (RFC 5987) - polskie znaki w nazwie pliku
+        self._naglowki(200, "text/markdown; charset=utf-8", len(tresc), [(
+            "Content-Disposition", f"attachment; filename=\"rozmowa.md\"; filename*=UTF-8''{quote(nazwa)}.md")])
+        self.wfile.write(tresc)
+
+    def _strumien(self, id_rozmowy):
+        # WHAT: Server-Sent Events - stan pisanej odpowiedzi przy każdej zmianie (najwyżej co 0,1 s),
+        #       na końcu zdarzenie "koniec"; co 15 s pusty komentarz, żeby połączenie nie wygasło.
+        # WHY:  wysyłamy całą ostatnią wiadomość, nie przyrosty - przeglądarka, która się
+        #       rozłączyła (telefon zasnął), po powrocie od razu ma pełny stan.
+        id_rozmowy = self._sprawdz_id(id_rozmowy)
+        odp = self.serwer.odpowiedz(id_rozmowy)
+        self._naglowki(200, "text/event-stream; charset=utf-8", None, [("X-Accel-Buffering", "no")])
+        if odp is None:
+            self.wfile.write(b"event: koniec\ndata: {}\n\n")
+            return
+        widziana = -1
+        try:
+            while True:
+                with odp.warunek:
+                    odp.warunek.wait_for(lambda: odp.wersja != widziana, timeout=15)
+                    zmiana, widziana, koniec = odp.wersja != widziana, odp.wersja, odp.koniec
+                    stan = _wiadomosc_dla_strony(odp.ostatnia) if zmiana else None
+                if stan is not None:
+                    self.wfile.write(b"data: " + json.dumps(stan, ensure_ascii=False).encode("utf-8") + b"\n\n")
+                else:
+                    self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+                if koniec:
+                    self.wfile.write(b"event: koniec\ndata: {}\n\n")
+                    return
+                time.sleep(0.1)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return  # WHY: przeglądarka zamknięta - odpowiedź pisze się dalej i zapisze sama
+
+
+def _qrcodegen():
+    # WHAT: biblioteka kodów QR (Project Nayuki, licencja MIT) z vendor/ - wczytana przy pierwszym użyciu.
+    # WHY:  jeden plik czystego Pythona dołączony do programu (bez nowej zależności z pip);
+    #       z pliku, nie przez sys.path - nic innego z vendor/ nie wejdzie do programu.
+    global _MODUL_QR
+    if _MODUL_QR is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("qrcodegen", _KATALOG_VENDOR / "qrcodegen.py")
+        modul = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modul)
+        _MODUL_QR = modul
+    return _MODUL_QR
+
+
+_MODUL_QR = None
+
+
+class KodQR(QWidget):
+    """Kod QR z adresem czatu - telefon otwiera go aparatem, bez przepisywania."""
+    # WHY: jasne tło i ciemne moduły - tak czytają je aparaty; kolory i tak z theme.qss
+    kolorTla = _wlasciwosc_koloru("kolorTla", "#ffffff")
+    kolorModulu = _wlasciwosc_koloru("kolorModulu", "#111111")
+
+    def __init__(self, parent=None):
+        self._kolory = {}
+        super().__init__(parent)
+        self._moduly = []
+        self.setFixedSize(168, 168)
+
+    def ustaw(self, tekst):
+        # WHAT: tekst -> siatka modułów (True = ciemny); pusty tekst = nic nie rysujemy.
+        self._moduly = []
+        if tekst:
+            try:
+                qr = _qrcodegen()
+                kod = qr.QrCode.encode_text(tekst, qr.QrCode.Ecc.MEDIUM)
+                self._moduly = [[kod.get_module(x, y) for x in range(kod.get_size())] for y in range(kod.get_size())]
+            except (OSError, ImportError, ValueError, AttributeError):
+                self._moduly = []  # WHY: brak pliku biblioteki - zostaje sam adres do skopiowania
+        self.setVisible(bool(self._moduly))
+        self.update()
+
+    def paintEvent(self, _zdarzenie):
+        if not self._moduly:
+            return
+        p = QPainter(self)
+        p.fillRect(self.rect(), self.kolorTla)
+        rozmiar = len(self._moduly)
+        # WHY: 4 moduły pustego marginesu z każdej strony - wymaga tego standard QR
+        krok = self.width() / (rozmiar + 8)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(self.kolorModulu)
+        for y, wiersz in enumerate(self._moduly):
+            for x, ciemny in enumerate(wiersz):
+                if ciemny:
+                    p.drawRect(QRectF((x + 4) * krok, (y + 4) * krok, krok + 0.5, krok + 0.5))
+        p.end()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -6464,6 +7436,13 @@ class MainWindow(QMainWindow):
         self.zasobnik = None            # WHY: ikona w zasobniku (QSystemTrayIcon), gdy włączona w Ustawieniach
         self.okno_zasobnika = None
         self._konczenie = False         # WHY: "Zakończ" z menu ikony - wtedy krzyżyk ma naprawdę zamknąć program
+        self._czat_zajeta = None        # WHY: rozmowa zajęta przez odpowiedź pisaną w oknie (zajmij_rozmowe)
+        # WHAT: czat w przeglądarce (1.2) - serwer w tym procesie, włączany w Ustawieniach.
+        # WHY:  przed _buduj_ui - karta w Ustawieniach pokazuje jego stan
+        self.serwer_www = SerwerCzatu(self)
+        self.serwer_www.rozmowa_zmieniona.connect(self._rozmowa_z_przegladarki)
+        self.serwer_www.wpis.connect(lambda tekst, poziom: self.wpis_log(tekst, poziom))
+        self._blad_www = ""             # WHY: ostatni błąd startu serwera (np. zajęty port) - dla Ustawień
 
         # WHY: język wczytujemy PRZED _buduj_ui() - widgety od razu dostają właściwe napisy.
         self._jezyk_aktywny = _wczytaj_jezyk_zapisany()
@@ -6481,6 +7460,8 @@ class MainWindow(QMainWindow):
                             min(900, ekran.height()) if ekran else 900)
         self._buduj_ui()
         self._ustaw_zasobnik(zasobnik_wlaczony())
+        if www_ustawienie("wlaczony", False, bool):
+            self._uruchom_serwer_www()
 
         # WHAT: odświeżanie co 10 s (stan usług + dane widocznego ekranu) i co 2 s
         #       zasoby komputera - tylko gdy panel główny jest na ekranie.
@@ -8839,6 +9820,10 @@ class MainWindow(QMainWindow):
         naglowek = QHBoxLayout()
         naglowek.addLayout(self._tytul_strony(
             _("Czat"), _("Szybka rozmowa z modelem prosto z Ollamy - bez Open WebUI i bez przeglądarki.")), 1)
+        # WHY: widoczny tylko, gdy czat w przeglądarce działa (Ustawienia) - otwiera bieżącą rozmowę
+        self.btn_czat_www = self._przycisk(_("Otwórz w przeglądarce"), "otworz", slot=self.otworz_czat_www)
+        self.btn_czat_www.setVisible(self.serwer_www.dziala)
+        naglowek.addWidget(self.btn_czat_www, 0, Qt.AlignmentFlag.AlignTop)
         naglowek.addWidget(self._przycisk(_("Nowa rozmowa"), "plus", slot=self.nowa_rozmowa),
                            0, Qt.AlignmentFlag.AlignTop)
         v.addLayout(naglowek)
@@ -9169,25 +10154,12 @@ class MainWindow(QMainWindow):
         self._pokaz_zalaczniki()
 
     def _modele_embeddingow(self):
-        # WHAT: [(nazwa, adres, nazwa hosta)] - modele embeddingów na hostach online.
-        return [(m["nazwa"], h["adres"], h["nazwa"]) for m in self._modele
-                if "embedding" in m.get("mozliwosci", []) or m["rodzaj"] == "embedding" for h in m["hosty"]]
+        return modele_embeddingow(self._modele)
 
     def _model_embeddingow(self):
-        # WHAT: (model, adres) do embeddingów - wybrany w Ustawieniach, a przy "Automatycznie"
-        #       (albo gdy wybrany host jest offline) najlepiej na hoście modelu czatu.
-        # WHY:  Ollama liczy wektory tylko modelem typu "embedding"; ten sam model musi
-        #       potem liczyć wektor pytania, więc zapamiętujemy go przy dokumencie.
-        kandydaci = [(nazwa, adres) for nazwa, adres, _h in self._modele_embeddingow()]
-        wybrany = _ustawienia().value("czat/model_rag", "")
-        for nazwa, adres in kandydaci:
-            if f"{adres}|{nazwa}" == wybrany:
-                return nazwa, adres
+        # WHAT: model embeddingów dla czatu w oknie - najlepiej na hoście wybranego modelu czatu.
         _model, host = self._wybrany_model_czatu()
-        for nazwa, adres in kandydaci:
-            if host and adres == host["adres"]:
-                return nazwa, adres
-        return kandydaci[0] if kandydaci else None
+        return model_embeddingow(self._modele, host["adres"] if host else None)
 
     def _przygotuj_dokument(self, z):
         # WHAT: duży plik -> RagWorker (fragmenty + wektory) w tle; postęp na chipie.
@@ -9314,20 +10286,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _umie_rozmawiac(model, ze_zdjeciem=False):
-        # WHAT: czy model obsługuje czat - możliwość "completion" z /api/show.
-        # WHY:  modele bez niej (embeddingi, rerankery, generatory obrazów) i tak
-        #       zwróciłyby błąd. Gdy Ollama nie podała możliwości (starsza wersja),
-        #       odrzucamy tylko embeddingi, jak wcześniej.
-        # WHY:  modele OCR (glm-ocr, deepseek-ocr, olmOCR) mają "completion", ale służą
-        #       do odczytu tekstu z obrazów - w rozmowie powtarzają pytanie (sprawdzone
-        #       na glm-ocr). Ollama nie ma flagi "model specjalistyczny", więc po nazwie
-        #       (zgłoszenie użytkownika).
-        #       Ze zdjęciem w załącznikach wracają - to właśnie ich zadanie.
-        if "ocr" in model["nazwa"].lower() and not ze_zdjeciem:
-            return False
-        if model.get("mozliwosci"):
-            return "completion" in model["mozliwosci"]
-        return model["rodzaj"] != "embedding"
+        return umie_rozmawiac(model, ze_zdjeciem)  # WHY: wspólne z czatem w przeglądarce
 
     def _modele_czatu(self):
         # WHAT: (model, host) do wyboru - tylko modele umiejące rozmawiać;
@@ -9489,16 +10448,7 @@ class MainWindow(QMainWindow):
             self.lbl_czat_myslenie.setToolTip(_("ten model nie myśli przed odpowiedzią"))
 
     def _parametr_myslenia(self, model):
-        # WHAT: wartość "think" do /api/chat albo None (nie wysyłać wcale).
-        # WHY:  tylko dla modeli z "thinking" - innym Ollama mogłaby odpowiedzieć błędem.
-        #       gpt-oss nie umie myśleć wcale - zna tylko poziomy low/medium/high, więc
-        #       "wyłączone" = "low" (wg dokumentacji Ollamy; NIE sprawdzone na żywo).
-        if "thinking" not in model.get("mozliwosci", []):
-            return None
-        wlaczone = _ustawienia().value("czat/myslenie", True, type=bool)
-        if model["nazwa"].startswith("gpt-oss"):
-            return "medium" if wlaczone else "low"
-        return wlaczone
+        return parametr_myslenia(model, _ustawienia().value("czat/myslenie", True, type=bool))
 
     def _przelacz_rozumowanie(self, wlacz):
         _ustawienia().setValue("czat/rozumowanie", wlacz)
@@ -9621,6 +10571,48 @@ class MainWindow(QMainWindow):
             self.combo_czat_model.setCurrentIndex(indeks)
         self._pokaz_czat(do_dolu=True)
         self._pokaz_kontekst()
+        if kto_prowadzi_rozmowe(id_rozmowy) == "www":
+            self._uwaga_czatu(_("W tej rozmowie pisze się teraz odpowiedź w przeglądarce - zobaczysz ją tutaj, "
+                                "gdy się skończy."), "info")
+
+    def _zajeta_przez_przegladarke(self, id_rozmowy):
+        # WHY: zmiana nazwy albo usunięcie w trakcie - zapis z przeglądarki na końcu odpowiedzi by je cofnął
+        if kto_prowadzi_rozmowe(id_rozmowy) == "www":
+            self._uwaga_czatu(_("W tej rozmowie pisze się teraz odpowiedź w przeglądarce - poczekaj, aż się "
+                                "skończy."), "warn")
+            return True
+        return False
+
+    def _rozmowa_zajeta_w_przegladarce(self):
+        # WHAT: True (i uwaga nad polem) = w otwartej rozmowie pisze się odpowiedź z przeglądarki.
+        if self._czat_id and kto_prowadzi_rozmowe(self._czat_id) == "www":
+            self._uwaga_czatu(_("W tej rozmowie pisze się teraz odpowiedź w przeglądarce - poczekaj, aż się "
+                                "skończy."), "warn")
+            return True
+        return False
+
+    def _rozmowa_z_przegladarki(self, id_rozmowy):
+        # WHAT: przeglądarka zapisała albo usunęła rozmowę - lista od nowa, a otwarta rozmowa
+        #       wczytuje się ponownie z pliku.
+        # WHY:  inaczej okno zapisałoby przy następnej odpowiedzi swoją starą wersję i zgubiło
+        #       to, co dopisała przeglądarka.
+        self._rozmowy = None
+        self._wypelnij_liste_rozmow()
+        if id_rozmowy != self._czat_id or self._czat_worker is not None:
+            return
+        try:
+            dane = wczytaj_rozmowe(id_rozmowy)
+        except FileNotFoundError:
+            self.nowa_rozmowa()  # WHY: usunięta w przeglądarce
+            return
+        except (OSError, ValueError):
+            return
+        self._czat = dane.get("wiadomosci", [])
+        self._czat_tytul = dane.get("tytul") if dane.get("tytul_wlasny") else None
+        self._pokaz_czat(do_dolu=True)
+        self._pokaz_kontekst()
+        if kto_prowadzi_rozmowe(id_rozmowy) != "www":
+            self._uwaga_czatu("")
 
     def _zaznaczona_rozmowa(self):
         element = self.lista_rozmow.currentItem()
@@ -9630,7 +10622,7 @@ class MainWindow(QMainWindow):
 
     def _zmien_nazwe_rozmowy(self):
         id_rozmowy = self._zaznaczona_rozmowa()
-        if id_rozmowy is None:
+        if id_rozmowy is None or self._zajeta_przez_przegladarke(id_rozmowy):
             return
         wpis = next((r for r in self._rozmowy or [] if r["id"] == id_rozmowy), None)
         tytul, ok = QInputDialog.getText(
@@ -9691,6 +10683,8 @@ class MainWindow(QMainWindow):
         if element is None:
             return
         id_rozmowy = element.data(Qt.ItemDataRole.UserRole)
+        if self._zajeta_przez_przegladarke(id_rozmowy):
+            return
         odp = QMessageBox.question(self, _("Usuń rozmowę"),
                                    _("Usunąć rozmowę \"{tytul}\"? Tego nie da się cofnąć.").format(
                                        tytul=element.toolTip()))
@@ -9737,7 +10731,7 @@ class MainWindow(QMainWindow):
                                 "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])),
                               "warn")
             return
-        if not self._sprawdz_narzedzia(model):
+        if not self._sprawdz_narzedzia(model) or self._rozmowa_zajeta_w_przegladarce():
             return
         self._czat.append({"rola": "user", "tresc": tekst, "zalaczniki": list(self._zalaczniki)})
         self._zalaczniki = []
@@ -9750,19 +10744,12 @@ class MainWindow(QMainWindow):
     def _zadaj_pytanie(self, model, host):
         # WHAT: wysyła modelowi rozmowę kończącą się pytaniem użytkownika i pisze odpowiedź.
         # WHY:  osobno od wyslij_czat - tę samą drogę wybiera "Wygeneruj ponownie".
-        # WHY: historia dla modelu - bez błędów i bez rozumowania (model go nie potrzebuje,
-        #      a zjadałoby kontekst); zdjęcia zostają przy swoich pytaniach, żeby model
-        #      pamiętał je w dalszej rozmowie ("a co jest w lewym rogu?")
-        historia = []
-        for w in self._czat:
-            if w["rola"] == "user":
-                wpis = {"role": "user", "content": _tresc_dla_modelu(w)}
-                obrazy = [z["b64"] for z in w.get("zalaczniki", []) if z["typ"] == "obraz"]
-                if obrazy:
-                    wpis["images"] = obrazy
-                historia.append(wpis)
-            elif w["rola"] == "assistant" and not w.get("przerwano"):
-                historia.append({"role": "assistant", "content": _rozdziel_myslenie(w["tresc"])[1]})
+        historia = historia_dla_modelu(self._czat)
+        # WHY: rozmowa zajęta przez okno do końca odpowiedzi - przeglądarka nie dopisze do niej
+        #      pytania w trakcie (zapisy by się nadpisały); id zapamiętane, bo "Nowa rozmowa"
+        #      w trakcie zmienia self._czat_id
+        zajmij_rozmowe(self._czat_id, "okno")
+        self._czat_zajeta = self._czat_id
         wyszukiwanie = None
         if self._szukanie_aktywne():
             # WHY: do zapytań sam tekst pytania - bez treści dołączonych plików
@@ -9774,11 +10761,7 @@ class MainWindow(QMainWindow):
         if wyszukiwanie:
             self._czat[-1]["etap"] = _("Układam zapytania do wyszukiwarki...")
         self._pokaz_czat(do_dolu=True)
-        # WHY: duże pliki z CAŁEJ rozmowy - można dopytywać o dokument dołączony wcześniej
-        dokumenty = [{"nazwa": z["nazwa"], "fragmenty": z["fragmenty"], "wektory": z["wektory"],
-                      "model_emb": z["model_emb"], "adres_emb": z["adres_emb"]}
-                     for w in self._czat if w["rola"] == "user"
-                     for z in w.get("zalaczniki", []) if z["typ"] == "dokument" and z.get("gotowy")]
+        dokumenty = dokumenty_rozmowy(self._czat)
         if dokumenty:
             self._czat[-1]["szuka"] = True
         worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model),
@@ -9808,6 +10791,8 @@ class MainWindow(QMainWindow):
         # WHY:  nieudana odpowiedź nie zostaje w historii - model by się nią sugerował, zjada
         #       kontekst i trafia do zapisu i eksportu.
         if self._czat_worker is not None or len(self._czat) < 2 or self._czat[-2]["rola"] != "user":
+            return
+        if self._rozmowa_zajeta_w_przegladarce():
             return
         if akcja == "ponow":
             model, host = self._wybrany_model_czatu()
@@ -10247,27 +11232,14 @@ class MainWindow(QMainWindow):
         if self.sender() is not self._czat_worker:
             return
         self._czat_worker = None
+        zwolnij_rozmowe(getattr(self, "_czat_zajeta", None), "okno")
         ostatnia = self._czat[-1] if self._czat else None
         if ostatnia is not None and ostatnia.get("trwa"):
-            ostatnia["trwa"] = False
+            zakoncz_wiadomosc(ostatnia, sukces, wynik)
             if not sukces:
-                if ostatnia["tresc"].strip():
-                    ostatnia["stat"] = _("błąd: {blad}").format(blad=wynik)
-                else:
-                    # WHY: surowy błąd + proste wyjaśnienie, jak na ekranie Dziennik
-                    wyjasnienie = wyjasnij_blad(wynik)
-                    ostatnia.update({"rola": "blad",
-                                     "tresc": wynik + (f"\n\n{wyjasnienie}" if wyjasnienie else "")})
                 self.wpis_log(_("Czat: błąd - {blad}").format(blad=wynik), "BŁĄD", "Ollama")
-            elif wynik.get("anulowano"):
-                ostatnia["stat"] = _("przerwano")
-                ostatnia["przerwano"] = not ostatnia["tresc"].strip()
-            else:
-                ostatnia["stat"] = self._statystyki_czatu(wynik)
-                # WHY: prompt_eval_count to CAŁA historia (sprawdzone: także gdy Ollama ma ją
-                #      w pamięci podręcznej - ta część jest osobno w prompt_eval_cached_count)
-                ostatnia["kontekst"] = [(wynik.get("prompt_eval_count") or 0) + (wynik.get("eval_count") or 0),
-                                        wynik.get("okno_kontekstu")]
+            elif not wynik.get("anulowano"):
+                self._statystyki_czatu(wynik)
             self._pokaz_czat()
             self._pokaz_kontekst()
             self._zapisz_biezaca_rozmowe()
@@ -10314,13 +11286,8 @@ class MainWindow(QMainWindow):
         self.lbl_kontekst_rada.setVisible(bool(rada))
 
     def _statystyki_czatu(self, d):
-        # WHAT: tokeny/s i czasy z ostatniej linii strumienia Ollamy (czasy w nanosekundach).
-        # WHY:  liczby podaje sama Ollama - bez własnego stopera, więc nie wlicza się
-        #       w nie czas sieci ani rysowania okna.
-        def na_sekunde(tokeny, ns):
-            return tokeny / (ns / 1e9) if tokeny and ns else None
-        gen = na_sekunde(d.get("eval_count"), d.get("eval_duration"))
-        prompt = na_sekunde(d.get("prompt_eval_count"), d.get("prompt_eval_duration"))
+        # WHAT: karta "Ostatnia odpowiedź" - tokeny/s i czasy z ostatniej linii strumienia Ollamy.
+        gen, prompt = tokeny_na_sekunde(d)
         calosc = (d.get("total_duration") or 0) / 1e9
         st = self._lbl_stat_czatu
         # WHY: od 100 tok/s bez części dziesiętnej - "18382.4" nie mieściło się w wąskiej karcie,
@@ -10332,13 +11299,7 @@ class MainWindow(QMainWindow):
         st["tokeny"].setText(f"{d.get('prompt_eval_count', 0)} / {d.get('eval_count', 0)}")
         st["calosc"].setText(f"{calosc:.1f} s")
         _odmaluj_rodzica(*st.values())
-        czesci = []
-        if gen:
-            czesci.append(_("{n:.1f} tok/s").format(n=gen))
-        if d.get("eval_count"):
-            czesci.append(_("{n} tokenów").format(n=d["eval_count"]))
-        czesci.append(f"{calosc:.1f} s")
-        return " · ".join(czesci)
+        return opis_statystyk(d)
 
     # =========================================================================
     #  Ekran "Open WebUI" (makieta WebUI.dc.html)
@@ -10976,6 +11937,9 @@ class MainWindow(QMainWindow):
         v.addWidget(karta)
         self._odswiez_modele_rag()
 
+        # --- Czat w przeglądarce (1.2) ---
+        v.addWidget(self._karta_czatu_www())
+
         # --- Zmienne środowiskowe Ollamy ---
         karta, uk = self._karta()
         uk.setSpacing(0)
@@ -11287,6 +12251,230 @@ class MainWindow(QMainWindow):
         uk.addWidget(self.ramka_test_wyszukiwania)
         self._pokaz_zrodlo_wyszukiwania()
 
+    # --- Czat w przeglądarce ------------------------------------------------------
+    def _karta_czatu_www(self):
+        # WHAT: karta w Ustawieniach - włączenie, port, sieć domowa z hasłem, adres i kod QR.
+        karta, uk = self._karta()
+        uk.setSpacing(0)
+        uk.addWidget(_etykieta(_("Czat w przeglądarce"), "h2"))
+        wstep = _etykieta(_("Ten sam czat co w programie - te same modele i zapisane rozmowy - pod adresem "
+                            "w przeglądarce, np. na telefonie. Działa, dopóki działa program (także schowany "
+                            "w zasobniku)."), "muted")
+        wstep.setWordWrap(True)
+        wstep.setContentsMargins(0, 6, 0, 8)
+        uk.addWidget(wstep)
+        self.sw_www = self._wiersz_przelacznika(
+            uk, _("Czat w przeglądarce"), _("bez sieci domowej działa tylko na tym komputerze"), self.przelacz_www)
+
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(14)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel(_("Port")))
+        opis = _etykieta(_("numer w adresie strony; zmień, jeśli zajmuje go inny program"), "muted")
+        opis.setWordWrap(True)
+        teksty.addWidget(opis)
+        h.addLayout(teksty, 1)
+        self.pole_port_www = QSpinBox()
+        self.pole_port_www.setRange(1024, 65535)
+        self.pole_port_www.setValue(www_port())
+        self.pole_port_www.setFixedWidth(140)
+        self.pole_port_www.editingFinished.connect(self._zmiana_portu_www)
+        h.addWidget(self.pole_port_www, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(wiersz)
+
+        self.sw_www_lan = self._wiersz_przelacznika(
+            uk, _("Dostęp z sieci domowej"),
+            _("telefon i inne komputery w tej sieci - po zalogowaniu hasłem ustawionym niżej"),
+            self.przelacz_www_lan)
+
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(8)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel(_("Hasło")))
+        self.lbl_haslo_www = _etykieta("", "muted")
+        self.lbl_haslo_www.setWordWrap(True)
+        teksty.addWidget(self.lbl_haslo_www)
+        h.addLayout(teksty, 1)
+        self.pole_haslo_www = QLineEdit()
+        self.pole_haslo_www.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pole_haslo_www.setPlaceholderText(_("nowe hasło (min. 8 znaków)"))
+        self.pole_haslo_www.setFixedWidth(240)
+        self.pole_haslo_www.returnPressed.connect(self.ustaw_haslo_www)
+        h.addWidget(self.pole_haslo_www, 0, Qt.AlignmentFlag.AlignTop)
+        h.addWidget(self._przycisk(_("Ustaw hasło"), slot=self.ustaw_haslo_www), 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(wiersz)
+
+        uwaga = _etykieta(_("W sieci domowej połączenie nie jest szyfrowane (zwykłe HTTP) - kto ma dostęp do tej "
+                            "sieci, może podejrzeć hasło i rozmowy. Włączaj tylko w zaufanej sieci domowej, nigdy "
+                            "w publicznej."), "muted")
+        uwaga.setWordWrap(True)
+        uwaga.setProperty("state", "warn")
+        uwaga.setContentsMargins(0, 10, 0, 0)
+        self.lbl_www_ostrzezenie = uwaga
+        uk.addWidget(uwaga)
+
+        # --- adres i kod QR ---
+        self.ramka_adresu_www = QFrame()
+        self.ramka_adresu_www.setObjectName("searchPanel")
+        h = QHBoxLayout(self.ramka_adresu_www)
+        h.setContentsMargins(0, 14, 0, 0)
+        h.setSpacing(18)
+        kolumna = QVBoxLayout()
+        kolumna.setSpacing(8)
+        self.lbl_www_stan = _etykieta("", "muted")
+        self.lbl_www_stan.setWordWrap(True)
+        kolumna.addWidget(self.lbl_www_stan)
+        self.lbl_www_adres = _etykieta("", "monoValue")
+        self.lbl_www_adres.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        kolumna.addWidget(self.lbl_www_adres)
+        przyciski = QHBoxLayout()
+        self.btn_www_otworz = self._przycisk(_("Otwórz w przeglądarce"), "otworz", slot=self.otworz_czat_www)
+        self.btn_www_kopiuj = self._przycisk(_("Kopiuj adres"), "kopiuj", slot=self._kopiuj_adres_www)
+        przyciski.addWidget(self.btn_www_otworz)
+        przyciski.addWidget(self.btn_www_kopiuj)
+        przyciski.addStretch(1)
+        kolumna.addLayout(przyciski)
+        self.lbl_www_qr = _etykieta(_("Zeskanuj kod aparatem telefonu, żeby otworzyć czat."), "muted")
+        self.lbl_www_qr.setWordWrap(True)
+        kolumna.addWidget(self.lbl_www_qr)
+        kolumna.addStretch(1)
+        h.addLayout(kolumna, 1)
+        self.kod_qr_www = KodQR()
+        h.addWidget(self.kod_qr_www, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(self.ramka_adresu_www)
+        self._odswiez_www()
+        return karta
+
+    def _uruchom_serwer_www(self):
+        # WHAT: start (albo restart) serwera wg ustawień; błąd (np. zajęty port) - w karcie i Dzienniku.
+        # WHY:  sieć domowa tylko z ustawionym hasłem - bez niego serwer zostaje na tym komputerze.
+        lan = www_ustawienie("lan", False, bool) and www_jest_haslo()
+        try:
+            self.serwer_www.uruchom(www_port(), lan)
+            self._blad_www = ""
+            adresy = www_adresy(self.serwer_www.port)
+            self.wpis_log(_("Czat w przeglądarce działa: {adres}").format(
+                adres=adresy["lan"] if lan and adresy["lan"] else adresy["lokalny"]))
+        except OSError as e:
+            self._blad_www = str(e)
+            self.wpis_log(_("Czat w przeglądarce nie wystartował: {blad}").format(blad=e), "BŁĄD")
+        self._odswiez_www()
+
+    def przelacz_www(self, wlacz):
+        www_zapisz("wlaczony", wlacz)
+        if wlacz:
+            self._uruchom_serwer_www()
+        else:
+            self.serwer_www.zatrzymaj()
+            self._blad_www = ""
+            self.wpis_log(_("Czat w przeglądarce wyłączony."))
+            self._odswiez_www()
+
+    def przelacz_www_lan(self, wlacz):
+        if wlacz and not www_jest_haslo():
+            # WHY: bez hasła każdy w sieci miałby modele i wszystkie rozmowy
+            self.sw_www_lan.ustaw_cicho(False)
+            QMessageBox.information(self, _("Czat w przeglądarce"),
+                                    _("Najpierw ustaw hasło - bez niego każdy w sieci widziałby Twoje rozmowy."))
+            self.pole_haslo_www.setFocus()
+            return
+        www_zapisz("lan", wlacz)
+        if self.serwer_www.dziala:
+            self._uruchom_serwer_www()
+        else:
+            self._odswiez_www()
+
+    def _zmiana_portu_www(self):
+        port = self.pole_port_www.value()
+        if port == www_port():
+            return
+        www_zapisz("port", port)
+        if self.serwer_www.dziala:
+            self._uruchom_serwer_www()
+        else:
+            self._odswiez_www()
+
+    def ustaw_haslo_www(self):
+        haslo = self.pole_haslo_www.text()
+        if len(haslo) < 8:
+            QMessageBox.information(self, _("Czat w przeglądarce"), _("Hasło musi mieć co najmniej 8 znaków."))
+            return
+        www_ustaw_haslo(haslo)
+        self.pole_haslo_www.clear()
+        self.wpis_log(_("Hasło czatu w przeglądarce zmienione - urządzenia muszą zalogować się ponownie."))
+        if self.serwer_www.dziala and www_ustawienie("lan", False, bool) and not self.serwer_www.lan:
+            self._uruchom_serwer_www()  # WHY: sieć domowa czekała na hasło
+        else:
+            self._odswiez_www()
+
+    def _adres_www(self):
+        # WHAT: adres do pokazania - w sieci domowej z IP komputera (dla telefonu), inaczej localhost.
+        if not self.serwer_www.dziala:
+            return None
+        adresy = www_adresy(self.serwer_www.port)
+        return adresy["lan"] if self.serwer_www.lan and adresy["lan"] else adresy["lokalny"]
+
+    def otworz_czat_www(self):
+        # WHY: z otwartą rozmową - strona od razu ją pokaże (#r=<id>)
+        if not self.serwer_www.dziala:
+            return
+        adres = f"http://localhost:{self.serwer_www.port}/"
+        if self._czat_id:
+            adres += f"#r={self._czat_id}"
+        QDesktopServices.openUrl(QUrl(adres))
+
+    def _kopiuj_adres_www(self):
+        adres = self._adres_www()
+        if adres:
+            QApplication.clipboard().setText(adres)
+            self.statusBar().showMessage(_("Skopiowano: {adres}").format(adres=adres), 4000)
+
+    def _odswiez_www(self):
+        # WHAT: stan karty "Czat w przeglądarce", przycisku na ekranie Czat i pozycji w menu zasobnika.
+        dziala = self.serwer_www.dziala
+        if hasattr(self, "btn_czat_www"):
+            self.btn_czat_www.setVisible(dziala)
+        if getattr(self, "_akcja_www_zasobnika", None) is not None:
+            try:
+                self._akcja_www_zasobnika.setVisible(dziala)
+            except RuntimeError:
+                self._akcja_www_zasobnika = None  # WHY: menu zasobnika usunięte (zasobnik wyłączony)
+        if not hasattr(self, "sw_www"):
+            return
+        self.sw_www.ustaw_cicho(www_ustawienie("wlaczony", False, bool))
+        jest_haslo = www_jest_haslo()
+        self.sw_www_lan.ustaw_cicho(www_ustawienie("lan", False, bool) and jest_haslo)
+        self.lbl_haslo_www.setText(_("ustawione - zmiana wyloguje wszystkie urządzenia") if jest_haslo
+                                   else _("nie ustawione - bez hasła nie włączysz dostępu z sieci domowej"))
+        adres = self._adres_www()
+        if self._blad_www:
+            self.lbl_www_stan.setText(_("Nie wystartował: {blad}").format(blad=self._blad_www))
+            self.lbl_www_stan.setProperty("state", "error")
+        elif dziala:
+            self.lbl_www_stan.setText(_("Działa - adres w sieci domowej:") if self.serwer_www.lan
+                                      else _("Działa - tylko na tym komputerze:"))
+            self.lbl_www_stan.setProperty("state", "ok")
+        else:
+            self.lbl_www_stan.setText(_("Wyłączony."))
+            self.lbl_www_stan.setProperty("state", "")
+        _odswiez_styl(self.lbl_www_stan)
+        self.lbl_www_adres.setText(adres or "")
+        self.lbl_www_adres.setVisible(bool(adres))
+        self.btn_www_otworz.setEnabled(dziala)
+        self.btn_www_kopiuj.setEnabled(dziala)
+        # WHY: kod QR tylko w sieci domowej - adres "localhost" na telefonie i tak by nie zadziałał
+        qr = adres if dziala and self.serwer_www.lan else ""
+        self.kod_qr_www.ustaw(qr)
+        self.lbl_www_qr.setVisible(bool(qr) and self.kod_qr_www.isVisible())
+
     def _pokaz_zrodlo_wyszukiwania(self):
         zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
         self.ramka_searxng.setVisible(zrodlo == "searxng")
@@ -11552,6 +12740,8 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction(_("Otwórz panel zarządzania"), self.pokaz_okno)
         menu.addAction(_("Otwórz czat"), self.otworz_czat)  # WHY: wbudowany czat, jak przycisk w okienku zasobnika
+        self._akcja_www_zasobnika = menu.addAction(_("Czat w przeglądarce"), self.otworz_czat_www)
+        self._akcja_www_zasobnika.setVisible(self.serwer_www.dziala)
         menu.addSeparator()
         menu.addAction(_("Zakończ"), self.zakoncz)
         self.zasobnik.setContextMenu(menu)
@@ -11762,6 +12952,8 @@ def main():
             lambda: okno.pokaz_okno() if bytes(polaczenie.readAll()).startswith(b"pokaz") else None)
 
     serwer.newConnection.connect(_nowe_polaczenie)
+    # WHY: port zwolniony od razu przy końcu programu (wątki serwera i tak są w tle)
+    app.aboutToQuit.connect(okno.serwer_www.zatrzymaj)
     # WHY: z autostartu (--w-zasobniku) tylko ikona - o ile zasobnik naprawdę działa
     if not (w_zasobniku and okno.zasobnik is not None and okno.zasobnik.isVisible()):
         okno.show()

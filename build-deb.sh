@@ -63,6 +63,9 @@ cp theme.qss "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 # WHY: bundled Inter + JetBrains Mono (SIL OFL, licenses in fonts/) - loaded by the app
 #      from next to the script, so the UI looks the same on every machine
 cp -r fonts "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+# WHY: the chat in the browser - the page (web/) and the QR code library for Settings (vendor/)
+cp -r web vendor "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
+rm -rf "$BUILD_DIR/usr/share/$PACKAGE_NAME/vendor/__pycache__"  # WHY: Python cache from a local run
 # WHY: app icon next to the script (window icon) and in the system icon theme (menu)
 cp logo.png "$BUILD_DIR/usr/share/$PACKAGE_NAME/"
 cp logo.png "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"

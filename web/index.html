@@ -1,0 +1,23 @@
+<!doctype html>
+<!--
+  LamaDeck - czat w przeglądarce (1.2).
+  WHAT: pusta strona - cały interfejs buduje app.js (wtedy każdy napis idzie przez _() i ma tłumaczenie).
+  WHY:  bez kroku budowania i bez niczego z internetu: marked.js (Markdown) leży w web/vendor/.
+-->
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1e22">
+  <meta name="color-scheme" content="dark">
+  <title>LamaDeck</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/marked.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

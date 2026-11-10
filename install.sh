@@ -39,6 +39,8 @@ SOURCE_SCRIPT="$SCRIPT_DIR/lamadeck.py"
 SOURCE_LANG_DIR="$SCRIPT_DIR/lang"
 SOURCE_THEME="$SCRIPT_DIR/theme.qss"
 SOURCE_FONTS_DIR="$SCRIPT_DIR/fonts"
+SOURCE_WEB_DIR="$SCRIPT_DIR/web"
+SOURCE_VENDOR_DIR="$SCRIPT_DIR/vendor"
 SOURCE_ICON="$SCRIPT_DIR/logo.png"
 TARGET_SCRIPT="$TARGET_DIR/lamadeck.py"
 LEGACY_SCRIPT="$LEGACY_DIR/ollama_manager.py"
@@ -319,6 +321,15 @@ fi
 if [ -d "$SOURCE_FONTS_DIR" ]; then
     cp -r "$SOURCE_FONTS_DIR" "$TARGET_DIR/"
 fi
+
+# WHY: the chat in the browser (web/ - the page; vendor/ - the QR code library for Settings)
+#      is served from next to the script as well
+for dir in "$SOURCE_WEB_DIR" "$SOURCE_VENDOR_DIR"; do
+    if [ -d "$dir" ]; then
+        cp -r "$dir" "$TARGET_DIR/"
+    fi
+done
+rm -rf "$TARGET_DIR/vendor/__pycache__"  # WHY: Python cache from running the app in the repo
 
 # WHY: the app icon goes twice - next to the script (window icon, loaded by the
 #      app itself) and into the icon theme folder (application menu / taskbar).

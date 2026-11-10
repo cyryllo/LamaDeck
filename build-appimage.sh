@@ -120,7 +120,8 @@ print("Python", __import__("sys").version.split()[0], "- Qt", QtCore.QT_VERSION_
 
 # --- 3. The app ---------------------------------------------------------------
 cp lamadeck.py theme.qss logo.png "$APP_DIR/usr/share/lamadeck/"
-cp -r lang fonts "$APP_DIR/usr/share/lamadeck/"
+cp -r lang fonts web vendor "$APP_DIR/usr/share/lamadeck/"
+rm -rf "$APP_DIR/usr/share/lamadeck/vendor/__pycache__"  # WHY: Python cache from a local run
 
 # WHAT: AppRun - what the AppImage runtime starts.
 # WHY:  -s (no user site-packages) and -E (ignore PYTHONPATH/PYTHONHOME): a PyQt6

@@ -631,3 +631,11 @@ QFrame#card QLabel#capTag {
 QFrame#card QLabel#capTag[state="ok"] { background: #1c2b22; color: #5fd38d; border-color: #2f5a40; }
 /* Drobne podpowiedzi pod listami (np. pod listą rozmów w czacie) */
 QFrame#card QLabel#smallNote { font-size: 8pt; }
+
+/* --- Ustawienia - czat w przeglądarce ---
+ * Kod QR z adresem czatu: ciemne moduły na jasnym tle - tylko tak czytają go aparaty telefonów,
+ * więc to jedyne jasne pole w ciemnym oknie. */
+KodQR {
+    qproperty-kolorTla: #ffffff;
+    qproperty-kolorModulu: #111111;
+}
