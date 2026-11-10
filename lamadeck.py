@@ -102,7 +102,7 @@ from PyQt6.QtDBus import QDBusInterface, QDBusArgument, QDBusMessage
 #       2026-10-30, przed szerszym udostępnieniem od 1.0).
 NAZWA_PROGRAMU = "LamaDeck"
 ID_PROGRAMU = "lamadeck"
-WERSJA = "1.1.6"
+WERSJA = "1.2.0"
 
 # WHAT: bazowy adres serwera Ollamy (operacje na modelach).
 # WHY:  wydzielony na górę - możesz wskazać BC-250
