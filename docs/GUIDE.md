@@ -147,7 +147,10 @@ The model writes 1–3 search queries, LamaDeck reads up to 5 pages, picks the p
 your question, and the answer lists the clickable sources below. In the bubble you can see what
 it's doing at the moment.
 
-The folder button next to the globe turns on the **working folder** — see the next section.
+The folder button next to the globe turns on the **working folder** — see the next section. The
+**plug** button (visible when an MCP server is on in Settings) gives the model tools of other
+programs — see [MCP servers](#mcp-servers). **Open in the browser** at the top of the screen opens
+the current conversation in the [chat in the browser](#chat-in-the-browser).
 
 **Conversations** are saved automatically after every answer (only on this computer). The list on
 the left opens them and searches titles and content. Right-click a conversation to **Rename**
@@ -266,6 +269,8 @@ diagram itself and gives you its link. It works in the app window and in the cha
 
 **Adding a server** — *Settings → Chat → MCP servers*:
 
+![MCP server window](img/en/serwer-mcp.png)
+
 - **Add ArchFlow** fills in the fields for you. In ArchFlow running in Docker, turn MCP on (set
   `MCP_TOKEN` in the container's `.env` file and restart it), then enter the address
   `http://<server>:9500/mcp` and the same token in LamaDeck. Without Docker choose **Command**:
@@ -280,8 +285,16 @@ diagram itself and gives you its link. It works in the app window and in the cha
 - **Test connection** shows how many tools the server has, or a plain error. The switch next to a
   server turns it off without removing it.
 
+![The model draws a diagram in ArchFlow](img/en/mcp.png)
+
 **In the chat** turn on the plug button next to the globe. The model needs the *tools* tag (e.g.
 qwen3, gemma4). Every tool use shows in the answer, e.g. "› used the tool: build_diagram (ArchFlow)".
+
+An example result of such a conversation in ArchFlow:
+
+![A diagram drawn by the model in ArchFlow](img/en/archflow.png)
+
+![Asking before a tool](img/en/mcp-zgoda.png)
 
 **Approvals** — *Ask before using MCP tools*: **Only before deleting** (the default) or **Before every
 tool that changes something**. Read-only tools always work without asking. The window shows the

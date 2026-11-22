@@ -146,7 +146,10 @@ ekranu:
 Model pisze 1–3 zapytania, LamaDeck czyta do 5 stron, wybiera fragmenty pasujące do pytania,
 a odpowiedź ma pod spodem listę klikalnych źródeł. W dymku widać, co program właśnie robi.
 
-Przycisk z folderem obok globusa włącza **katalog roboczy** — patrz następny rozdział.
+Przycisk z folderem obok globusa włącza **katalog roboczy** — patrz następny rozdział. Przycisk
+z **wtyczką** (widać go, gdy w Ustawieniach jest włączony serwer MCP) daje modelowi narzędzia innych
+programów — patrz [Serwery MCP](#serwery-mcp). **Otwórz w przeglądarce** u góry ekranu otwiera
+bieżącą rozmowę w [czacie w przeglądarce](#czat-w-przeglądarce).
 
 **Rozmowy** zapisują się same po każdej odpowiedzi (tylko na tym komputerze). Lista po lewej je
 otwiera i przeszukuje tytuły oraz treść. Prawy klik na rozmowie: **Zmień nazwę** (też dwuklik
@@ -265,6 +268,8 @@ diagram i poda do niego link. Działa w oknie programu i w czacie w przeglądarc
 
 **Jak dodać serwer** — *Ustawienia → Czat → Serwery MCP*:
 
+![Okno serwera MCP](img/pl/serwer-mcp.png)
+
 - **Dodaj ArchFlow** wypełnia pola za Ciebie. W ArchFlow w Dockerze włącz MCP (ustaw `MCP_TOKEN`
   w pliku `.env` kontenera i uruchom go ponownie), a w LamaDeck wpisz adres
   `http://<serwer>:9500/mcp` i ten sam token. Bez Dockera wybierz **Polecenie**:
@@ -279,8 +284,16 @@ diagram i poda do niego link. Działa w oknie programu i w czacie w przeglądarc
 - **Sprawdź połączenie** pokazuje liczbę narzędzi serwera albo czytelny błąd. Przełącznikiem przy
   serwerze wyłączysz go bez usuwania.
 
+![Model rysuje diagram w ArchFlow](img/pl/mcp.png)
+
 **W czacie** włącz przycisk z wtyczką obok globusa. Model potrzebuje tagu *narzędzia* (np. qwen3,
 gemma4). Każde użycie narzędzia widać w odpowiedzi, np. „› użył narzędzia: build_diagram (ArchFlow)”.
+
+Przykładowy wynik takiej rozmowy w ArchFlow:
+
+![Diagram narysowany przez model w ArchFlow](img/pl/archflow.png)
+
+![Pytanie o zgodę na narzędzie](img/pl/mcp-zgoda.png)
 
 **Zgody** — *Pytaj o zgodę na narzędzia MCP*: **Tylko przed usuwaniem** (domyślnie) albo **Przed
 każdym, które coś zmienia**. Narzędzia tylko do odczytu działają zawsze bez pytania. Okienko pokazuje

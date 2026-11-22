@@ -11,10 +11,13 @@
 #         "tylko-katalog" (BEZ offscreen, okno na pulpicie): same katalog/zapis/podglad - widok Strona
 #         "katalog" = katalog roboczy na tymczasowym folderze z index.html (prawdziwa gemma4,
 #         zgoda na zapis klikana automatycznie, prawdziwe okienko zgody trafia do zapis.png)
+#         "mcp" = prawdziwa gemma4 rysuje diagram w ArchFlow przez serwer MCP z Twoich Ustawień
+#         (mcp.png + okno zgody mcp-zgoda.png; diagram zostaje w ArchFlow - usuń go po zrzutach)
 #         potem panel/czat/zasobnik kopiuje się do screenshots/lamadeck-*(_pl).png
 import os, sys, time, tempfile
 from pathlib import Path
 jezyk, wyjscie = sys.argv[1], Path(sys.argv[2]); z_czatem = "czat" in sys.argv[3:]
+z_mcp = "mcp" in sys.argv[3:]  # WHY: prawdziwa gemma4 + ArchFlow (zrzuty mcp.png, mcp-zgoda.png)
 z_katalogiem = "katalog" in sys.argv[3:]  # WHY: prawdziwa praca gemma4 na plikach (zrzuty katalog.png, zapis.png)
 # WHY: "tylko-katalog" = same zrzuty katalogu i podglądu - na ZWYKŁYM pulpicie (bez offscreen), bo
 #      w trybie offscreen Chromium (widok "Strona") rysuje tła, ale nie tekst
@@ -27,6 +30,15 @@ _prawdziwy_katalog = om.katalog_rozmow
 # WHY: rozmowy z testu w katalogu tymczasowym, ale podpowiedź na ekranie pokazuje zwykłą ścieżkę
 om.katalog_rozmow = lambda: _prawdziwy_katalog() if sys._getframe(1).f_code.co_name == "_strona_czat" else czaty
 om._wczytaj_jezyk_zapisany = lambda: jezyk
+# WHY: działający LamaDeck trzyma już port czatu w przeglądarce - okno zrzutów bierze wolny port,
+#      a karta i tak pokazuje zwykły adres (bez tego zrzut Ustawień pokazywał "nie uruchomiono")
+import socket
+def _wolny_port():
+    with socket.socket() as g:
+        g.bind(("127.0.0.1", 0)); return g.getsockname()[1]
+_uruchom_www, _adresy_www = om.SerwerCzatu.uruchom, om.www_adresy
+om.SerwerCzatu.uruchom = lambda self, port, lan: _uruchom_www(self, _wolny_port(), lan)
+om.www_adresy = lambda port=None: _adresy_www(om.WWW_PORT_DOMYSLNY)
 om._wczytaj_jezyk(jezyk)
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QEventLoop, QTimer
@@ -37,6 +49,9 @@ def czekaj(ms):
     p = QEventLoop(); QTimer.singleShot(ms, p.quit); p.exec()
 
 def zrzut(widget, nazwa):
+    # WHY: pasek stanu pokazuje ostatni komunikat, np. adres czatu w sieci domowej (Twój adres IP)
+    if hasattr(widget, "statusBar"):
+        widget.statusBar().clearMessage(); czekaj(50)
     obraz = widget.grab()
     # WHY: grab() okna nie łapie treści QWebEngineView (Chromium rysuje osobno) - widok strony
     #      zrzucany sam i wklejany w swoje miejsce
@@ -78,6 +93,9 @@ if not tylko_katalog:
     w._przejdz("ustawienia"); czekaj(2500); zrzut(w, "ustawienia")
     karta_czatu = w.combo_model_rag.parentWidget().parentWidget()
     zrzut(karta_czatu, "ustawienia-czat")
+    # WHAT: okno "Dodaj ArchFlow" - gotowy wpis, bez Twojego tokenu (pole Certyfikat (CA) widać przy HTTP)
+    okno_mcp = om.DialogSerwerMcp(dict(om.ARCHFLOW_MCP_HTTP), [], w, archflow=True)
+    okno_mcp.show(); czekaj(500); zrzut(okno_mcp, "serwer-mcp"); okno_mcp.close()
 
 if z_czatem and not tylko_katalog:
     w._przejdz("czat"); czekaj(3000)
@@ -87,7 +105,7 @@ if z_czatem and not tylko_katalog:
             c.setCurrentIndex(i); break
     print("   model:", c.currentText())
     w.btn_czat_internet.setChecked(True)
-    pytanie = {"pl": "Co nowego w najnowszej wersji Ollamy? Odpowiedz krótko, w kilku punktach.",
+    pytanie = {"pl": "Jakie są nowości w najnowszej wersji Ollamy? Odpowiedz krótko, w kilku punktach.",
                "en": "What's new in the latest Ollama release? Keep it short, a few bullet points."}[jezyk]
     w.pole_czat.setPlainText(pytanie); w.wyslij_czat()
     start = time.time()
@@ -96,8 +114,44 @@ if z_czatem and not tylko_katalog:
     czekaj(1500)
     print("   odpowiedź w %.0f s, źródeł: %d" % (time.time() - start, len(w._czat[-1].get("zrodla_www", []))))
     w.widok_czatu.verticalScrollBar().setValue(0); czekaj(300)
+    print("   serwer www:", w.serwer_www.dziala, "przycisk:", w.btn_czat_www.isVisible())
     zrzut(w, "czat")
     w.btn_czat_internet.setChecked(False)
+
+if z_mcp and not tylko_katalog:
+    zgody_mcp = []
+    def _zgoda_mcp(self):
+        # WHY: prawdziwe okno zgody na narzędzie - zrzut pierwszego, potem "Zezwól"
+        self.show(); czekaj(400)
+        if not zgody_mcp:
+            zrzut(self, "mcp-zgoda")
+        zgody_mcp.append(1); self.hide(); return om.QDialog.DialogCode.Accepted
+    om.DialogNarzedziaMcp.exec = _zgoda_mcp
+    # WHY: okno zgody pojawia się przy narzędziach, które coś zmieniają, tylko w tym trybie - ustawiony
+    #      w pamięci tego procesu, Twoje Ustawienia zostają bez zmian
+    om.zgody_mcp = lambda: "zmiany"
+    w._przejdz("czat"); czekaj(1500)
+    w.nowa_rozmowa()
+    c = w.combo_czat_model
+    for i in range(c.count()):
+        if "gemma4" in (c.itemData(i) or "") and "localhost" in (c.itemData(i) or ""):
+            c.setCurrentIndex(i); break
+    w.btn_czat_internet.setChecked(False)
+    w.btn_czat_mcp.setChecked(True)
+    pytanie = {"pl": "Narysuj w ArchFlow diagram mojego domowego AI: przeglądarka i telefon łączą się z LamaDeck, "
+                     "a LamaDeck z Ollamą na dwóch komputerach.",
+               "en": "Draw a diagram of my home AI in ArchFlow: a browser and a phone connect to LamaDeck, "
+                     "and LamaDeck to Ollama on two computers."}[jezyk]
+    w.pole_czat.setPlainText(pytanie); w.wyslij_czat()
+    start = time.time()
+    while w._czat_worker is not None and time.time() - start < 900:
+        czekaj(1000)
+    czekaj(1500)
+    print("   mcp: %.0f s, kroki: %s" % (time.time() - start,
+          [(k["nazwa"], k["stan"]) for k in w._czat[-1].get("narzedzia", [])]))
+    pasek = w.widok_czatu.verticalScrollBar(); pasek.setValue(pasek.maximum()); czekaj(300)
+    zrzut(w, "mcp")
+    w.btn_czat_mcp.setChecked(False)
 
 if z_katalogiem:
     import shutil

@@ -13,8 +13,9 @@ wszystko działa lokalnie, w Twoim LAN.
 > z Ollamą. Aktualizacja ze starej nazwy zachowuje ustawienia i rozmowy — program sam je
 > przenosi przy pierwszym uruchomieniu.
 
-> **Status: 1.2 — stabilna.** Używam jej na co dzień na własnym sprzęcie. Nowość w 1.2: czat
-> w przeglądarce — ten sam czat, modele i rozmowy, także na telefonie — patrz [Plan](#plan).
+> **Status: 1.3 — stabilna.** Używam jej na co dzień na własnym sprzęcie. Nowość w 1.3: serwery
+> MCP w czacie — model korzysta z narzędzi innych programów (np. ArchFlow rysuje diagramy), przez
+> http albo https — patrz [Plan](#plan).
 > [Zgłoszenia błędów i uwagi](../../issues) są mile widziane. Strona projektu: https://cyryllo.github.io/LamaDeck/pl/
 
 **Pierwszy raz? [Instrukcja](docs/PRZEWODNIK.md) pokazuje każdy ekran na zrzutach — co robi każda

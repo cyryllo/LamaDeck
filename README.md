@@ -17,8 +17,9 @@ everything runs on your LAN.
 **New here? The [user guide](docs/GUIDE.md) shows every screen with screenshots — what each feature
 does and how to turn it on** (also on the [project page](https://cyryllo.github.io/LamaDeck/guide/)).
 
-> **Status: 1.2 — stable.** Daily driver on my own setup. New in 1.2: the chat in your web
-> browser — the same chat, models and conversations, on your phone too — see the [Roadmap](#roadmap).
+> **Status: 1.3 — stable.** Daily driver on my own setup. New in 1.3: MCP servers in the chat —
+> the model uses tools of other programs (e.g. ArchFlow draws diagrams), over http or https —
+> see the [Roadmap](#roadmap).
 > [Bug reports and feedback](../../issues) are welcome. Project page: https://cyryllo.github.io/LamaDeck/
 
 ![LamaDeck — Dashboard](screenshots/lamadeck-dashboard.png)

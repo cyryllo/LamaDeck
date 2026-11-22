@@ -11,7 +11,9 @@ WHY:  the guide is written once, in Markdown, so GitHub shows it in the reposito
 Usage: guide.py <guide.md> <output.html> <lang: en|pl> <prefix for img/ paths> <path to site root>
 """
 import html
+import os
 import re
+import struct
 import sys
 
 LABELS = {
@@ -55,7 +57,24 @@ def inline(text, img_prefix):
     return "".join(out)
 
 
-def convert(markdown, img_prefix):
+def png_size(path):
+    """WHAT: width and height of a PNG file (from its IHDR header), or None.
+
+    WHY: images without width/height are 0 px tall until they load; with loading="lazy" they load
+         while the page scrolls to a heading from the contents, push the text down, and the reader
+         ends up far from what they clicked. With the size known, the browser keeps the space.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+    except OSError:
+        return None
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return struct.unpack(">II", head[16:24])
+
+
+def convert(markdown, img_prefix, source_dir="."):
     # WHAT: block-level parsing, line by line. Returns (title, body html, [(anchor, heading)]).
     lines = markdown.splitlines()
     body, toc, title = [], [], ""
@@ -101,11 +120,13 @@ def convert(markdown, img_prefix):
         if image:
             flush()
             alt, src = image.group(1), image.group(2)
+            size = png_size(os.path.join(source_dir, src)) if src.startswith("img/") else None
+            dims = f' width="{size[0]}" height="{size[1]}"' if size else ""
             if src.startswith("img/"):
                 src = img_prefix + src[len("img/"):]
             # WHY: a link to the full-size picture - screenshots are 1600 px wide
             body.append(f'<figure class="shot"><a href="{html.escape(src)}"><img src="{html.escape(src)}" '
-                        f'alt="{html.escape(alt)}" loading="lazy"></a><figcaption>{html.escape(alt)}</figcaption></figure>')
+                        f'alt="{html.escape(alt)}"{dims} loading="lazy"></a><figcaption>{html.escape(alt)}</figcaption></figure>')
             i += 1
             continue
         if stripped.startswith(">"):
@@ -203,7 +224,7 @@ def page(lang, title, body, toc, root):
 def main():
     source, target, lang, img_prefix, root = sys.argv[1:6]
     with open(source, encoding="utf-8") as f:
-        title, body, toc = convert(f.read(), img_prefix)
+        title, body, toc = convert(f.read(), img_prefix, os.path.dirname(os.path.abspath(source)))
     with open(target, "w", encoding="utf-8") as f:
         f.write(page(lang, title, body, toc, root))
 
