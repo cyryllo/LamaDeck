@@ -2846,8 +2846,8 @@ _ZALECANY_KONTEKST_MCP = 32768    # WHY: plan MCP - przy mniejszym oknie opisy n
 _MCP_TIMEOUT = 120                 # WHY: narzędzie może pracować dłużej (np. zbudowanie dużego diagramu)
 TRYBY_ZGOD_MCP = ["usuwanie", "zmiany"]
 # WHY: gotowy wpis dla ArchFlow (decyzja użytkownika - pierwszy serwer); inne dodaje się ręcznie
-ARCHFLOW_MCP_HTTP = {"nazwa": "ArchFlow", "wlaczony": True, "typ": "http",
-                     "adres": "http://localhost:9500/mcp", "token": "", "polecenie": "", "env": ""}
+ARCHFLOW_MCP_HTTP = {"nazwa": "ArchFlow", "wlaczony": True, "typ": "http", "adres": "http://localhost:9500/mcp",
+                     "token": "", "certyfikat": "", "polecenie": "", "env": ""}
 ARCHFLOW_MCP_POLECENIE = {"nazwa": "ArchFlow", "wlaczony": True, "typ": "polecenie", "adres": "", "token": "",
                           "polecenie": "npx -y archflow-mcp@latest", "env": "ARCHFLOW_URL=http://localhost:9500"}
 
@@ -2864,6 +2864,7 @@ def serwery_mcp():
             wynik.append({"nazwa": str(s["nazwa"]), "wlaczony": bool(s.get("wlaczony", True)),
                           "typ": "polecenie" if s.get("typ") == "polecenie" else "http",
                           "adres": str(s.get("adres", "")), "token": str(s.get("token", "")),
+                          "certyfikat": str(s.get("certyfikat", "")),
                           "polecenie": str(s.get("polecenie", "")), "env": str(s.get("env", ""))})
     return wynik
 
@@ -2906,8 +2907,12 @@ class BladPolaczeniaMcp(BladMcp):
 class KlientMcpHttp:
     """Serwer MCP przez Streamable HTTP (np. ArchFlow w Dockerze: http://host:9500/mcp)."""
 
-    def __init__(self, url, token=None, timeout=_MCP_TIMEOUT):
+    def __init__(self, url, token=None, timeout=_MCP_TIMEOUT, certyfikat=None):
         self.url, self.timeout = url, timeout
+        # WHY: https - własny certyfikat (plik CA, np. z domowego serwera) albo zaufane certyfikaty
+        #      systemu; requests z pip/AppImage ma swój zestaw (certifi) i nie widzi certyfikatów
+        #      dodanych do systemu, a paczka Debiana używa systemowych - tak jest wszędzie jednakowo
+        self.weryfikacja = certyfikat or _certyfikaty_systemu() or True
         self.naglowki = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
         if token:
             self.naglowki["Authorization"] = f"Bearer {token}"
@@ -2921,8 +2926,17 @@ class KlientMcpHttp:
             wiad["params"] = params
         if not powiadomienie:
             wiad["id"] = next(self._id)
+        # WHY: plik certyfikatu z ustawień zniknął - sprawdzane wprost, bo w requests każdy błąd
+        #      połączenia też jest OSError i nie da się ich rozróżnić po wyjątku
+        if isinstance(self.weryfikacja, str) and not os.path.isfile(self.weryfikacja):
+            raise BladMcp(_("Nie udało się odczytać certyfikatu ({blad}).").format(blad=self.weryfikacja))
         try:
-            r = requests.post(self.url, json=wiad, headers=self.naglowki, timeout=(10, self.timeout), stream=True)
+            r = requests.post(self.url, json=wiad, headers=self.naglowki, timeout=(10, self.timeout), stream=True,
+                              verify=self.weryfikacja)
+        except requests.exceptions.SSLError as e:
+            raise BladMcp(_("Certyfikat serwera MCP nie jest zaufany ({blad}). Jeśli to Twój własny certyfikat, "
+                            "wskaż jego plik w polu \"Certyfikat (CA)\" przy tym serwerze.").format(
+                                blad=_przyczyna_ssl(e))) from None
         except requests.RequestException as e:
             raise BladPolaczeniaMcp(_("Serwer MCP pod adresem {adres} nie odpowiada ({blad}).").format(adres=self.url, blad=e)) \
                 from None
@@ -3074,7 +3088,24 @@ def _klient_mcp(serwer):
         return KlientMcpStdio(serwer["polecenie"], _zmienne_z_tekstu(serwer["env"]))
     if not serwer["adres"].startswith(("http://", "https://")):
         raise BladMcp(_("Adres serwera MCP musi zaczynać się od http:// albo https://."))
-    return KlientMcpHttp(serwer["adres"], serwer["token"] or None)
+    return KlientMcpHttp(serwer["adres"], serwer["token"] or None, certyfikat=serwer.get("certyfikat") or None)
+
+
+def _przyczyna_ssl(blad):
+    # WHAT: sama przyczyna z długiego opisu requests ("... certificate verify failed: self-signed
+    #       certificate (_ssl.c:1029)" -> "self-signed certificate")
+    tekst = str(blad)
+    m = re.search(r"certificate verify failed: ([^(]+)", tekst) or re.search(r"SSLError\((?:\d+, )?'?([^']+)", tekst)
+    return (m.group(1) if m else tekst).strip()[:160]
+
+
+def _certyfikaty_systemu():
+    # WHAT: plik z zaufanymi certyfikatami systemu (Debian/Ubuntu, Fedora/openSUSE) albo None.
+    for sciezka in ("/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
+                    "/etc/ssl/ca-bundle.pem"):
+        if os.path.isfile(sciezka):
+            return sciezka
+    return None
 
 
 def tekst_wyniku_mcp(wynik):
@@ -5396,6 +5427,16 @@ class DialogSerwerMcp(QDialog):
         self.pole_token = QLineEdit(serwer.get("token", ""))
         self.pole_token.setEchoMode(QLineEdit.EchoMode.Password)
         self.pole_token.setPlaceholderText(_("puste = bez tokenu"))
+        # WHAT: plik certyfikatu dla https z własnym (domowym) certyfikatem - pole + "Wybierz..."
+        self.pole_certyfikat = QLineEdit(serwer.get("certyfikat", ""))
+        self.pole_certyfikat.setPlaceholderText(_("puste = certyfikaty zaufane w systemie"))
+        wybierz = QPushButton(_("Wybierz..."))
+        wybierz.clicked.connect(self._wybierz_certyfikat)
+        self.wiersz_certyfikatu = QWidget()
+        h = QHBoxLayout(self.wiersz_certyfikatu)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(self.pole_certyfikat, 1)
+        h.addWidget(wybierz)
         self.pole_polecenie = QLineEdit(serwer.get("polecenie", ""))
         self.pole_polecenie.setPlaceholderText("npx -y archflow-mcp@latest")
         self.pole_env = QPlainTextEdit(serwer.get("env", ""))
@@ -5403,6 +5444,7 @@ class DialogSerwerMcp(QDialog):
         self.pole_env.setFixedHeight(80)
         self._wiersze = {"http": [], "polecenie": []}
         for typ, etykieta, pole in (("http", _("Adres"), self.pole_adres), ("http", _("Token"), self.pole_token),
+                                    ("http", _("Certyfikat (CA)"), self.wiersz_certyfikatu),
                                     ("polecenie", _("Polecenie"), self.pole_polecenie),
                                     ("polecenie", _("Zmienne środowiskowe"), self.pole_env)):
             lbl = QLabel(etykieta)
@@ -5431,6 +5473,12 @@ class DialogSerwerMcp(QDialog):
         self._pokaz_pola()
         self.wynik = None
 
+    def _wybierz_certyfikat(self):
+        plik, _f = QFileDialog.getOpenFileName(self, _("Certyfikat (CA)"), str(Path.home()),
+                                               _("Certyfikaty (*.pem *.crt *.cer)") + ";;" + _("Wszystkie pliki (*)"))
+        if plik:
+            self.pole_certyfikat.setText(plik)
+
     def _pokaz_pola(self, *_a):
         typ = self.combo_typ.currentData()
         for rodzaj, widzety in self._wiersze.items():
@@ -5456,6 +5504,7 @@ class DialogSerwerMcp(QDialog):
         self.wynik = {"nazwa": nazwa, "wlaczony": True, "typ": typ,
                       "adres": self.pole_adres.text().strip() if typ == "http" else "",
                       "token": self.pole_token.text().strip() if typ == "http" else "",
+                      "certyfikat": self.pole_certyfikat.text().strip() if typ == "http" else "",
                       "polecenie": self.pole_polecenie.text().strip() if typ == "polecenie" else "",
                       "env": self.pole_env.toPlainText().strip() if typ == "polecenie" else ""}
         self.accept()
@@ -14060,6 +14109,26 @@ def _wczytaj_motyw(app):
     PALETA = Paleta()
 
 
+def _wersja_krotka(tekst):
+    # WHAT: "1.3.1" -> (1, 3, 1); bez liczb -> (0,) - porównanie wersji dwóch kopii programu.
+    return tuple(int(x) for x in re.findall(r"\d+", tekst)[:3]) or (0,)
+
+
+def _czekaj_na_koniec_kopii(nazwa_gniazda, sekund=15):
+    # WHAT: starsza kopia obiecała się zamknąć - czekamy, aż zwolni gniazdo (i port czatu w przeglądarce).
+    # WHY:  zamyka się kilka chwil (serwery MCP, czat w przeglądarce); gdy nie zdąży, nowa kopia
+    #       się wycofuje zamiast działać obok starej.
+    koniec = time.monotonic() + sekund
+    while time.monotonic() < koniec:
+        proba = QLocalSocket()
+        proba.connectToServer(nazwa_gniazda)
+        if not proba.waitForConnected(200):
+            return True
+        proba.abort()
+        time.sleep(0.2)
+    return False
+
+
 def main():
     _przenies_dane_ollama_manager()  # WHY: przed pierwszym użyciem QSettings
     _odswiez_sciezke_appimage()
@@ -14074,14 +14143,19 @@ def main():
     # WHAT: tylko jedna kopia programu naraz.
     # WHY:  z zasobnikiem program działa w tle (np. z autostartu) - drugie
     #       uruchomienie z menu pokazuje istniejące okno, zamiast drugiej ikony.
+    #       Od 1.3.1 kopia wysyła swoją wersję: działająca STARSZA ustępuje ("ustap") i się zamyka -
+    #       inaczej po aktualizacji (apt, nowy AppImage) dalej pokazywała się stara wersja, aż do
+    #       ręcznego "Zakończ" (zgłoszenie użytkownika). Starsze wersje (do 1.3.0) tego nie znają -
+    #       po prostu pokazują swoje okno, jak dawniej.
     nazwa_gniazda = f"{ID_PROGRAMU}-{getpass.getuser()}"
     gniazdo = QLocalSocket()
     gniazdo.connectToServer(nazwa_gniazda)
     if gniazdo.waitForConnected(300):
-        if not w_zasobniku:
-            gniazdo.write(b"pokaz")
-            gniazdo.waitForBytesWritten(300)
-        return
+        gniazdo.write(f"{'start' if w_zasobniku else 'pokaz'} {WERSJA}".encode())
+        gniazdo.waitForBytesWritten(300)
+        odpowiedz = bytes(gniazdo.readAll()) if gniazdo.waitForReadyRead(1500) else b""
+        if not odpowiedz.startswith(b"ustap") or not _czekaj_na_koniec_kopii(nazwa_gniazda):
+            return
     QLocalServer.removeServer(nazwa_gniazda)  # WHY: gniazdo po kopii, która się wywaliła
     serwer = QLocalServer()
     serwer.listen(nazwa_gniazda)
@@ -14089,11 +14163,26 @@ def main():
     _wczytaj_motyw(app)
     okno = MainWindow()
     def _nowe_polaczenie():
-        # WHY: okno pokazujemy tylko na wiadomość "pokaz" - kopia z autostartu
-        #      (--w-zasobniku) łączy się bez niej i ma po prostu się zakończyć.
+        # WHAT: druga kopia programu: "pokaz <wersja>" (z menu) albo "start <wersja>" (autostart).
+        # WHY:  nowsza wersja dostaje "ustap" i przejmuje miejsce, a ta się zamyka; ta sama albo
+        #       starsza - okno pokazujemy tylko na "pokaz" (kopia z autostartu kończy się po cichu).
         polaczenie = serwer.nextPendingConnection()
-        polaczenie.readyRead.connect(
-            lambda: okno.pokaz_okno() if bytes(polaczenie.readAll()).startswith(b"pokaz") else None)
+
+        def _czytaj():
+            czesci = bytes(polaczenie.readAll()).decode("utf-8", "replace").split()
+            if not czesci:
+                return
+            if len(czesci) > 1 and _wersja_krotka(czesci[1]) > _wersja_krotka(WERSJA):
+                polaczenie.write(b"ustap")
+                polaczenie.waitForBytesWritten(500)
+                QTimer.singleShot(0, okno.zakoncz)
+                return
+            polaczenie.write(b"ok")
+            polaczenie.flush()
+            if czesci[0] == "pokaz":
+                okno.pokaz_okno()
+
+        polaczenie.readyRead.connect(_czytaj)
 
     serwer.newConnection.connect(_nowe_polaczenie)
     # WHY: port zwolniony od razu przy końcu programu (wątki serwera i tak są w tle)

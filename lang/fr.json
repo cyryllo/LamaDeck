@@ -832,5 +832,12 @@
   "{model} nie umie korzystać z narzędzi - do narzędzi MCP wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo wyłącz narzędzia MCP.": "{model} ne sait pas utiliser d'outils - pour les outils MCP, choisissez un modèle avec l'étiquette « outils » (par ex. qwen3, gemma4) ou désactivez les outils MCP.",
   "{narzedzie} - serwer MCP {serwer}": "{narzedzie} - serveur MCP {serwer}",
   "Łączę z serwerami MCP...": "Connexion aux serveurs MCP...",
-  "Łączę...": "Connexion..."
+  "Łączę...": "Connexion...",
+  "Certyfikat (CA)": "Certificat (CA)",
+  "Wybierz...": "Choisir...",
+  "puste = certyfikaty zaufane w systemie": "vide = certificats approuvés par le système",
+  "Certyfikaty (*.pem *.crt *.cer)": "Certificats (*.pem *.crt *.cer)",
+  "Wszystkie pliki (*)": "Tous les fichiers (*)",
+  "Nie udało się odczytać certyfikatu ({blad}).": "Impossible de lire le certificat ({blad}).",
+  "Certyfikat serwera MCP nie jest zaufany ({blad}). Jeśli to Twój własny certyfikat, wskaż jego plik w polu \"Certyfikat (CA)\" przy tym serwerze.": "Le certificat du serveur MCP n'est pas approuvé ({blad}). S'il s'agit de votre propre certificat, choisissez son fichier dans le champ \"Certificat (CA)\" de ce serveur."
 }

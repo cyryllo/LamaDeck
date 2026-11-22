@@ -273,6 +273,9 @@ diagram i poda do niego link. Działa w oknie programu i w czacie w przeglądarc
 - **Dodaj serwer** — dowolny inny serwer MCP: pod **adresem HTTP** (z tokenem albo bez) albo jako
   **polecenie** uruchamiane na tym komputerze, ze zmiennymi środowiskowymi (`KLUCZ=WARTOŚĆ`,
   jedna na linię).
+- Adres może zaczynać się od `http://` albo `https://`. W sieci domowej zwykle wystarczy `http://`,
+  do serwera w internecie użyj `https://`. Certyfikat z zaufanego urzędu (np. Let's Encrypt)
+  działa od razu. Jeśli serwer ma własny certyfikat, wskaż jego plik w polu **Certyfikat (CA)**.
 - **Sprawdź połączenie** pokazuje liczbę narzędzi serwera albo czytelny błąd. Przełącznikiem przy
   serwerze wyłączysz go bez usuwania.
 

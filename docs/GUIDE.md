@@ -273,6 +273,10 @@ diagram itself and gives you its link. It works in the app window and in the cha
   the diagrams).
 - **Add server** — any other MCP server: at an **HTTP address** (with or without a token) or as a
   **command** run on this computer, with environment variables (`KEY=VALUE`, one per line).
+- The address can start with `http://` or `https://`. On a home network `http://` is usually
+  enough; for a server on the internet use `https://`. A certificate from a trusted authority
+  (e.g. Let's Encrypt) works right away. If the server has its own certificate, choose its file
+  in the **Certificate (CA)** field.
 - **Test connection** shows how many tools the server has, or a plain error. The switch next to a
   server turns it off without removing it.
 
