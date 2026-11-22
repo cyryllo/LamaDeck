@@ -239,8 +239,10 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Czat może korzystać z narzędzi innych programów przez MCP (Model Context Protocol) — np.
   [ArchFlow](https://github.com/cyryllo/ArchFlow) rysuje diagramy: *„Narysuj w ArchFlow mój homelab”*
 - *Ustawienia → Czat → Serwery MCP*: **Dodaj ArchFlow** (gotowy wpis) albo **Dodaj serwer** dla
-  dowolnego innego — pod adresem HTTP (z tokenem) albo jako polecenie uruchamiane na tym komputerze
-  (np. `npx -y …`); **Sprawdź połączenie** pokazuje liczbę narzędzi
+  dowolnego innego — pod adresem `http://` albo `https://` (z tokenem) albo jako polecenie
+  uruchamiane na tym komputerze (np. `npx -y …`); **Sprawdź połączenie** pokazuje liczbę narzędzi
+- HTTPS: certyfikaty zaufane w systemie działają od razu (także w AppImage); dla serwera z własnym
+  certyfikatem wskaż jego plik w polu **Certyfikat (CA)**
 - Przycisk z wtyczką w czacie włącza narzędzia; każde użycie widać w odpowiedzi. Pyta przed
   narzędziami, które usuwają (albo przed każdym, które coś zmienia — do wyboru); narzędzia tylko do
   odczytu nigdy nie pytają. Działa w oknie i w czacie w przeglądarce
@@ -271,6 +273,7 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - Zamknięcie okna chowa je do zasobnika; program kończysz z menu ikony
 - Opcjonalnie start programu po zalogowaniu, od razu schowanego w zasobniku
 - Działa tylko jedna kopia programu — ponowne uruchomienie po prostu pokazuje okno
+- Po aktualizacji po prostu uruchom go ponownie — nowa wersja zastępuje działającą starą (od 1.3.1)
 
 **Ustawienia**
 - Język interfejsu — polski, angielski, niemiecki, hiszpański, francuski, portugalski, włoski;
@@ -310,7 +313,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
   ten komputer; sieć domowa z hasłem i kodem QR
 
 - [x] **1.3** — serwery MCP w czacie (HTTP i polecenie), na start ArchFlow: lokalny model rysuje
-  diagramy
+  diagramy; 1.3.1: MCP przez HTTPS (także z własnym certyfikatem), nowa wersja po aktualizacji
+  zastępuje działającą starą
 
 **Dalej:** dopracowanie po codziennym używaniu. Pomysły i życzenia mile widziane w
 [zgłoszeniach](../../issues).

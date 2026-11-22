@@ -376,7 +376,9 @@ Włącz *Ustawienia → Ikona w zasobniku systemowym*. Wtedy:
 - środkowy klik — główne okno, prawy — menu z **Zakończ** (i **Czat w przeglądarce**, gdy jest
   włączony),
 - zamknięcie okna tylko chowa je do zasobnika; program kończysz przez **Zakończ** w menu ikony,
-- **Uruchamiaj program po zalogowaniu** startuje LamaDeck od razu schowany w zasobniku.
+- **Uruchamiaj program po zalogowaniu** startuje LamaDeck od razu schowany w zasobniku,
+- po aktualizacji po prostu uruchom LamaDeck jeszcze raz: nowa wersja prosi działającą starą o
+  zamknięcie i zajmuje jej miejsce (od 1.3.1; wersję 1.3.0 i starsze zamknij raz przez **Zakończ**).
 
 ## Gdzie są Twoje dane
 
@@ -406,6 +408,16 @@ wyszukiwaniem w internecie, które włączasz sam.
 - **Telefon nie otwiera czatu w przeglądarce** — telefon musi być w tej samej sieci, a *Dostęp
   z sieci domowej* włączony. Zapora na komputerze (np. `ufw`) może blokować port — zezwól na
   `11500/tcp`. Gdy karta pokazuje *Nie wystartował*, port zajmuje inny program — zmień **Port**.
+
+- **Po aktualizacji dalej uruchamia się stara wersja** — działająca kopia jest starsza niż 1.3.1
+  i nie wie, że ma ustąpić: zamknij ją raz (ikona w zasobniku → **Zakończ**) i uruchom LamaDeck
+  ponownie. Jeśli kiedyś instalowałeś go przez `install.sh`, a teraz używasz `.deb`, usuń starą
+  kopię poleceniem `./install.sh --uninstall` — jej wpis w menu może dalej uruchamiać starą wersję.
+  Przy apt najpierw `sudo apt update`, żeby apt w ogóle zobaczył nową wersję.
+
+- **Serwer MCP zgłasza „certyfikat nie jest zaufany”** — serwer ma własny (wystawiony samodzielnie)
+  certyfikat. Wskaż jego plik w polu **Certyfikat (CA)** przy tym serwerze (*Ustawienia → Czat →
+  Serwery MCP → Zmień*). Tylko publiczny certyfikat, nigdy klucz prywatny.
 
 - **Model pokazuje kod w czacie zamiast go zapisać** — sprawdź, czy widać pasek katalogu (katalog
   jest wybrany) i czy model ma tag *narzędzia*. Mniejsze modele czasem ignorują polecenie; wtedy

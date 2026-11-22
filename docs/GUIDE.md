@@ -375,7 +375,9 @@ Turn on *Settings → System tray icon*. Then:
 - middle click — the main window, right click — the menu with **Quit** (and **Chat in the browser**
   when it's on),
 - closing the window only hides it in the tray; quit with **Quit** in the icon's menu,
-- **Start the program after login** starts LamaDeck already hidden in the tray.
+- **Start the program after login** starts LamaDeck already hidden in the tray,
+- after an update just start LamaDeck again: the new version asks the running old one to close and
+  takes its place (from 1.3.1 on; close 1.3.0 or older once with **Quit**).
 
 ## Where your data is
 
@@ -405,6 +407,16 @@ searches you turn on yourself.
   *Access from the home network* must be on. A firewall on the computer (e.g. `ufw`) may block the
   port — allow `11500/tcp`. If the card says *Did not start*, another program uses the port —
   change **Port**.
+
+- **After an update the old version still starts** — the running copy is older than 1.3.1 and
+  doesn't know it should hand over: close it once (tray icon → **Quit**) and start LamaDeck again.
+  If you once installed it with `install.sh` and now use the `.deb`, remove the old copy with
+  `./install.sh --uninstall` — its menu entry may still start the old version. With apt, run
+  `sudo apt update` first, so apt knows about the new version.
+
+- **An MCP server says "certificate is not trusted"** — the server uses its own (self-signed)
+  certificate. Choose its file in the server's **Certificate (CA)** field (*Settings → Chat → MCP
+  servers → Edit*). Only the public certificate, never the private key.
 
 - **The model shows code in the chat instead of saving it** — check that the folder bar is visible
   (the folder is chosen) and that the model is tagged *tools*. Smaller models sometimes ignore the
