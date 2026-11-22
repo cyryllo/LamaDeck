@@ -320,7 +320,8 @@ fonts are bundled, so it looks the same everywhere).
 
 - [x] **1.3** — MCP servers in the chat (HTTP and command), starting with ArchFlow: a local model
   draws diagrams; 1.3.1: MCP over HTTPS (own certificates too), the new version replaces the
-  running old one after an update
+  running old one after an update; 1.3.2: readable links and LaTeX arrows in answers, the question
+  box on a phone
 
 **Next:** polishing from everyday use. Ideas and wishes are welcome in the [issues](../../issues).
 

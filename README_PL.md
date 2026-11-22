@@ -315,7 +315,8 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 - [x] **1.3** — serwery MCP w czacie (HTTP i polecenie), na start ArchFlow: lokalny model rysuje
   diagramy; 1.3.1: MCP przez HTTPS (także z własnym certyfikatem), nowa wersja po aktualizacji
-  zastępuje działającą starą
+  zastępuje działającą starą; 1.3.2: czytelne linki i strzałki LaTeX w odpowiedziach, pole pytania
+  na telefonie
 
 **Dalej:** dopracowanie po codziennym używaniu. Pomysły i życzenia mile widziane w
 [zgłoszeniach](../../issues).
