@@ -27,7 +27,7 @@
 
 <main>
   <div class="wrap intro">
-    <span class="status">Version 1.2 · free and open source (GPL-3.0)</span>
+    <span class="status">Version 1.3 · free and open source (GPL-3.0)</span>
     <h1>A control panel for your local AI stack</h1>
     <p class="lead">LamaDeck is a desktop app for KDE that runs Ollama on every computer in your
       home network, joins all their models behind one address for VS Code and other tools, and
@@ -96,6 +96,9 @@
       <div>
         <h2>A chat that shows the numbers</h2>
         <ul style="margin-top:1.25rem">
+          <li><strong>Tools of other programs (MCP)</strong>: connect MCP servers - at an address or
+            as a command - and the model uses their tools, e.g. ArchFlow draws your diagrams. Asks
+            before anything that deletes.</li>
           <li><strong>Working folder</strong>: the model reads and searches the files of a folder you
             choose and changes them only with your approval, with a preview of every change. Click
             a saved file to see it next to the conversation - a web page or a game runs right there
@@ -228,13 +231,21 @@ cd LamaDeck
               files, every change approved; saved files and a live preview, web pages and games too</li>
           </ul>
         </div>
-        <div class="milestone now">
+        <div class="milestone">
           <h3>1.2 · done: the chat in your web browser</h3>
           <ul>
             <li><span class="done">1.2.0:</span> the same chat and conversations in the browser, on
               your phone too; home network with a password and a QR code</li>
             <li><span class="done">1.2.1:</span> attachments, the working folder with approval and
               the file preview in the browser</li>
+          </ul>
+        </div>
+        <div class="milestone now">
+          <h3>1.3 · done: MCP servers in the chat</h3>
+          <ul>
+            <li><span class="done">1.3.0:</span> tools of other programs through MCP - any number of
+              servers at an address or as a command, ready-made ArchFlow entry, approvals before
+              deleting; in the window and in the browser</li>
           </ul>
         </div>
         <div class="milestone">
