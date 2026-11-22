@@ -5282,6 +5282,23 @@ def wczytaj_rozmowe(id_rozmowy):
     return dane
 
 
+# WHAT: pojedyncze symbole LaTeX w $...$ -> zwykłe znaki (tylko do wyświetlenia, kopiowanie bez zmian).
+# WHY:  modele (np. gemma4) piszą trasy i przejścia jako "A $\rightarrow$ B" - czat nie składa wzorów,
+#       więc na ekranie zostawał surowy zapis LaTeX. Zamieniamy tylko pojedynczy znany symbol, nic więcej.
+#       Ta sama lista jest w web/app.js (bezLatexu).
+_SYMBOLE_LATEX = {
+    "rightarrow": "→", "to": "→", "leftarrow": "←", "gets": "←", "leftrightarrow": "↔",
+    "Rightarrow": "⇒", "Leftarrow": "⇐", "Leftrightarrow": "⇔", "implies": "⇒", "uparrow": "↑",
+    "downarrow": "↓", "times": "×", "cdot": "·", "approx": "≈", "neq": "≠", "ne": "≠", "le": "≤",
+    "leq": "≤", "ge": "≥", "geq": "≥", "pm": "±", "ldots": "…", "dots": "…", "infty": "∞", "circ": "°",
+}
+_WZORZEC_SYMBOLU_LATEX = re.compile(r"\$\s*\\(" + "|".join(sorted(_SYMBOLE_LATEX, key=len, reverse=True)) + r")\s*\$")
+
+
+def bez_latexu(tekst):
+    return _WZORZEC_SYMBOLU_LATEX.sub(lambda m: _SYMBOLE_LATEX[m.group(1)], tekst)
+
+
 def _rozdziel_myslenie(tresc):
     # WHAT: (rozumowanie, odpowiedź) z treści, w której model sam wstawił <think>...</think>.
     # WHY:  nowsza Ollama oddaje rozumowanie w osobnym polu "thinking", ale część
@@ -5484,6 +5501,10 @@ class DialogSerwerMcp(QDialog):
         for rodzaj, widzety in self._wiersze.items():
             for w in widzety:
                 w.setVisible(rodzaj == typ)
+        # WHY: inna liczba wierszy (HTTP ma ich więcej) - bez tego okno zostawało przy starej wysokości
+        #      i ściskało wiersze, ostatni (Certyfikat) był ucięty
+        self.layout().activate()
+        self.resize(self.width(), max(self.height(), self.sizeHint().height()))
 
     def _zapisz(self):
         nazwa = self.pole_nazwa.text().strip()
@@ -5780,7 +5801,9 @@ class WidokCzatu(QTextBrowser):
                 praca_w_ciszy = _("Model wciąż pracuje ({s} s) - zapis dłuższego pliku może potrwać kilka minut; "
                                   "potem pojawi się okienko z podglądem zmian.").format(s=cisza)
         if odpowiedz.strip():
-            c.insertMarkdown(odpowiedz)
+            poczatek = c.position()
+            c.insertMarkdown(bez_latexu(odpowiedz))
+            self._koloruj_linki(poczatek, c.position())
             # WHAT: pliki zapisane w tej odpowiedzi - klik otwiera podgląd obok rozmowy
             zapisane = list(dict.fromkeys(k["sciezka"] for k in w.get("narzedzia") or []
                                           if k.get("nazwa") in ("write_file", "edit_file") and k.get("stan") == "ok"))
@@ -5869,6 +5892,25 @@ class WidokCzatu(QTextBrowser):
                     tekst += " - " + (_("żeby dalej pytać o ten plik, dołącz go ponownie")
                                       if z.get("bez_wyszukiwania") else _("wyszukiwanie fragmentów"))
                 c.insertText(tekst, self._znaki(self.kolorWyciszony))
+
+    def _koloruj_linki(self, od, do):
+        # WHAT: linki z Markdownu odpowiedzi w kolorze linków z theme.qss (jak źródła pod odpowiedzią).
+        # WHY:  Qt przy insertMarkdown barwi linki kolorem z palety systemu - ciemnoniebieskim, prawie
+        #       niewidocznym na ciemnym tle (widać było na zrzutach z linkiem do diagramu ArchFlow)
+        blok = self.document().findBlock(od)
+        while blok.isValid() and blok.position() < do:
+            it = blok.begin()
+            while not it.atEnd():
+                fragment = it.fragment()
+                if fragment.isValid() and fragment.charFormat().isAnchor():
+                    k = QTextCursor(self.document())
+                    k.setPosition(max(fragment.position(), od))
+                    k.setPosition(min(fragment.position() + fragment.length(), do), QTextCursor.MoveMode.KeepAnchor)
+                    f = QTextCharFormat()
+                    f.setForeground(self.kolorLinku)
+                    k.mergeCharFormat(f)
+                it += 1
+            blok = blok.next()
 
     def _styl_kodu(self, ramka):
         # WHAT: bloki kodu - tło i JetBrains Mono, zawijane, z linkiem "Kopiuj kod" nad

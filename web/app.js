@@ -811,6 +811,18 @@ function escapeHtml(tekst) {
   return String(tekst).replace(/[&<>"']/g, (z) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[z]));
 }
 
+// WHAT: pojedyncze symbole LaTeX w $...$ -> zwykłe znaki (tylko wyświetlanie; ta sama lista co
+//       _SYMBOLE_LATEX w lamadeck.py). WHY: modele piszą "A $\\rightarrow$ B", a czat nie składa wzorów.
+const SYMBOLE_LATEX = {
+  rightarrow: "→", to: "→", leftarrow: "←", gets: "←", leftrightarrow: "↔", Rightarrow: "⇒", Leftarrow: "⇐",
+  Leftrightarrow: "⇔", implies: "⇒", uparrow: "↑", downarrow: "↓", times: "×", cdot: "·", approx: "≈",
+  neq: "≠", ne: "≠", le: "≤", leq: "≤", ge: "≥", geq: "≥", pm: "±", ldots: "…", dots: "…", infty: "∞", circ: "°",
+};
+const WZORZEC_LATEX = new RegExp("\\$\\s*\\\\(" + Object.keys(SYMBOLE_LATEX).sort((a, b) => b.length - a.length).join("|") + ")\\s*\\$", "g");
+function bezLatexu(tekst) {
+  return String(tekst).replace(WZORZEC_LATEX, (_c, nazwa) => SYMBOLE_LATEX[nazwa]);
+}
+
 let markedGotowy = false;
 
 function markdown(tekst) {
@@ -839,7 +851,7 @@ function markdown(tekst) {
     });
     markedGotowy = true;
   }
-  return marked.parse(tekst);
+  return marked.parse(bezLatexu(tekst));
 }
 
 // --- Kontekst ---

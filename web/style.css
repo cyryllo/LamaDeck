@@ -284,7 +284,11 @@ iframe.strona { border: 1px solid var(--karta-ramka); border-radius: 8px; backgr
   .opis-modelu { width: 100%; }
   .kontekst { min-width: 110px; flex: 1; margin-left: auto; }
   .rozmowa { padding: 16px; }
-  .pole { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .pole { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+  /* WHY: przy czterech przyciskach (spinacz, folder, globus, wtyczka) pole pytania miało na telefonie
+          kilka liter szerokości - teraz zajmuje cały wiersz, a przyciski i "Wyślij" są pod nim */
+  .pole textarea { order: -1; flex-basis: 100%; }
+  .pole .przycisk.glowny { margin-left: auto; }
   .uwaga-czatu, .chipy, .ramka-katalogu { margin-left: 16px; margin-right: 16px; }
   .uklad.z-podgladem .pasek { display: flex; }
 }
