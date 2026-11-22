@@ -234,6 +234,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--akcent); }
 }
 .okno h2 { margin: 0; font-size: 18px; }
 .okno .wyciszony { margin: 0; color: var(--wyciszony); font-size: 13px; }
+.okno .ostrzezenie { margin: 0; color: var(--uwaga); font-size: 13px; }
 .przyciski { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 .przyciski .odstep { flex: 1; }
 .roznica {

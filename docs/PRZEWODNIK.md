@@ -257,6 +257,42 @@ rozmowy (Kod, Zmiany, Strona). Na telefonie lista rozmów jest pod przyciskiem �
   Strona z katalogu roboczego działa w piaskownicy i nie dostanie się do czatu.
 - Ustawienia, modele i usługi zmieniasz tylko w programie.
 
+## Serwery MCP
+
+Czat może korzystać z narzędzi innych programów przez **MCP** (Model Context Protocol). Na przykład
+ArchFlow rysuje diagramy: poproś *„Narysuj w ArchFlow diagram mojego homelaba”*, a model sam zbuduje
+diagram i poda do niego link. Działa w oknie programu i w czacie w przeglądarce.
+
+**Jak dodać serwer** — *Ustawienia → Czat → Serwery MCP*:
+
+- **Dodaj ArchFlow** wypełnia pola za Ciebie. W ArchFlow w Dockerze włącz MCP (ustaw `MCP_TOKEN`
+  w pliku `.env` kontenera i uruchom go ponownie), a w LamaDeck wpisz adres
+  `http://<serwer>:9500/mcp` i ten sam token. Bez Dockera wybierz **Polecenie**:
+  `npx -y archflow-mcp@latest` (wymaga Node.js) ze zmienną `ARCHFLOW_URL` albo `ARCHFLOW_DIR`
+  (folder na diagramy).
+- **Dodaj serwer** — dowolny inny serwer MCP: pod **adresem HTTP** (z tokenem albo bez) albo jako
+  **polecenie** uruchamiane na tym komputerze, ze zmiennymi środowiskowymi (`KLUCZ=WARTOŚĆ`,
+  jedna na linię).
+- **Sprawdź połączenie** pokazuje liczbę narzędzi serwera albo czytelny błąd. Przełącznikiem przy
+  serwerze wyłączysz go bez usuwania.
+
+**W czacie** włącz przycisk z wtyczką obok globusa. Model potrzebuje tagu *narzędzia* (np. qwen3,
+gemma4). Każde użycie narzędzia widać w odpowiedzi, np. „› użył narzędzia: build_diagram (ArchFlow)”.
+
+**Zgody** — *Pytaj o zgodę na narzędzia MCP*: **Tylko przed usuwaniem** (domyślnie) albo **Przed
+każdym, które coś zmienia**. Narzędzia tylko do odczytu działają zawsze bez pytania. Okienko pokazuje
+serwer, narzędzie i dokładnie to, co model chce przekazać.
+
+**Warto wiedzieć:**
+
+- Opisy narzędzi zajmują kilka tysięcy tokenów. Program ostrzeże, gdy okno kontekstu jest mniejsze
+  niż 32k — zwiększ wtedy `OLLAMA_CONTEXT_LENGTH` w Ustawieniach. Najlepiej radzą sobie większe
+  modele (np. qwen3:30b-a3b, gemma4:26b); modele 7–8B często się gubią.
+- Serwer-polecenie startuje przy pierwszym użyciu i działa do zamknięcia programu.
+- Token zapisuje się w ustawieniach programu otwartym tekstem.
+- Gdy serwer jest niedostępny, odpowiedź idzie dalej bez jego narzędzi, a nad polem pytania pojawia
+  się uwaga.
+
 ## Router LiteLLM
 
 ![Router LiteLLM](img/pl/router.png)
@@ -317,6 +353,8 @@ zalogowaniu).
 
 ![Ustawienia czatu](img/pl/ustawienia-czat.png)
 
+- **Serwery MCP** (w karcie Czat) — narzędzia innych programów dla modelu (patrz
+  [Serwery MCP](#serwery-mcp)).
 - **Czat w przeglądarce** — włączenie, port, dostęp z sieci domowej z hasłem, adres i kod QR
   (patrz [Czat w przeglądarce](#czat-w-przeglądarce)).
 - **Zmienne środowiskowe Ollamy** (niżej na tym samym ekranie) — każda z krótkim opisem.

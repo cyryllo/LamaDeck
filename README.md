@@ -240,6 +240,17 @@ fonts are bundled, so it looks the same everywhere).
 
 ![Chat in the browser](screenshots/lamadeck-web.png)
 
+**MCP servers** (1.3)
+- The chat can use tools of other programs through MCP (Model Context Protocol) — e.g.
+  [ArchFlow](https://github.com/cyryllo/ArchFlow) draws diagrams: *"Draw my homelab in ArchFlow"*
+- *Settings → Chat → MCP servers*: **Add ArchFlow** (ready-made entry) or **Add server** for any
+  other one — at an HTTP address (with a token) or as a command run on this computer (e.g.
+  `npx -y …`); **Test connection** shows the number of tools
+- The plug button in the chat turns the tools on; every tool use shows in the answer. Asks before
+  tools that delete (or before every tool that changes something — your choice); read-only tools
+  never ask. Works in the window and in the chat in the browser
+- No new dependencies: the MCP client uses `requests` and the standard library
+
 **Open WebUI**
 - Start, restart, stop, open in the browser, copy the address
 - Settings: open the browser after start, require login (only switchable off while there are no
@@ -302,6 +313,9 @@ fonts are bundled, so it looks the same everywhere).
 - [x] **1.2** — the chat in your web browser with the same features and conversations as in the
   window: answers as they're written, web search, attachments, working folder and file preview.
   Only this computer by default; the home network with a password and a QR code
+
+- [x] **1.3** — MCP servers in the chat (HTTP and command), starting with ArchFlow: a local model
+  draws diagrams
 
 **Next:** polishing from everyday use. Ideas and wishes are welcome in the [issues](../../issues).
 

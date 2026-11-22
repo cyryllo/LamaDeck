@@ -42,6 +42,7 @@ const IKONY = {
   spinacz: '<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   zamknij: '<path d="M6 6l12 12M18 6L6 18"/>',
+  wtyczka: '<path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>',
   otworz: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
 };
 
@@ -76,6 +77,7 @@ const S = {
   rozmowa: null,       // otwarta rozmowa z /api/rozmowa; null = nowa
   zrodlo: null,        // EventSource pisanej odpowiedzi
   szukaj: false,       // przycisk z globusem
+  mcp: false,          // przycisk z wtyczką - narzędzia z serwerów MCP
   szukane: "",
   kody: [],            // treść bloków kodu pod przyciskami "kopiuj"
   katalogi: [],        // katalogi robocze wybrane kiedyś w programie (/api/katalogi)
@@ -281,6 +283,18 @@ function zbudujUklad() {
   E.katalogPrzycisk.addEventListener("click", () => menuKatalogow(E.katalogPrzycisk));
   E.internet = przyciskIkona("swiat", "", "przycisk ikona");
   E.internet.hidden = !S.stan.szukanie;
+  // WHAT: narzędzia MCP (np. ArchFlow) - przycisk tylko, gdy w programie jest włączony serwer MCP
+  E.mcp = przyciskIkona("wtyczka", "", "przycisk ikona");
+  E.mcp.hidden = !(S.stan.mcp && S.stan.mcp.length);
+  E.mcp.addEventListener("click", () => {
+    S.mcp = !S.mcp;
+    pokazPrzyciskMcp();
+    const m = wybranyModel();
+    if (S.mcp && m && !m.narzedzia) {
+      uwaga(_f("{model} nie umie korzystać z narzędzi - do narzędzi MCP wybierz model z tagiem \"narzędzia\" (np. qwen3, gemma4) albo wyłącz narzędzia MCP.",
+        { model: m.krotka }), "warn");
+    }
+  });
   E.internet.addEventListener("click", () => {
     S.szukaj = !S.szukaj;
     pokazPrzyciskInternetu();
@@ -307,7 +321,7 @@ function zbudujUklad() {
       dodajPliki(z.clipboardData.files);
     }
   });
-  pole.append(E.plik, E.zalacz, E.katalogPrzycisk, E.internet, E.pytanie, E.wyslij);
+  pole.append(E.plik, E.zalacz, E.katalogPrzycisk, E.internet, E.mcp, E.pytanie, E.wyslij);
   glowna.append(gora, E.rozmowa, E.uwaga, E.chipy, E.ramkaKatalogu, pole);
   glowna.addEventListener("dragover", (z) => { if (z.dataTransfer.types.includes("Files")) z.preventDefault(); });
   glowna.addEventListener("drop", (z) => {
@@ -326,6 +340,7 @@ function zbudujUklad() {
   new MutationObserver(() => { zaslona.hidden = !uklad.classList.contains("menu-otwarte"); })
     .observe(uklad, { attributes: true, attributeFilter: ["class"] });
   pokazPrzyciskInternetu();
+  pokazPrzyciskMcp();
 
   // WHY: po powrocie do karty (telefon zasnął, rozmowa zmieniła się w programie) - świeże dane
   document.addEventListener("visibilitychange", () => {
@@ -359,6 +374,15 @@ function pokazPrzyciskInternetu() {
   const opis = _f("Szukaj w internecie: {stan}", { stan: S.szukaj ? _("włączone") : _("wyłączone") });
   E.internet.title = opis;
   E.internet.setAttribute("aria-label", opis);
+}
+
+function pokazPrzyciskMcp() {
+  E.mcp.classList.toggle("wlaczony", S.mcp);
+  E.mcp.setAttribute("aria-pressed", String(S.mcp));
+  const opis = _f("Narzędzia MCP: {stan}", { stan: S.mcp ? _("włączone") : _("wyłączone") }) +
+    " (" + (S.stan.mcp || []).join(", ") + ")";
+  E.mcp.title = opis;
+  E.mcp.setAttribute("aria-label", opis);
 }
 
 function uwaga(tekst, stan) {
@@ -876,7 +900,7 @@ async function wyslij() {
   try {
     const wynik = await api("/api/wyslij", {
       id: S.rozmowa ? S.rozmowa.id : null, model: S.model, tekst: tekst,
-      myslenie: E.myslenie.checked, szukaj: S.szukaj, katalog: S.katalog,
+      myslenie: E.myslenie.checked, szukaj: S.szukaj, katalog: S.katalog, mcp: S.mcp,
       zalaczniki: gotowe.map((z) => z.token),
     });
     E.pytanie.value = "";
@@ -965,7 +989,7 @@ async function klikWRozmowie(z) {
   try {
     const wynik = await api("/api/akcja", {
       id: S.rozmowa.id, akcja: akcja, model: S.model, myslenie: E.myslenie.checked, szukaj: S.szukaj,
-      katalog: S.katalog,
+      katalog: S.katalog, mcp: S.mcp,
     });
     if (akcja === "popraw") {
       E.pytanie.value = wynik.tekst || "";
@@ -1114,6 +1138,10 @@ function pokazProsbe(prosba) {
   const okno = el("div", "okno");
   okno.setAttribute("role", "dialog");
   okno.setAttribute("aria-modal", "true");
+  if (prosba.mcp) {
+    okienkoNarzedziaMcp(okno, zaslona, prosba);
+    return;
+  }
   okno.append(el("h2", "", prosba.nowy ? _("Model chce utworzyć plik") : _("Model chce zmienić plik")),
     el("div", "mono", prosba.nowy ? _f("Nowy plik: {sciezka}", { sciezka: prosba.sciezka })
       : _f("Zmiana pliku: {sciezka}", { sciezka: prosba.sciezka })));
@@ -1145,6 +1173,34 @@ function pokazProsbe(prosba) {
     b.addEventListener("click", decyzja(wybor));
     przyciski.append(b);
   }
+  okno.append(przyciski);
+  zaslona.append(okno);
+  document.body.append(zaslona);
+}
+
+function okienkoNarzedziaMcp(okno, zaslona, prosba) {
+  // WHAT: model chce użyć narzędzia MCP, które coś zmienia albo usuwa - Zezwól / Odrzuć (jak w programie).
+  okno.append(el("h2", "", _("Model chce użyć narzędzia")),
+    el("div", "mono", _f("{narzedzie} - serwer MCP {serwer}", { narzedzie: prosba.narzedzie, serwer: prosba.serwer })));
+  if (prosba.usuwa) okno.append(el("p", "ostrzezenie", _("To narzędzie usuwa dane.")));
+  okno.append(el("p", "wyciszony", _("Co model chce przekazać:")), el("pre", "roznica", prosba.argumenty || ""));
+  const przyciski = el("div", "przyciski");
+  const decyzja = (wybor) => async () => {
+    for (const b of przyciski.querySelectorAll("button")) b.disabled = true;
+    try {
+      await api("/api/zgoda", { id: S.rozmowa.id, nr: prosba.nr, wybor: wybor });
+    } catch (e) {
+      uwaga(e.message, "warn");
+    }
+    zaslona.remove();
+  };
+  const odrzuc = el("button", "przycisk", _("Odrzuć"));
+  odrzuc.type = "button";
+  odrzuc.addEventListener("click", decyzja(null));
+  const zezwol = el("button", "przycisk glowny", _("Zezwól"));
+  zezwol.type = "button";
+  zezwol.addEventListener("click", decyzja("raz"));
+  przyciski.append(odrzuc, el("span", "odstep"), zezwol);
   okno.append(przyciski);
   zaslona.append(okno);
   document.body.append(zaslona);

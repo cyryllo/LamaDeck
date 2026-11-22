@@ -235,6 +235,17 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 
 ![Czat w przeglądarce](screenshots/lamadeck-web_pl.png)
 
+**Serwery MCP** (1.3)
+- Czat może korzystać z narzędzi innych programów przez MCP (Model Context Protocol) — np.
+  [ArchFlow](https://github.com/cyryllo/ArchFlow) rysuje diagramy: *„Narysuj w ArchFlow mój homelab”*
+- *Ustawienia → Czat → Serwery MCP*: **Dodaj ArchFlow** (gotowy wpis) albo **Dodaj serwer** dla
+  dowolnego innego — pod adresem HTTP (z tokenem) albo jako polecenie uruchamiane na tym komputerze
+  (np. `npx -y …`); **Sprawdź połączenie** pokazuje liczbę narzędzi
+- Przycisk z wtyczką w czacie włącza narzędzia; każde użycie widać w odpowiedzi. Pyta przed
+  narzędziami, które usuwają (albo przed każdym, które coś zmienia — do wyboru); narzędzia tylko do
+  odczytu nigdy nie pytają. Działa w oknie i w czacie w przeglądarce
+- Bez nowych zależności: klient MCP używa `requests` i biblioteki standardowej
+
 **Open WebUI**
 - Uruchom, uruchom ponownie, zatrzymaj, otwórz w przeglądarce, kopiuj adres
 - Ustawienia: otwieranie przeglądarki po starcie, wymaganie logowania (wyłączyć da się tylko,
@@ -297,6 +308,9 @@ i JetBrains Mono są dołączone do programu, więc wygląda tak samo na każdym
 - [x] **1.2** — czat w przeglądarce z tymi samymi funkcjami i rozmowami co w oknie: odpowiedź na
   bieżąco, wyszukiwanie w internecie, załączniki, katalog roboczy i podgląd plików. Domyślnie tylko
   ten komputer; sieć domowa z hasłem i kodem QR
+
+- [x] **1.3** — serwery MCP w czacie (HTTP i polecenie), na start ArchFlow: lokalny model rysuje
+  diagramy
 
 **Dalej:** dopracowanie po codziennym używaniu. Pomysły i życzenia mile widziane w
 [zgłoszeniach](../../issues).

@@ -25,6 +25,8 @@ import re
 import secrets
 import base64
 import heapq
+import itertools
+import queue
 import math
 import operator
 from array import array
@@ -2830,6 +2832,374 @@ class PullWorker(WatekTla):
             strumien.close()
 
 
+# =============================================================================
+#  Serwery MCP (Model Context Protocol) - narzędzia innych programów w czacie (1.3)
+# =============================================================================
+# WHAT: czat może korzystać z narzędzi serwerów MCP (np. ArchFlow rysuje diagramy): program
+#       łączy się z włączonymi serwerami, dokleja ich narzędzia do "tools" w /api/chat,
+#       a wywołania modelu przekazuje do serwera i odsyła mu wynik.
+# WHY:  sama Ollama nie mówi po MCP - narzędzia zawsze wykonuje klient (tu LamaDeck). Bez nowych
+#       zależności: HTTP przez requests, polecenie przez subprocess (JSON-RPC po jednej linii).
+#       Plan i kod referencyjny sprawdzony z archflow-mcp: docs/plan-mcp.md.
+WERSJA_PROTOKOLU_MCP = "2025-06-18"
+_ZALECANY_KONTEKST_MCP = 32768    # WHY: plan MCP - przy mniejszym oknie opisy narzędzi wypierają rozmowę
+_MCP_TIMEOUT = 120                 # WHY: narzędzie może pracować dłużej (np. zbudowanie dużego diagramu)
+TRYBY_ZGOD_MCP = ["usuwanie", "zmiany"]
+# WHY: gotowy wpis dla ArchFlow (decyzja użytkownika - pierwszy serwer); inne dodaje się ręcznie
+ARCHFLOW_MCP_HTTP = {"nazwa": "ArchFlow", "wlaczony": True, "typ": "http",
+                     "adres": "http://localhost:9500/mcp", "token": "", "polecenie": "", "env": ""}
+ARCHFLOW_MCP_POLECENIE = {"nazwa": "ArchFlow", "wlaczony": True, "typ": "polecenie", "adres": "", "token": "",
+                          "polecenie": "npx -y archflow-mcp@latest", "env": "ARCHFLOW_URL=http://localhost:9500"}
+
+
+def serwery_mcp():
+    # WHAT: [{"nazwa", "wlaczony", "typ" (http/polecenie), "adres", "token", "polecenie", "env"}] z ustawień.
+    try:
+        lista = json.loads(_ustawienia().value("mcp/serwery", "") or "[]")
+    except ValueError:
+        lista = []
+    wynik = []
+    for s in lista if isinstance(lista, list) else []:
+        if isinstance(s, dict) and s.get("nazwa"):
+            wynik.append({"nazwa": str(s["nazwa"]), "wlaczony": bool(s.get("wlaczony", True)),
+                          "typ": "polecenie" if s.get("typ") == "polecenie" else "http",
+                          "adres": str(s.get("adres", "")), "token": str(s.get("token", "")),
+                          "polecenie": str(s.get("polecenie", "")), "env": str(s.get("env", ""))})
+    return wynik
+
+
+def zapisz_serwery_mcp(lista):
+    # WHY: token zapisany otwartym tekstem w ustawieniach (osobiste narzędzie w domowej sieci) - mówi o
+    #      tym opis w Ustawieniach
+    _ustawienia().setValue("mcp/serwery", json.dumps(lista, ensure_ascii=False))
+
+
+def zgody_mcp():
+    # WHAT: "usuwanie" (domyślnie) = pytamy tylko o narzędzia usuwające; "zmiany" = o każde poza odczytem.
+    tryb = _ustawienia().value("mcp/zgody", "usuwanie")
+    return tryb if tryb in TRYBY_ZGOD_MCP else "usuwanie"
+
+
+def mcp_dostepne():
+    return any(s["wlaczony"] for s in serwery_mcp())
+
+
+def _zmienne_z_tekstu(tekst):
+    # WHAT: "KLUCZ=WARTOŚĆ" w liniach -> słownik (puste linie i # pomijane).
+    wynik = {}
+    for linia in (tekst or "").splitlines():
+        linia = linia.strip()
+        if linia and not linia.startswith("#") and "=" in linia:
+            klucz, _s, wartosc = linia.partition("=")
+            wynik[klucz.strip()] = wartosc.strip()
+    return wynik
+
+
+class BladMcp(RuntimeError):
+    """Błąd połączenia albo protokołu MCP (tekst gotowy dla człowieka)."""
+
+
+class BladPolaczeniaMcp(BladMcp):
+    """Zerwane połączenie (serwer nie odpowiada, proces się skończył) - warto połączyć się od nowa."""
+
+
+class KlientMcpHttp:
+    """Serwer MCP przez Streamable HTTP (np. ArchFlow w Dockerze: http://host:9500/mcp)."""
+
+    def __init__(self, url, token=None, timeout=_MCP_TIMEOUT):
+        self.url, self.timeout = url, timeout
+        self.naglowki = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+        if token:
+            self.naglowki["Authorization"] = f"Bearer {token}"
+        self._id = itertools.count(1)
+        self.instrukcje = ""
+        self.serwer = {}
+
+    def _wyslij(self, metoda, params=None, powiadomienie=False):
+        wiad = {"jsonrpc": "2.0", "method": metoda}
+        if params is not None:
+            wiad["params"] = params
+        if not powiadomienie:
+            wiad["id"] = next(self._id)
+        try:
+            r = requests.post(self.url, json=wiad, headers=self.naglowki, timeout=(10, self.timeout), stream=True)
+        except requests.RequestException as e:
+            raise BladPolaczeniaMcp(_("Serwer MCP pod adresem {adres} nie odpowiada ({blad}).").format(adres=self.url, blad=e)) \
+                from None
+        # WHY: serwer z sesją podaje Mcp-Session-Id - odsyłamy go w każdym kolejnym zapytaniu
+        if r.headers.get("Mcp-Session-Id"):
+            self.naglowki["Mcp-Session-Id"] = r.headers["Mcp-Session-Id"]
+        if powiadomienie:
+            r.close()
+            return None
+        if r.status_code == 401:
+            raise BladMcp(_("Serwer MCP odrzucił token - sprawdź token w Ustawieniach."))
+        if r.status_code == 503:
+            raise BladMcp(_("Serwer MCP jest wyłączony ({tekst}).").format(tekst=r.text.strip()[:200]))
+        if r.status_code >= 400:
+            raise BladMcp(_("Serwer MCP odpowiedział błędem HTTP {kod}.").format(kod=r.status_code))
+        if r.headers.get("Content-Type", "").startswith("text/event-stream"):
+            # WHY: część serwerów odpowiada strumieniem SSE - szukamy wiadomości z naszym id
+            for linia in r.iter_lines(decode_unicode=True):
+                if linia and linia.startswith("data:"):
+                    try:
+                        odp = json.loads(linia[5:].strip())
+                    except ValueError:
+                        continue
+                    if odp.get("id") == wiad["id"]:
+                        return self._wynik(odp)
+            raise BladPolaczeniaMcp(_("Serwer MCP zamknął połączenie bez odpowiedzi."))
+        try:
+            return self._wynik(r.json())
+        except ValueError:
+            raise BladMcp(_("Pod tym adresem nie ma serwera MCP (odpowiedź nie jest JSON-em).")) from None
+
+    @staticmethod
+    def _wynik(odp):
+        if "error" in odp:
+            raise BladMcp(str((odp["error"] or {}).get("message") or _("błąd MCP")))
+        return odp.get("result") or {}
+
+    def polacz(self):
+        wynik = self._wyslij("initialize", {"protocolVersion": WERSJA_PROTOKOLU_MCP, "capabilities": {},
+                                            "clientInfo": {"name": NAZWA_PROGRAMU, "version": WERSJA}})
+        self.instrukcje = str(wynik.get("instructions") or "")
+        self.serwer = wynik.get("serverInfo") or {}
+        self.naglowki["MCP-Protocol-Version"] = wynik.get("protocolVersion", WERSJA_PROTOKOLU_MCP)
+        self._wyslij("notifications/initialized", powiadomienie=True)
+        return wynik
+
+    def narzedzia(self):
+        # WHY: lista może przyjść w kilku stronach (nextCursor)
+        wynik, kursor = [], None
+        for _strona in range(20):
+            odp = self._wyslij("tools/list", {"cursor": kursor} if kursor else None)
+            wynik += odp.get("tools") or []
+            kursor = odp.get("nextCursor")
+            if not kursor:
+                break
+        return wynik
+
+    def wywolaj(self, nazwa, argumenty):
+        return self._wyslij("tools/call", {"name": nazwa, "arguments": argumenty or {}})
+
+    def zamknij(self):
+        pass
+
+
+class KlientMcpStdio(KlientMcpHttp):
+    """Serwer MCP jako proces (np. "npx -y archflow-mcp@latest"); JSON-RPC po jednej linii."""
+
+    def __init__(self, polecenie, env=None, timeout=_MCP_TIMEOUT):
+        self.url = polecenie
+        self.timeout, self._id, self.instrukcje, self.serwer = timeout, itertools.count(1), "", {}
+        self.naglowki = {}  # WHY: wspólny polacz() zapisuje tu wersję protokołu; w stdio nieużywane
+        try:
+            czesci = shlex.split(polecenie)
+        except ValueError as e:
+            raise BladMcp(_("Nieprawidłowe polecenie serwera MCP: {blad}").format(blad=e)) from None
+        if not czesci:
+            raise BladMcp(_("Nie podano polecenia serwera MCP."))
+        try:
+            # WHY: stderr to nie kanał protokołu - zbieramy ostatnie linie tylko do opisu błędu
+            self.proc = subprocess.Popen(czesci, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, env={**os.environ, **(env or {})},
+                                         text=True, encoding="utf-8", errors="replace", bufsize=1)
+        except OSError as e:
+            raise BladMcp(_("Nie udało się uruchomić serwera MCP ({polecenie}): {blad}").format(
+                polecenie=czesci[0], blad=e)) from None
+        self._odpowiedzi = queue.Queue()
+        self._stderr = []
+        self._blokada = threading.Lock()  # WHY: jeden proces, a pytać mogą naraz okno i przeglądarka
+        threading.Thread(target=self._czytaj, daemon=True).start()
+        threading.Thread(target=self._czytaj_bledy, daemon=True).start()
+
+    def _czytaj(self):
+        for linia in self.proc.stdout:
+            if linia.strip():
+                try:
+                    self._odpowiedzi.put(json.loads(linia))
+                except ValueError:
+                    continue  # WHY: śmieci na stdout (np. komunikat npm) - pomijamy
+        self._odpowiedzi.put(None)  # WHY: proces się skończył - czekający dostaje znak końca
+
+    def _czytaj_bledy(self):
+        for linia in self.proc.stderr:
+            self._stderr = (self._stderr + [linia.rstrip()])[-12:]
+
+    def _wyslij(self, metoda, params=None, powiadomienie=False):
+        wiad = {"jsonrpc": "2.0", "method": metoda}
+        if params is not None:
+            wiad["params"] = params
+        with self._blokada:
+            if not powiadomienie:
+                wiad["id"] = next(self._id)
+            try:
+                self.proc.stdin.write(json.dumps(wiad, ensure_ascii=False) + "\n")
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                raise BladPolaczeniaMcp(self._opis_konca()) from None
+            if powiadomienie:
+                return None
+            koniec = time.monotonic() + self.timeout
+            while True:
+                try:
+                    odp = self._odpowiedzi.get(timeout=max(0.1, koniec - time.monotonic()))
+                except queue.Empty:
+                    raise BladMcp(_("Serwer MCP nie odpowiedział w ciągu {s} s.").format(s=self.timeout)) from None
+                if odp is None:
+                    raise BladPolaczeniaMcp(self._opis_konca())
+                if odp.get("id") == wiad["id"]:
+                    return self._wynik(odp)
+
+    def _opis_konca(self):
+        ostatnie = " | ".join(l for l in self._stderr[-4:] if l.strip())
+        return _("Serwer MCP zakończył działanie.") + (f" {ostatnie}" if ostatnie else "")
+
+    def zamknij(self):
+        # WHY: najpierw stdin - przy martwym procesie jego zamknięcie (flush) rzuca BrokenPipeError
+        try:
+            self.proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+        try:
+            self.proc.terminate()
+            self.proc.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            self.proc.kill()
+
+
+def _klient_mcp(serwer):
+    if serwer["typ"] == "polecenie":
+        return KlientMcpStdio(serwer["polecenie"], _zmienne_z_tekstu(serwer["env"]))
+    if not serwer["adres"].startswith(("http://", "https://")):
+        raise BladMcp(_("Adres serwera MCP musi zaczynać się od http:// albo https://."))
+    return KlientMcpHttp(serwer["adres"], serwer["token"] or None)
+
+
+def tekst_wyniku_mcp(wynik):
+    # WHAT: wynik tools/call -> tekst dla modelu; błąd narzędzia też jako tekst - model może się poprawić.
+    czesci = []
+    for c in wynik.get("content") or []:
+        if c.get("type") == "text":
+            czesci.append(c.get("text", ""))
+        elif c.get("type") == "resource":
+            czesci.append(str((c.get("resource") or {}).get("text") or ""))
+        elif c.get("type") in ("image", "audio"):
+            czesci.append(f"[{c['type']}]")  # WHY: modele czatu dostają tylko tekst
+    if not any(czesci) and wynik.get("structuredContent") is not None:
+        czesci.append(json.dumps(wynik["structuredContent"], ensure_ascii=False))
+    tekst = "\n".join(c for c in czesci if c) or "(no output)"
+    return f"Error: {tekst}" if wynik.get("isError") else tekst
+
+
+class MenedzerMcp:
+    """Połączenia z serwerami MCP - wspólne dla okna i czatu w przeglądarce, do końca programu.
+
+    WHY: serwer-polecenie to proces (npx pobiera i startuje go kilka sekund) - uruchamiamy go przy
+         pierwszym użyciu i trzymamy do zamknięcia programu, zamiast przy każdej odpowiedzi.
+         Łączenie i wywołania idą w wątkach odpowiedzi (nigdy w wątku okna).
+    """
+
+    def __init__(self):
+        self._polaczenia = {}               # WHY: nazwa serwera -> {"klient", "podpis", "narzedzia"}
+        self._blokada = threading.Lock()
+
+    def _polaczenie(self, serwer, od_nowa=False):
+        # WHAT: połączony klient tego serwera; po zmianie ustawień albo na życzenie - od nowa.
+        podpis = json.dumps(serwer, sort_keys=True)
+        with self._blokada:
+            stare = self._polaczenia.get(serwer["nazwa"])
+            if stare and stare["podpis"] == podpis and not od_nowa:
+                return stare
+            if stare:
+                self._polaczenia.pop(serwer["nazwa"], None)
+                stare["klient"].zamknij()
+            klient = _klient_mcp(serwer)
+            try:
+                klient.polacz()
+                narzedzia = klient.narzedzia()
+            except Exception:
+                klient.zamknij()
+                raise
+            wpis = {"klient": klient, "podpis": podpis, "narzedzia": narzedzia}
+            self._polaczenia[serwer["nazwa"]] = wpis
+            return wpis
+
+    def sprawdz(self, serwer):
+        # WHAT: "Sprawdź połączenie" w Ustawieniach - łączy od nowa; (liczba narzędzi, nazwa serwera).
+        wpis = self._polaczenie(serwer, od_nowa=True)
+        info = wpis["klient"].serwer
+        return len(wpis["narzedzia"]), " ".join(str(x) for x in (info.get("name"), info.get("version")) if x)
+
+    def zestaw(self):
+        # WHAT: narzędzia wszystkich włączonych serwerów dla jednej odpowiedzi:
+        #       {"tools": [...dla Ollamy], "mapa": {nazwa: {...}}, "instrukcje": [(serwer, tekst)], "bledy": [...]}.
+        # WHY:  nazwy dla modelu muszą być jednoznaczne - przy kolizji (z narzędziami katalogu roboczego albo
+        #       między serwerami) dostają przedrostek serwera, np. "archflow__build_diagram".
+        zajete = {n["function"]["name"] for n in NARZEDZIA_KATALOGU}
+        wynik = {"tools": [], "mapa": {}, "instrukcje": [], "bledy": []}
+        for serwer in [s for s in serwery_mcp() if s["wlaczony"]]:
+            try:
+                wpis = self._polaczenie(serwer)
+            except Exception as e:
+                wynik["bledy"].append(f"{serwer['nazwa']}: {e}")
+                continue
+            if wpis["klient"].instrukcje.strip():
+                wynik["instrukcje"].append((serwer["nazwa"], wpis["klient"].instrukcje.strip()))
+            przedrostek = re.sub(r"[^a-z0-9]+", "_", serwer["nazwa"].lower()).strip("_") or "mcp"
+            for n in wpis["narzedzia"]:
+                oryginalna = str(n.get("name") or "")
+                if not oryginalna:
+                    continue
+                nazwa = re.sub(r"[^A-Za-z0-9_-]", "_", oryginalna)
+                if nazwa in zajete:
+                    nazwa = f"{przedrostek}__{nazwa}"
+                zajete.add(nazwa)
+                adnotacje = n.get("annotations") or {}
+                wynik["mapa"][nazwa] = {"serwer": serwer["nazwa"], "narzedzie": oryginalna,
+                                        "tylko_odczyt": bool(adnotacje.get("readOnlyHint")),
+                                        "usuwa": bool(adnotacje.get("destructiveHint"))}
+                wynik["tools"].append({"type": "function", "function": {
+                    "name": nazwa, "description": str(n.get("description") or ""),
+                    "parameters": n.get("inputSchema") or {"type": "object", "properties": {}}}})
+        return wynik
+
+    def wywolaj(self, nazwa_serwera, narzedzie, argumenty):
+        # WHAT: wywołanie narzędzia -> tekst dla modelu; zerwane połączenie = jedna próba od nowa.
+        serwer = next((s for s in serwery_mcp() if s["nazwa"] == nazwa_serwera), None)
+        if serwer is None:
+            raise BladMcp(_("Serwera MCP {nazwa} nie ma już w Ustawieniach.").format(nazwa=nazwa_serwera))
+        try:
+            return tekst_wyniku_mcp(self._polaczenie(serwer)["klient"].wywolaj(narzedzie, argumenty))
+        except BladPolaczeniaMcp:
+            return tekst_wyniku_mcp(self._polaczenie(serwer, od_nowa=True)["klient"].wywolaj(narzedzie, argumenty))
+
+    def odlacz(self, nazwa):
+        # WHAT: serwer usunięty albo wyłączony w Ustawieniach - kończymy jego połączenie (i proces).
+        with self._blokada:
+            wpis = self._polaczenia.pop(nazwa, None)
+        if wpis:
+            wpis["klient"].zamknij()
+
+    def zamknij(self):
+        # WHAT: koniec programu - procesy serwerów-poleceń kończą się razem z nim.
+        with self._blokada:
+            polaczenia, self._polaczenia = list(self._polaczenia.values()), {}
+        for wpis in polaczenia:
+            wpis["klient"].zamknij()
+
+
+MCP = MenedzerMcp()
+
+
+def polecenie_mcp(instrukcje):
+    # WHAT: wiadomość systemowa z instrukcjami serwerów MCP (pole "instructions" z initialize).
+    # WHY:  bez nich model gorzej używa narzędzi (np. ArchFlow: ikony ogólne, rozmieszczanie robi serwer).
+    return "\n\n".join(f"Instructions from the MCP server \"{nazwa}\" (its tools are available to you):\n{tekst}"
+                       for nazwa, tekst in instrukcje)
+
+
 class CzatWorker(WatekTla):
     """Jedna odpowiedź modelu na ekranie "Czat" (POST /api/chat, strumień).
 
@@ -2842,12 +3212,13 @@ class CzatWorker(WatekTla):
     zrodla = pyqtSignal(object)            # [(plik, [(linia_od, linia_do), ...])] - fragmenty z dużych plików
     etap = pyqtSignal(str)                 # co się dzieje przed odpowiedzią (wyszukiwanie w internecie)
     zrodla_www = pyqtSignal(object)        # [{"tytul", "url"}] - strony z wyszukiwania, w kolejności numerów
-    narzedzie = pyqtSignal(object)         # krok pracy na plikach: {"nazwa", "sciezka", "stan", "info"}
-    prosba_zapisu = pyqtSignal(object)     # zmiana pliku do zatwierdzenia (przygotuj_zmiane_pliku)
+    narzedzie = pyqtSignal(object)         # krok pracy na plikach / MCP: {"nazwa", "sciezka", "stan", "info"}
+    prosba_zapisu = pyqtSignal(object)     # zmiana pliku albo narzędzie MCP do zatwierdzenia
+    uwaga = pyqtSignal(str)                # ostrzeżenie dla użytkownika (np. serwer MCP niedostępny)
     zakonczono = pyqtSignal(bool, object)  # (sukces, statystyki z Ollamy albo tekst błędu)
 
     def __init__(self, adres, model, wiadomosci, dokumenty=None, myslenie=None, wyszukiwanie=None,
-                 katalog=None):
+                 katalog=None, mcp=False):
         super().__init__()
         self.adres = adres
         self.model = model
@@ -2858,6 +3229,10 @@ class CzatWorker(WatekTla):
         self.wyszukiwanie = wyszukiwanie
         # WHY: katalog roboczy = model dostaje narzędzia do plików (NARZEDZIA_KATALOGU)
         self.katalog = katalog
+        # WHY: narzędzia z włączonych serwerów MCP - łączymy się dopiero w run() (to sieć / proces)
+        self.mcp = mcp
+        self._mcp = None                    # WHY: MenedzerMcp.zestaw() tej odpowiedzi
+        self._zgody_mcp = zgody_mcp()
         self._anuluj = False
         self._odpowiedz = None
         # WHAT: decyzja użytkownika o zapisie - wątek czeka na nią (threading.Event), okno ją ustawia.
@@ -2883,8 +3258,9 @@ class CzatWorker(WatekTla):
         dane = {"model": self.model, "messages": self.wiadomosci, "stream": True}
         if self.myslenie is not None:
             dane["think"] = self.myslenie
-        if self.katalog:
-            dane["tools"] = NARZEDZIA_KATALOGU
+        narzedzia = (NARZEDZIA_KATALOGU if self.katalog else []) + (self._mcp["tools"] if self._mcp else [])
+        if narzedzia:
+            dane["tools"] = narzedzia
         return dane
 
     def _wykonaj_narzedzie(self, nazwa, argumenty):
@@ -2892,6 +3268,13 @@ class CzatWorker(WatekTla):
         # WHY:  błąd (zła ścieżka, plik binarny...) wraca do modelu jako tekst - model może się
         #       poprawić; nie przerywa całej odpowiedzi.
         argumenty = argumenty if isinstance(argumenty, dict) else {}
+        cel = self._mcp["mapa"].get(nazwa) if self._mcp else None
+        if cel is not None:
+            return self._wykonaj_narzedzie_mcp(nazwa, cel, argumenty)
+        if not self.katalog:
+            krok = {"nazwa": nazwa, "sciezka": "", "stan": "blad", "info": f"unknown tool '{nazwa}'"}
+            self.narzedzie.emit(krok)
+            return f"Error: unknown tool '{nazwa}'"
         krok = {"nazwa": nazwa, "sciezka": argumenty.get("path") or argumenty.get("text") or "", "stan": "ok"}
         try:
             if nazwa == "list_files":
@@ -2926,6 +3309,45 @@ class CzatWorker(WatekTla):
             return f"Error: {e}"
         self.narzedzie.emit(krok)
         return wynik
+
+    def _wykonaj_narzedzie_mcp(self, nazwa, cel, argumenty):
+        # WHAT: narzędzie serwera MCP - zgoda użytkownika, gdy trzeba, potem tools/call i wynik dla modelu.
+        # WHY:  zgoda tym samym mechanizmem co zapis pliku (prosba_zapisu + threading.Event), więc działa
+        #       w oknie i w przeglądarce. Pytamy o narzędzia usuwające (destructiveHint), a w trybie
+        #       "zmiany" o wszystkie poza odczytem (readOnlyHint) - decyzja użytkownika, Ustawienia.
+        krok = {"nazwa": cel["narzedzie"], "sciezka": cel["serwer"], "stan": "ok", "mcp": True}
+        if cel["usuwa"] or (self._zgody_mcp == "zmiany" and not cel["tylko_odczyt"]):
+            self._decyzja.clear()
+            self.prosba_zapisu.emit({"mcp": True, "serwer": cel["serwer"], "narzedzie": cel["narzedzie"],
+                                     "usuwa": cel["usuwa"],
+                                     "argumenty": json.dumps(argumenty, ensure_ascii=False, indent=2)[:20000]})
+            self._decyzja.wait()
+            if self._anuluj:
+                return "Cancelled by the user."
+            if not self._zgoda:
+                krok["stan"] = "odrzucono"
+                self.narzedzie.emit(krok)
+                return "The user rejected this tool call. Do not repeat it; ask what they want instead."
+        try:
+            wynik = MCP.wywolaj(cel["serwer"], cel["narzedzie"], argumenty)
+        except Exception as e:
+            krok.update({"stan": "blad", "info": str(e)})
+            self.narzedzie.emit(krok)
+            return f"Error: {e}"
+        if wynik.startswith("Error:"):
+            # WHY: błąd narzędzia (np. zły identyfikator) wraca do modelu - może się poprawić
+            krok.update({"stan": "blad", "info": wynik[6:].strip()[:300]})
+        self.narzedzie.emit(krok)
+        return wynik
+
+    def _polacz_mcp(self):
+        # WHAT: narzędzia z włączonych serwerów MCP; niedostępny serwer = uwaga, odpowiedź idzie dalej.
+        self.etap.emit(_("Łączę z serwerami MCP..."))
+        zestaw = MCP.zestaw()
+        self.etap.emit("")
+        if zestaw["bledy"]:
+            self.uwaga.emit(_("Narzędzia MCP niedostępne: {bledy}").format(bledy="; ".join(zestaw["bledy"])))
+        self._mcp = zestaw if zestaw["tools"] else None
 
     def _runda(self):
         # WHAT: jedno zapytanie do /api/chat ze strumieniem -> (statystyki, treść, rozumowanie, tool_calls).
@@ -3141,8 +3563,16 @@ class CzatWorker(WatekTla):
                     return
             if self.dokumenty:
                 self._dolacz_fragmenty()
+            if self.mcp:
+                self._polacz_mcp()
+                if self._anuluj:
+                    self.zakonczono.emit(True, {"anulowano": True})
+                    return
             if self._model_w_pamieci() is False:
                 self.ladowanie.emit()
+            if self._mcp and self._mcp["instrukcje"]:
+                # WHY: instrukcje serwerów tylko na czas tej odpowiedzi - nie trafiają do zapisu rozmowy
+                self.wiadomosci = [{"role": "system", "content": polecenie_mcp(self._mcp["instrukcje"])}] + self.wiadomosci
             if self.katalog:
                 # WHY: polecenie systemowe i przypomnienie tylko na czas tej odpowiedzi - nie trafiają
                 #      do zapisu rozmowy
@@ -3152,7 +3582,7 @@ class CzatWorker(WatekTla):
             kroki = 0
             while True:
                 statystyki, tresc, myslenie, wywolania = self._runda()
-                if self._anuluj or not wywolania or not self.katalog:
+                if self._anuluj or not wywolania or not (self.katalog or self._mcp):
                     break
                 # WHAT: model chce użyć narzędzi - wykonujemy je i pytamy go ponownie (pętla agenta).
                 wiadomosc = {"role": "assistant", "content": tresc, "tool_calls": wywolania}
@@ -3180,6 +3610,12 @@ class CzatWorker(WatekTla):
                 statystyki = {"anulowano": True}
             elif statystyki:
                 statystyki["okno_kontekstu"] = self._okno_kontekstu()
+                okno = statystyki["okno_kontekstu"]
+                if self._mcp and okno and okno < _ZALECANY_KONTEKST_MCP:
+                    # WHY: opisy narzędzi (np. ArchFlow z listą ikon) zajmują kilka tysięcy tokenów
+                    self.uwaga.emit(_("Okno kontekstu modelu to {n} tokenów - opisy narzędzi MCP zajmują kilka "
+                                      "tysięcy. Zalecane co najmniej 32k (OLLAMA_CONTEXT_LENGTH w "
+                                      "Ustawieniach).").format(n=okno))
             self.zakonczono.emit(True, statystyki)
         except Exception as e:
             if self._anuluj:
@@ -4469,6 +4905,15 @@ def katalogi_robocze_znane(rozmowy=None):
 def opis_kroku(krok):
     # WHAT: krok pracy modelu na plikach jako krótki tekst dla człowieka ("przeczytał plik: a.py").
     # WHY:  tłumaczony przy wyświetlaniu - zapisana rozmowa przeżywa zmianę języka.
+    if krok.get("mcp"):
+        # WHAT: narzędzie serwera MCP - w "sciezka" jest nazwa serwera
+        if krok.get("stan") == "odrzucono":
+            return _("odrzuciłeś narzędzie: {narzedzie} ({serwer})").format(
+                narzedzie=krok.get("nazwa", ""), serwer=krok.get("sciezka", ""))
+        if krok.get("stan") == "blad":
+            return _("nie udało się ({narzedzie}): {blad}").format(narzedzie=krok.get("nazwa", ""), blad=krok.get("info", ""))
+        return _("użył narzędzia: {narzedzie} ({serwer})").format(narzedzie=krok.get("nazwa", ""),
+                                                                 serwer=krok.get("sciezka", ""))
     sciezka = krok.get("sciezka") or "."
     # WHY: "." to dla modelu cały katalog - "przejrzał katalog: ." wyglądało jak błąd
     if krok.get("nazwa") == "list_files" and sciezka in (".", "./") and krok.get("stan") == "ok":
@@ -4918,6 +5363,142 @@ class DialogZmianyPliku(QDialog):
         self.accept()
 
 
+class DialogSerwerMcp(QDialog):
+    """Dodanie albo zmiana serwera MCP: nazwa i sposób połączenia (adres HTTP albo polecenie)."""
+
+    def __init__(self, serwer, zajete_nazwy, parent=None, archflow=False):
+        super().__init__(parent)
+        self.setWindowTitle(_("Serwer MCP"))
+        self.resize(640, 0)
+        self._zajete = zajete_nazwy
+        uk = QVBoxLayout(self)
+        uk.setSpacing(10)
+        if archflow:
+            # WHY: gotowy wpis ArchFlow - krótko, jak włączyć MCP po stronie ArchFlow (docs/plan-mcp.md)
+            info = _etykieta(_("ArchFlow rysuje diagramy na prośbę modelu. W ArchFlow w Dockerze włącz MCP: "
+                               "ustaw MCP_TOKEN w pliku .env kontenera i uruchom go ponownie - adres to "
+                               "http://<serwer>:9500/mcp, token ten sam. Bez Dockera wybierz \"Polecenie\": "
+                               "npx -y archflow-mcp@latest (wymaga Node.js) z ARCHFLOW_URL albo ARCHFLOW_DIR "
+                               "(folder na diagramy)."), "muted")
+            info.setWordWrap(True)
+            uk.addWidget(info)
+        forma = QFormLayout()
+        forma.setSpacing(8)
+        self.pole_nazwa = QLineEdit(serwer.get("nazwa", ""))
+        forma.addRow(_("Nazwa"), self.pole_nazwa)
+        self.combo_typ = QComboBox()
+        self.combo_typ.addItem(_("Adres HTTP"), "http")
+        self.combo_typ.addItem(_("Polecenie (proces na tym komputerze)"), "polecenie")
+        self.combo_typ.setCurrentIndex(max(0, self.combo_typ.findData(serwer.get("typ", "http"))))
+        forma.addRow(_("Połączenie"), self.combo_typ)
+        self.pole_adres = QLineEdit(serwer.get("adres", ""))
+        self.pole_adres.setPlaceholderText("http://localhost:9500/mcp")
+        self.pole_token = QLineEdit(serwer.get("token", ""))
+        self.pole_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pole_token.setPlaceholderText(_("puste = bez tokenu"))
+        self.pole_polecenie = QLineEdit(serwer.get("polecenie", ""))
+        self.pole_polecenie.setPlaceholderText("npx -y archflow-mcp@latest")
+        self.pole_env = QPlainTextEdit(serwer.get("env", ""))
+        self.pole_env.setPlaceholderText(_("KLUCZ=WARTOŚĆ, jedna na linię"))
+        self.pole_env.setFixedHeight(80)
+        self._wiersze = {"http": [], "polecenie": []}
+        for typ, etykieta, pole in (("http", _("Adres"), self.pole_adres), ("http", _("Token"), self.pole_token),
+                                    ("polecenie", _("Polecenie"), self.pole_polecenie),
+                                    ("polecenie", _("Zmienne środowiskowe"), self.pole_env)):
+            lbl = QLabel(etykieta)
+            forma.addRow(lbl, pole)
+            self._wiersze[typ] += [lbl, pole]
+        uk.addLayout(forma)
+        uwaga = _etykieta(_("Token zapisuje się w ustawieniach programu otwartym tekstem."), "muted")
+        uwaga.setWordWrap(True)
+        uk.addWidget(uwaga)
+        self.lbl_blad = _etykieta("", "muted")
+        self.lbl_blad.setProperty("state", "error")
+        self.lbl_blad.hide()
+        uk.addWidget(self.lbl_blad)
+        przyciski = QHBoxLayout()
+        przyciski.addStretch(1)
+        anuluj = QPushButton(_("Anuluj"))
+        anuluj.clicked.connect(self.reject)
+        zapisz = QPushButton(_("Zapisz"))
+        zapisz.setObjectName("primary")
+        zapisz.setDefault(True)
+        zapisz.clicked.connect(self._zapisz)
+        przyciski.addWidget(anuluj)
+        przyciski.addWidget(zapisz)
+        uk.addLayout(przyciski)
+        self.combo_typ.currentIndexChanged.connect(self._pokaz_pola)
+        self._pokaz_pola()
+        self.wynik = None
+
+    def _pokaz_pola(self, *_a):
+        typ = self.combo_typ.currentData()
+        for rodzaj, widzety in self._wiersze.items():
+            for w in widzety:
+                w.setVisible(rodzaj == typ)
+
+    def _zapisz(self):
+        nazwa = self.pole_nazwa.text().strip()
+        typ = self.combo_typ.currentData()
+        blad = ""
+        if not nazwa:
+            blad = _("Podaj nazwę serwera.")
+        elif nazwa in self._zajete:
+            blad = _("Serwer o tej nazwie już jest.")
+        elif typ == "http" and not self.pole_adres.text().strip().startswith(("http://", "https://")):
+            blad = _("Adres serwera MCP musi zaczynać się od http:// albo https://.")
+        elif typ == "polecenie" and not self.pole_polecenie.text().strip():
+            blad = _("Nie podano polecenia serwera MCP.")
+        if blad:
+            self.lbl_blad.setText(blad)
+            self.lbl_blad.show()
+            return
+        self.wynik = {"nazwa": nazwa, "wlaczony": True, "typ": typ,
+                      "adres": self.pole_adres.text().strip() if typ == "http" else "",
+                      "token": self.pole_token.text().strip() if typ == "http" else "",
+                      "polecenie": self.pole_polecenie.text().strip() if typ == "polecenie" else "",
+                      "env": self.pole_env.toPlainText().strip() if typ == "polecenie" else ""}
+        self.accept()
+
+
+class DialogNarzedziaMcp(QDialog):
+    """Model chce użyć narzędzia serwera MCP, które coś zmienia albo usuwa - decyzja użytkownika.
+
+    WHY: zgody MCP ustawia użytkownik (Ustawienia: tylko usuwanie / każde, które coś zmienia);
+         widać serwer, narzędzie i dokładnie to, co model chce przekazać (argumenty).
+    """
+
+    def __init__(self, prosba, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(_("Model chce użyć narzędzia"))
+        self.resize(760, 520)
+        uk = QVBoxLayout(self)
+        uk.setSpacing(10)
+        uk.addWidget(_etykieta(_("{narzedzie} - serwer MCP {serwer}").format(
+            narzedzie=prosba["narzedzie"], serwer=prosba["serwer"]), "h3"))
+        if prosba.get("usuwa"):
+            uwaga = _etykieta(_("To narzędzie usuwa dane."), "muted")
+            uwaga.setProperty("state", "warn")
+            uk.addWidget(uwaga)
+        uk.addWidget(_etykieta(_("Co model chce przekazać:"), "muted"))
+        argumenty = QPlainTextEdit(prosba.get("argumenty", ""))
+        argumenty.setObjectName("log")
+        argumenty.setReadOnly(True)
+        uk.addWidget(argumenty, 1)
+        przyciski = QHBoxLayout()
+        odrzuc = QPushButton(_("Odrzuć"))
+        odrzuc.setObjectName("danger")
+        odrzuc.clicked.connect(self.reject)
+        przyciski.addWidget(odrzuc)
+        przyciski.addStretch(1)
+        zezwol = QPushButton(_("Zezwól"))
+        zezwol.setObjectName("primary")
+        zezwol.setDefault(True)
+        zezwol.clicked.connect(self.accept)
+        przyciski.addWidget(zezwol)
+        uk.addLayout(przyciski)
+
+
 class WidokCzatu(QTextBrowser):
     akcja = pyqtSignal(str)  # "ponow" / "popraw" - ikony przy ostatniej wiadomości
     plik = pyqtSignal(str)   # ścieżka pliku zapisanego przez model (względna) - otwórz podgląd
@@ -5339,6 +5920,7 @@ _IKONY_SVG = {
     "czat": '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     "folder": '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
     "internet": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    "wtyczka": '<path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>',
     "spinacz": '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.5"/>',
     "zamknij": '<path d="M6 6l12 12M18 6L6 18"/>',
     # WHAT: stan modelu w tabeli hosta - kość RAM (wczytany do pamięci) i dysk (tylko na dysku)
@@ -6767,13 +7349,14 @@ class OdpowiedzWWW:
          czyta postęp przez /api/strumien - wersja rośnie przy każdej zmianie.
     """
 
-    def __init__(self, serwer, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None):
+    def __init__(self, serwer, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None, mcp=False):
         self.serwer = serwer
         self.id = id_rozmowy
         self.dane = dane                    # WHY: cała rozmowa z pliku; ostatnia wiadomość = pytanie
         self.model, self.host = model, host
         self.myslenie, self.szukaj = myslenie, szukaj
         self.katalog = katalog              # WHY: katalog roboczy = model dostaje narzędzia do plików
+        self.mcp = mcp                      # WHY: narzędzia z włączonych serwerów MCP
         self.warunek = threading.Condition()
         self.wersja = 0
         self.koniec = False
@@ -6829,11 +7412,24 @@ class OdpowiedzWWW:
         self.ostatnia["_ostatni"] = time.time()
         self._zmiana()
 
+    def _uwaga(self, tekst):
+        self._uwagi.append(tekst)
+        self.ostatnia["_uwagi"] = list(self._uwagi)
+        self._zmiana()
+
     def _prosba_zapisu(self, zmiana):
         # WHAT: model chce zapisać plik - zgoda zapamiętana dla katalogu albo pytanie w przeglądarce.
         # WHY:  wołane w wątku odpowiedzi tuż przed tym, jak CzatWorker zaczyna czekać na decyzję;
         #       pytanie siedzi w wiadomości (strumień), więc przeglądarka, która się rozłączyła,
         #       po powrocie znowu je pokaże. Decyzja przychodzi przez /api/zgoda (metoda zgoda()).
+        if zmiana.get("mcp"):
+            # WHAT: narzędzie MCP do zatwierdzenia - zawsze pytanie w przeglądarce (Zezwól / Odrzuć)
+            self._nr_prosby += 1
+            self.ostatnia["_prosba"] = {"nr": self._nr_prosby, "mcp": True, "serwer": zmiana["serwer"],
+                                        "narzedzie": zmiana["narzedzie"], "usuwa": zmiana["usuwa"],
+                                        "argumenty": zmiana["argumenty"]}
+            self._zmiana()
+            return
         _PRZED_ZMIANAMI.setdefault(zmiana["plik"], zmiana["stara"])
         tryb, _wlasny = tryb_zapisu_katalogu(self.katalog)
         if tryb == "zawsze" or self.katalog in _KATALOGI_SESJI:
@@ -6850,6 +7446,11 @@ class OdpowiedzWWW:
         prosba = self.ostatnia.get("_prosba")
         if not prosba or prosba["nr"] != nr or self._worker is None:
             return False
+        if prosba.get("mcp"):
+            self.ostatnia.pop("_prosba", None)
+            self._zmiana()
+            self._worker.odpowiedz_na_zapis(wybor is not None)
+            return True
         tryb, _wlasny = tryb_zapisu_katalogu(self.katalog)
         # WHY: tryb "raz na sesję" - pierwsza zgoda otwiera zapis bez pytania do zamknięcia programu
         if wybor == "sesja" or (wybor == "raz" and tryb == "sesja"):
@@ -6925,7 +7526,7 @@ class OdpowiedzWWW:
         self._wynik = (False, _("nieznany błąd"))
         czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(self.model["nazwa"]), "tresc": "",
                      "myslenie": "", "trwa": True, "_start": time.time(), "gb": self.model["rozmiar"] / 1024 ** 3,
-                     "pliki": bool(self.katalog)})
+                     "pliki": bool(self.katalog) or self.mcp})
         self._zmiana()
         try:
             self._dolacz_strony(pytanie)
@@ -6944,12 +7545,13 @@ class OdpowiedzWWW:
                 self.ostatnia["szuka"] = True
             if not self._anuluj:
                 worker = CzatWorker(self.host["adres"], self.model["nazwa"], historia_dla_modelu(czat), dokumenty,
-                                    parametr_myslenia(self.model, self.myslenie), wyszukiwanie, self.katalog)
+                                    parametr_myslenia(self.model, self.myslenie), wyszukiwanie, self.katalog, self.mcp)
                 bezposrednio = Qt.ConnectionType.DirectConnection
                 for sygnal, slot in ((worker.fragment, self._fragment), (worker.ladowanie, self._ladowanie),
                                      (worker.etap, self._etap), (worker.zrodla_www, self._zrodla_www),
                                      (worker.zrodla, self._zrodla), (worker.narzedzie, self._narzedzie),
-                                     (worker.prosba_zapisu, self._prosba_zapisu), (worker.zakonczono, self._koniec)):
+                                     (worker.prosba_zapisu, self._prosba_zapisu), (worker.uwaga, self._uwaga),
+                                     (worker.zakonczono, self._koniec)):
                     sygnal.connect(slot, bezposrednio)
                 self._worker = worker
                 if self._anuluj:
@@ -7040,7 +7642,7 @@ class SerwerCzatu(QObject):
         with self._blokada:
             return self._odpowiedzi.get(id_rozmowy)
 
-    def rozpocznij(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None):
+    def rozpocznij(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog=None, mcp=False):
         # WHAT: zapisuje rozmowę z pytaniem i startuje odpowiedź; False = w tej rozmowie
         #       właśnie pisze ktoś inny.
         # WHY:  zapis PRZED startem wątku - potem wątek zmienia te same słowniki; pytanie od
@@ -7048,7 +7650,7 @@ class SerwerCzatu(QObject):
         if not zajmij_rozmowe(id_rozmowy, "www"):
             return False
         self.zapisz(id_rozmowy, dane)
-        odp = OdpowiedzWWW(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog)
+        odp = OdpowiedzWWW(self, id_rozmowy, dane, model, host, myslenie, szukaj, katalog, mcp)
         with self._blokada:
             self._odpowiedzi[id_rozmowy] = odp
         odp.start()
@@ -7312,7 +7914,8 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
             tlumaczenia = {k: _(k) for k in _klucze_tlumaczen_www() if _(k) != k}
         return {"zalogowany": self._zalogowany(), "wymaga_hasla": self._wymaga_hasla(), "jezyk": jezyk,
                 "tlumaczenia": tlumaczenia, "wersja": WERSJA, "nazwa": NAZWA_PROGRAMU,
-                "szukanie": wyszukiwanie_ustawienie("zrodlo", "wylaczone") != "wylaczone"}
+                "szukanie": wyszukiwanie_ustawienie("zrodlo", "wylaczone") != "wylaczone",
+                "mcp": [s["nazwa"] for s in serwery_mcp() if s["wlaczony"]]}
 
     def _zaloguj(self, dane):
         ip = self.client_address[0]
@@ -7391,6 +7994,7 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
             raise ValueError(_("Dołączony plik wygasł - dołącz go ponownie."))
         model, host = self._znajdz_model(dane.get("model"), any(z["typ"] == "obraz" for z, _k in czekajace))
         katalog = self._sprawdz_katalog(dane.get("katalog"), model)
+        mcp = self._sprawdz_mcp(dane.get("mcp"), model)
         if any(z["typ"] == "obraz" for z, _k in czekajace) and "vision" not in model.get("mozliwosci", []):
             raise ValueError(_("{model} nie widzi zdjęć. Wybierz model z tagiem \"zdjęcia\" "
                                "(np. gemma3, qwen2.5vl, llava).").format(model=_skroc_nazwe_modelu_hf(model["nazwa"])))
@@ -7410,9 +8014,20 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
         self._ustaw_katalog(rozmowa, katalog)
         rozmowa["wiadomosci"].append({"rola": "user", "tresc": tekst, "zalaczniki": zalaczniki})
         if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
-                                      bool(dane.get("szukaj")), katalog):
+                                      bool(dane.get("szukaj")), katalog, mcp):
             return self._blad(409, self._zajeta(id_rozmowy))
         return self._json({"id": id_rozmowy})
+
+    @staticmethod
+    def _sprawdz_mcp(wlaczone, model):
+        # WHAT: narzędzia MCP z przeglądarki - tylko z włączonym serwerem i modelem z "tools".
+        if not wlaczone or not mcp_dostepne():
+            return False
+        if "tools" not in model.get("mozliwosci", []):
+            raise ValueError(_("{model} nie umie korzystać z narzędzi - do narzędzi MCP wybierz model z tagiem "
+                               "\"narzędzia\" (np. qwen3, gemma4) albo wyłącz narzędzia MCP.").format(
+                                   model=_skroc_nazwe_modelu_hf(model["nazwa"])))
+        return True
 
     @staticmethod
     def _ustaw_katalog(rozmowa, katalog):
@@ -7451,11 +8066,12 @@ class _ObslugaWWW(BaseHTTPRequestHandler):
                                    "(np. gemma3, qwen2.5vl, llava).").format(
                                        model=_skroc_nazwe_modelu_hf(model["nazwa"])))
             katalog = self._sprawdz_katalog(dane.get("katalog"), model)
+            mcp = self._sprawdz_mcp(dane.get("mcp"), model)
             czat.pop()
             rozmowa.update({"model": model["nazwa"], "host": host["adres"]})
             self._ustaw_katalog(rozmowa, katalog)
             if not self.serwer.rozpocznij(id_rozmowy, rozmowa, model, host, bool(dane.get("myslenie", True)),
-                                          bool(dane.get("szukaj")), katalog):
+                                          bool(dane.get("szukaj")), katalog, mcp):
                 return self._blad(409, self._zajeta(id_rozmowy))
             return self._json({"id": id_rozmowy})
         if dane.get("akcja") == "popraw":
@@ -7758,6 +8374,7 @@ class MainWindow(QMainWindow):
         self.okno_zasobnika = None
         self._konczenie = False         # WHY: "Zakończ" z menu ikony - wtedy krzyżyk ma naprawdę zamknąć program
         self._czat_zajeta = None        # WHY: rozmowa zajęta przez odpowiedź pisaną w oknie (zajmij_rozmowe)
+        self._mcp_w_czacie = False      # WHY: przełącznik "Narzędzia MCP" w czacie - przeżywa przebudowę okna
         # WHAT: czat w przeglądarce (1.2) - serwer w tym procesie, włączany w Ustawieniach.
         # WHY:  przed _buduj_ui - karta w Ustawieniach pokazuje jego stan
         self.serwer_www = SerwerCzatu(self)
@@ -10271,6 +10888,19 @@ class MainWindow(QMainWindow):
         self.btn_czat_katalog.clicked.connect(self._wybierz_katalog_roboczy)
         wpis.addWidget(self.btn_czat_katalog)
         self._odswiez_katalog_roboczy()
+        # WHAT: przełącznik "Narzędzia MCP" - widoczny, gdy w Ustawieniach jest włączony serwer MCP.
+        # WHY:  jak globus: zostaje włączony do wyłączenia, po ponownym uruchomieniu programu wyłączony
+        #       (opisy narzędzi zajmują sporo kontekstu - świadomie, gdy są potrzebne)
+        self.btn_czat_mcp = QPushButton()
+        self.btn_czat_mcp.setObjectName("attachButton")
+        self.btn_czat_mcp.setCheckable(True)
+        self.btn_czat_mcp.setChecked(self._mcp_w_czacie)
+        self.btn_czat_mcp.setIcon(ikona("wtyczka", PALETA.tekst, rozmiar=20, grubosc=1.8))
+        self.btn_czat_mcp.setIconSize(QSize(20, 20))
+        self.btn_czat_mcp.setFixedSize(48, 76)
+        self.btn_czat_mcp.toggled.connect(self._przelacz_mcp)
+        wpis.addWidget(self.btn_czat_mcp)
+        self._odswiez_przycisk_mcp()
         self.pole_czat = QPlainTextEdit()
         self.pole_czat.setObjectName("chatInput")
         self.pole_czat.setPlaceholderText(_("Napisz wiadomość... (Enter wysyła, Shift+Enter - nowa linia)"))
@@ -11078,7 +11708,8 @@ class MainWindow(QMainWindow):
                             "pytanie": self._czat[-1].get("tresc", ""), "emb": self._model_embeddingow()}
         self._czat.append({"rola": "assistant", "kto": _skroc_nazwe_modelu_hf(model["nazwa"]),
                            "tresc": "", "myslenie": "", "trwa": True, "start": time.monotonic(),
-                           "gb": model["rozmiar"] / 1024 ** 3, "pliki": bool(self._katalog_roboczy)})
+                           "gb": model["rozmiar"] / 1024 ** 3,
+                           "pliki": bool(self._katalog_roboczy) or self._mcp_aktywne()})
         if wyszukiwanie:
             self._czat[-1]["etap"] = _("Układam zapytania do wyszukiwarki...")
         self._pokaz_czat(do_dolu=True)
@@ -11086,7 +11717,8 @@ class MainWindow(QMainWindow):
         if dokumenty:
             self._czat[-1]["szuka"] = True
         worker = CzatWorker(host["adres"], model["nazwa"], historia, dokumenty, self._parametr_myslenia(model),
-                            wyszukiwanie, self._katalog_roboczy)
+                            wyszukiwanie, self._katalog_roboczy, self._mcp_aktywne())
+        worker.uwaga.connect(self._czat_uwaga_workera)
         self._czat_worker = worker
         self._czat_odswiezenie_zaplanowane = False
         worker.fragment.connect(self._czat_fragment)
@@ -11448,6 +12080,11 @@ class MainWindow(QMainWindow):
 
     def _sprawdz_narzedzia(self, model):
         # WHAT: z katalogiem roboczym tylko modele z możliwością "tools" - inne i tak by go nie użyły.
+        if self._mcp_aktywne() and not self._katalog_roboczy and "tools" not in model.get("mozliwosci", []):
+            self._uwaga_czatu(_("{model} nie umie korzystać z narzędzi - do narzędzi MCP wybierz model z tagiem "
+                                "\"narzędzia\" (np. qwen3, gemma4) albo wyłącz narzędzia MCP.").format(
+                                    model=_skroc_nazwe_modelu_hf(model["nazwa"])), "warn")
+            return False
         if self._katalog_roboczy and "tools" not in model.get("mozliwosci", []):
             self._uwaga_czatu(_("{model} nie umie korzystać z narzędzi - do pracy na plikach wybierz model "
                                 "z tagiem \"narzędzia\" (np. qwen3, gemma4) albo odepnij katalog.").format(
@@ -11464,6 +12101,9 @@ class MainWindow(QMainWindow):
         # WHAT: model chce zapisać plik - zgoda zapamiętana dla katalogu albo okienko z podglądem.
         worker = self.sender()
         if worker is not self._czat_worker:
+            return
+        if zmiana.get("mcp"):
+            worker.odpowiedz_na_zapis(DialogNarzedziaMcp(zmiana, self).exec() == QDialog.DialogCode.Accepted)
             return
         katalog = self._katalog_roboczy
         # WHY: wersja sprzed PIERWSZEJ zmiany w tej sesji - widok "Zmiany" w podglądzie
@@ -11493,6 +12133,32 @@ class MainWindow(QMainWindow):
             self._czat[-1].pop("etap", None)
             self._czat[-1]["zrodla_www"] = zrodla
             self._czat_odswiez_ostatnia()
+
+    def _mcp_aktywne(self):
+        return self._mcp_w_czacie and mcp_dostepne()
+
+    def _przelacz_mcp(self, wlacz):
+        self._mcp_w_czacie = wlacz
+        self._odswiez_przycisk_mcp()
+        model, _host = self._wybrany_model_czatu()
+        if wlacz and model:
+            self._sprawdz_narzedzia(model)
+
+    def _odswiez_przycisk_mcp(self):
+        # WHAT: przycisk widać tylko z włączonym serwerem MCP; dymek mówi, z których serwerów są narzędzia.
+        if not hasattr(self, "btn_czat_mcp"):
+            return
+        serwery = [s["nazwa"] for s in serwery_mcp() if s["wlaczony"]]
+        self.btn_czat_mcp.setVisible(bool(serwery))
+        stan = _("włączone") if self._mcp_w_czacie else _("wyłączone")
+        self.btn_czat_mcp.setToolTip(
+            _("Narzędzia MCP: {stan}\nModel może używać narzędzi innych programów (serwery: {serwery}). "
+              "Wymaga modelu z tagiem \"narzędzia\". Serwery dodasz w Ustawieniach.").format(
+                stan=stan, serwery=", ".join(serwery) or "-"))
+
+    def _czat_uwaga_workera(self, tekst):
+        if self.sender() is self._czat_worker:
+            self._uwaga_czatu(tekst, "warn")
 
     def _szukanie_aktywne(self):
         return self._szukaj_w_internecie and wyszukiwanie_ustawienie("zrodlo", "wylaczone") != "wylaczone"
@@ -12254,6 +12920,8 @@ class MainWindow(QMainWindow):
         uk.addWidget(wiersz)
         # WHY: wyszukiwanie w internecie to też ustawienie czatu - jedna karta (prośba użytkownika)
         self._sekcja_wyszukiwania(uk)
+        # WHY: serwery MCP to narzędzia czatu - w tej samej karcie (plan: Ustawienia -> Czat -> Serwery MCP)
+        self._sekcja_mcp(uk)
         v.addWidget(karta)
         self._odswiez_modele_rag()
 
@@ -12795,6 +13463,162 @@ class MainWindow(QMainWindow):
         self.kod_qr_www.ustaw(qr)
         self.lbl_www_qr.setVisible(bool(qr) and self.kod_qr_www.isVisible())
 
+    # --- Serwery MCP ---------------------------------------------------------------
+    def _sekcja_mcp(self, uk):
+        # WHAT: część karty "Czat" - serwery MCP (lista, dodawanie, sprawdzanie) i zgody na ich narzędzia.
+        naglowek = _etykieta(_("Serwery MCP"), "h3")
+        naglowek.setContentsMargins(0, 18, 0, 0)
+        uk.addWidget(naglowek)
+        wstep = _etykieta(_("Narzędzia innych programów dla modelu w czacie - np. ArchFlow rysuje diagramy. "
+                            "Model używa ich po włączeniu przycisku z wtyczką w czacie i tylko wtedy, gdy ma "
+                            "tag \"narzędzia\". Możesz dodać dowolny serwer MCP: pod adresem HTTP albo jako "
+                            "polecenie uruchamiane na tym komputerze."), "muted")
+        wstep.setWordWrap(True)
+        wstep.setContentsMargins(0, 6, 0, 8)
+        uk.addWidget(wstep)
+        self.ramka_mcp = QFrame()
+        self.ramka_mcp.setObjectName("searchPanel")
+        self.uklad_mcp = QVBoxLayout(self.ramka_mcp)
+        self.uklad_mcp.setContentsMargins(0, 0, 0, 0)
+        self.uklad_mcp.setSpacing(0)
+        uk.addWidget(self.ramka_mcp)
+        przyciski = QHBoxLayout()
+        przyciski.setContentsMargins(0, 10, 0, 0)
+        przyciski.addWidget(self._przycisk(_("Dodaj ArchFlow"), "plus", slot=lambda: self._dodaj_serwer_mcp(True)))
+        przyciski.addWidget(self._przycisk(_("Dodaj serwer"), "plus", slot=lambda: self._dodaj_serwer_mcp(False)))
+        przyciski.addStretch(1)
+        uk.addLayout(przyciski)
+        wiersz = QFrame()
+        wiersz.setObjectName("settingRow")
+        h = QHBoxLayout(wiersz)
+        h.setContentsMargins(0, 10, 0, 10)
+        h.setSpacing(14)
+        teksty = QVBoxLayout()
+        teksty.setSpacing(2)
+        teksty.addWidget(QLabel(_("Pytaj o zgodę na narzędzia MCP")))
+        opis = _etykieta(_("narzędzia tylko do odczytu działają zawsze bez pytania"), "muted")
+        opis.setWordWrap(True)
+        teksty.addWidget(opis)
+        h.addLayout(teksty, 1)
+        self.combo_zgody_mcp = QComboBox()
+        self.combo_zgody_mcp.setMinimumWidth(320)
+        self.combo_zgody_mcp.addItem(_("Tylko przed usuwaniem"), "usuwanie")
+        self.combo_zgody_mcp.addItem(_("Przed każdym, które coś zmienia"), "zmiany")
+        self.combo_zgody_mcp.setCurrentIndex(max(0, self.combo_zgody_mcp.findData(zgody_mcp())))
+        self.combo_zgody_mcp.currentIndexChanged.connect(
+            lambda _i: _ustawienia().setValue("mcp/zgody", self.combo_zgody_mcp.currentData()))
+        h.addWidget(self.combo_zgody_mcp, 0, Qt.AlignmentFlag.AlignTop)
+        uk.addWidget(wiersz)
+        if not hasattr(self, "_stan_mcp"):
+            self._stan_mcp = {}  # WHY: nazwa serwera -> (wynik "Sprawdź połączenie", stan) - przeżywa przebudowę
+        self._pokaz_serwery_mcp()
+
+    def _pokaz_serwery_mcp(self):
+        # WHAT: wiersze serwerów: przełącznik, nazwa, połączenie, wynik sprawdzenia, przyciski.
+        while self.uklad_mcp.count():
+            w = self.uklad_mcp.takeAt(0).widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+        serwery = serwery_mcp()
+        if not serwery:
+            pusto = _etykieta(_("Nie ma jeszcze żadnego serwera."), "muted")
+            pusto.setContentsMargins(0, 6, 0, 0)
+            self.uklad_mcp.addWidget(pusto)
+        for serwer in serwery:
+            wiersz = QFrame()
+            wiersz.setObjectName("settingRow")
+            h = QHBoxLayout(wiersz)
+            h.setContentsMargins(0, 10, 0, 10)
+            h.setSpacing(8)
+            przelacznik = Przelacznik(serwer["nazwa"])
+            przelacznik.setChecked(serwer["wlaczony"])
+            przelacznik.clicked.connect(lambda wl, n=serwer["nazwa"]: self._wlacz_serwer_mcp(n, wl))
+            h.addWidget(przelacznik, 0, Qt.AlignmentFlag.AlignTop)
+            teksty = QVBoxLayout()
+            teksty.setSpacing(2)
+            teksty.addWidget(QLabel(serwer["nazwa"]))
+            gdzie = serwer["adres"] if serwer["typ"] == "http" else serwer["polecenie"]
+            opis = _etykieta(gdzie, "mono", muted="true")
+            opis.setWordWrap(True)
+            teksty.addWidget(opis)
+            tekst, stan = self._stan_mcp.get(serwer["nazwa"], ("", ""))
+            if tekst:
+                lbl = _etykieta(tekst, "muted")
+                lbl.setWordWrap(True)
+                lbl.setProperty("state", stan)
+                teksty.addWidget(lbl)
+            h.addLayout(teksty, 1)
+            sprawdz = self._przycisk(_("Sprawdź połączenie"), slot=lambda _c=False, s=serwer: self._sprawdz_serwer_mcp(s))
+            sprawdz.setEnabled(tekst != _("Łączę..."))
+            for btn in (sprawdz,
+                        self._przycisk(_("Zmień"), slot=lambda _c=False, n=serwer["nazwa"]: self._zmien_serwer_mcp(n)),
+                        self._przycisk(_("Usuń"), "kosz", "danger",
+                                       slot=lambda _c=False, n=serwer["nazwa"]: self._usun_serwer_mcp(n))):
+                h.addWidget(btn, 0, Qt.AlignmentFlag.AlignTop)
+            self.uklad_mcp.addWidget(wiersz)
+
+    def _zapisz_mcp(self, lista):
+        zapisz_serwery_mcp(lista)
+        self._pokaz_serwery_mcp()
+        self._odswiez_przycisk_mcp()
+
+    def _dodaj_serwer_mcp(self, archflow):
+        lista = serwery_mcp()
+        wzor = dict(ARCHFLOW_MCP_HTTP) if archflow else {"typ": "http"}
+        if archflow and any(s["nazwa"] == "ArchFlow" for s in lista):
+            wzor["nazwa"] = ""
+        dialog = DialogSerwerMcp(wzor, {s["nazwa"] for s in lista}, self, archflow)
+        if dialog.exec() and dialog.wynik:
+            self._zapisz_mcp(lista + [dialog.wynik])
+            self.wpis_log(_("Dodano serwer MCP: {nazwa}").format(nazwa=dialog.wynik["nazwa"]))
+            self._sprawdz_serwer_mcp(dialog.wynik)
+
+    def _zmien_serwer_mcp(self, nazwa):
+        lista = serwery_mcp()
+        serwer = next((s for s in lista if s["nazwa"] == nazwa), None)
+        if serwer is None:
+            return
+        dialog = DialogSerwerMcp(serwer, {s["nazwa"] for s in lista if s["nazwa"] != nazwa}, self)
+        if dialog.exec() and dialog.wynik:
+            dialog.wynik["wlaczony"] = serwer["wlaczony"]
+            MCP.odlacz(nazwa)
+            self._stan_mcp.pop(nazwa, None)
+            self._zapisz_mcp([dialog.wynik if s["nazwa"] == nazwa else s for s in lista])
+
+    def _usun_serwer_mcp(self, nazwa):
+        odp = QMessageBox.question(self, _("Serwery MCP"), _("Usunąć serwer MCP \"{nazwa}\"?").format(nazwa=nazwa))
+        if odp != QMessageBox.StandardButton.Yes:
+            return
+        MCP.odlacz(nazwa)
+        self._stan_mcp.pop(nazwa, None)
+        self._zapisz_mcp([s for s in serwery_mcp() if s["nazwa"] != nazwa])
+
+    def _wlacz_serwer_mcp(self, nazwa, wlacz):
+        if not wlacz:
+            MCP.odlacz(nazwa)  # WHY: wyłączony serwer-polecenie nie musi dalej działać w tle
+        self._zapisz_mcp([dict(s, wlaczony=wlacz) if s["nazwa"] == nazwa else s for s in serwery_mcp()])
+
+    def _sprawdz_serwer_mcp(self, serwer):
+        # WHAT: initialize + tools/list w tle; wynik (liczba narzędzi albo błąd) pod nazwą serwera.
+        nazwa = serwer["nazwa"]
+        self._stan_mcp[nazwa] = (_("Łączę..."), "")
+        worker = FunkcjaWorker(lambda: MCP.sprawdz(serwer))
+
+        def _po(ok, wynik):
+            if ok:
+                liczba, info = wynik
+                tekst = _("Połączono · narzędzia: {n}").format(n=liczba) + (f" · {info}" if info else "")
+                self._stan_mcp[nazwa] = (tekst, "ok")
+            else:
+                self._stan_mcp[nazwa] = (str(wynik), "error")
+                self.wpis_log(_("Serwer MCP {nazwa}: {blad}").format(nazwa=nazwa, blad=wynik), "BŁĄD")
+            if hasattr(self, "uklad_mcp"):
+                self._pokaz_serwery_mcp()
+
+        self._uruchom_watek(f"mcp:{nazwa}", worker, worker.zakonczono, _po)
+        self._pokaz_serwery_mcp()
+
     def _pokaz_zrodlo_wyszukiwania(self):
         zrodlo = self.combo_zrodlo_wyszukiwania.currentData()
         self.ramka_searxng.setVisible(zrodlo == "searxng")
@@ -13274,6 +14098,7 @@ def main():
     serwer.newConnection.connect(_nowe_polaczenie)
     # WHY: port zwolniony od razu przy końcu programu (wątki serwera i tak są w tle)
     app.aboutToQuit.connect(okno.serwer_www.zatrzymaj)
+    app.aboutToQuit.connect(MCP.zamknij)  # WHY: procesy serwerów MCP (polecenia) kończą się z programem
     # WHY: z autostartu (--w-zasobniku) tylko ikona - o ile zasobnik naprawdę działa
     if not (w_zasobniku and okno.zasobnik is not None and okno.zasobnik.isVisible()):
         okno.show()

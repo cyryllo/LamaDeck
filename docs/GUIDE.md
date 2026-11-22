@@ -258,6 +258,41 @@ conversation (Code, Changes, Page). On a phone the conversation list is behind t
   working folder runs in a sandbox and can't reach the chat.
 - Settings, models and services are managed in the app only.
 
+## MCP servers
+
+The chat can use tools of other programs through **MCP** (Model Context Protocol). For example
+ArchFlow draws diagrams: ask *"Draw a diagram of my homelab in ArchFlow"* and the model builds the
+diagram itself and gives you its link. It works in the app window and in the chat in the browser.
+
+**Adding a server** — *Settings → Chat → MCP servers*:
+
+- **Add ArchFlow** fills in the fields for you. In ArchFlow running in Docker, turn MCP on (set
+  `MCP_TOKEN` in the container's `.env` file and restart it), then enter the address
+  `http://<server>:9500/mcp` and the same token in LamaDeck. Without Docker choose **Command**:
+  `npx -y archflow-mcp@latest` (needs Node.js) with `ARCHFLOW_URL` or `ARCHFLOW_DIR` (a folder for
+  the diagrams).
+- **Add server** — any other MCP server: at an **HTTP address** (with or without a token) or as a
+  **command** run on this computer, with environment variables (`KEY=VALUE`, one per line).
+- **Test connection** shows how many tools the server has, or a plain error. The switch next to a
+  server turns it off without removing it.
+
+**In the chat** turn on the plug button next to the globe. The model needs the *tools* tag (e.g.
+qwen3, gemma4). Every tool use shows in the answer, e.g. "› used the tool: build_diagram (ArchFlow)".
+
+**Approvals** — *Ask before using MCP tools*: **Only before deleting** (the default) or **Before every
+tool that changes something**. Read-only tools always work without asking. The window shows the
+server, the tool and exactly what the model wants to pass.
+
+**Good to know:**
+
+- Tool descriptions take a few thousand tokens. LamaDeck warns you when the context window is
+  smaller than 32k — raise `OLLAMA_CONTEXT_LENGTH` in Settings. Bigger models cope best (e.g.
+  qwen3:30b-a3b, gemma4:26b); 7–8B models often get lost.
+- A command server starts on first use and runs until you close LamaDeck.
+- The token is stored in the app's settings as plain text.
+- When a server is unreachable, the answer goes on without its tools and a note appears above the
+  question box.
+
 ## LiteLLM Router
 
 ![LiteLLM Router](img/en/router.png)
@@ -316,6 +351,8 @@ log in again).
 
 ![Chat settings](img/en/ustawienia-czat.png)
 
+- **MCP servers** (in the Chat card) — tools of other programs for the model (see
+  [MCP servers](#mcp-servers)).
 - **Chat in the browser** — on/off, port, access from the home network with a password, the address
   and a QR code (see [Chat in the browser](#chat-in-the-browser)).
 - **Ollama environment variables** (lower on the same screen) — each with a short description.
