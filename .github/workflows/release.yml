@@ -87,9 +87,16 @@ jobs:
           NOTES="packaging/release-notes/$VERSION.md"
           TITLE="$(sed -n '1s/^# *//p' "$NOTES")"
           tail -n +2 "$NOTES" > build/release-notes.md
-          gh release create "$GITHUB_REF_NAME" --verify-tag \
-            --title "${TITLE:-LamaDeck $VERSION}" --notes-file build/release-notes.md \
-            "lamadeck_${VERSION}_all.deb" "LamaDeck-${VERSION}-x86_64.AppImage"
+          FILES=("lamadeck_${VERSION}_all.deb" "LamaDeck-${VERSION}-x86_64.AppImage")
+          # WHY: a re-run (e.g. after adding the signing key) updates the existing release
+          #      instead of failing on "release already exists"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "${TITLE:-LamaDeck $VERSION}" --notes-file build/release-notes.md
+            gh release upload "$GITHUB_REF_NAME" --clobber "${FILES[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "${TITLE:-LamaDeck $VERSION}" --notes-file build/release-notes.md "${FILES[@]}"
+          fi
 
       - name: Publish the APT repository and the project page
         env:
