@@ -1,0 +1,97 @@
+# =============================================================================
+#  LamaDeck release - runs when a version tag (v1.2.3) is pushed.
+#
+#  WHAT: builds the .deb and the AppImage, tests both in clean distributions
+#        (Docker: Debian 13, Ubuntu 24.04, Fedora), creates the GitHub release
+#        with the description from packaging/release-notes/<version>.md and
+#        publishes the signed APT repository with the project page (gh-pages).
+#  WHY:  one "git push --tags" is the whole release - the same scripts as on
+#        the developer's computer, nothing built or uploaded by hand.
+#
+#  One-time setup (repository Settings -> Secrets and variables -> Actions):
+#    APT_SIGNING_KEY         gpg --export-secret-keys --armor "LamaDeck APT repository"
+#    APT_SIGNING_PASSPHRASE  the passphrase of that key
+#  Without them the release is still made; only the APT repository is skipped.
+# =============================================================================
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # WHY: create the release and push the gh-pages branch
+
+# WHY: the release and the page workflow both push gh-pages - one at a time
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version and the release notes
+        run: |
+          VERSION="$(sed -n 's/^WERSJA = "\(.*\)"/\1/p' lamadeck.py)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match WERSJA = \"$VERSION\" in lamadeck.py"
+            exit 1
+          fi
+          if [ ! -s "packaging/release-notes/$VERSION.md" ]; then
+            echo "::error::Missing packaging/release-notes/$VERSION.md (first line: '# Title')"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install the build tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dpkg-dev apt-utils
+
+      # WHY: the pinned Python and appimagetool are downloaded once, not on every release
+      - uses: actions/cache@v4
+        with:
+          path: build/appimage/cache
+          key: appimage-${{ hashFiles('build-appimage.sh') }}
+
+      - name: Build the .deb
+        run: ./build-deb.sh
+
+      - name: Build the AppImage
+        run: ./build-appimage.sh
+
+      # WHY: nothing is published if the app doesn't start in any of them
+      - name: Test in Debian 13
+        run: ./test-in-docker.sh debian
+      - name: Test in Ubuntu 24.04
+        run: ./test-in-docker.sh ubuntu
+      - name: Test the AppImage in Fedora
+        run: ./test-in-docker.sh fedora
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="packaging/release-notes/$VERSION.md"
+          TITLE="$(sed -n '1s/^# *//p' "$NOTES")"
+          tail -n +2 "$NOTES" > build/release-notes.md
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "${TITLE:-LamaDeck $VERSION}" --notes-file build/release-notes.md \
+            "lamadeck_${VERSION}_all.deb" "LamaDeck-${VERSION}-x86_64.AppImage"
+
+      - name: Publish the APT repository and the project page
+        env:
+          SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          LAMADECK_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::warning::No APT_SIGNING_KEY secret - the APT repository was not updated"
+            exit 0
+          fi
+          printf '%s\n' "$SIGNING_KEY" | gpg --batch --quiet --import
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ./apt-repo.sh fetch
+          ./apt-repo.sh build "lamadeck_${VERSION}_all.deb"
+          ./apt-repo.sh publish

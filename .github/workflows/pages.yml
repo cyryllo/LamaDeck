@@ -1,0 +1,40 @@
+# =============================================================================
+#  LamaDeck project page - runs when the page, the guide or the screenshots
+#  change on main (or by hand: Actions -> Project page -> Run workflow).
+#
+#  WHAT: assembles the site (site/, the guide from docs/*.md, screenshots) and
+#        pushes it to gh-pages together with the APT repository already published
+#        there - packages and signatures are copied as they are, nothing is re-signed.
+#  WHY:  documentation fixes go online without making a release.
+# =============================================================================
+name: Project page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "screenshots/**"
+      - "fonts/**"
+      - "logo.png"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # WHY: push the gh-pages branch
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish the page
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ./apt-repo.sh fetch
+          ./apt-repo.sh publish

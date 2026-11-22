@@ -13,6 +13,8 @@
 #
 #  Commands:
 #    ./apt-repo.sh init-key         create the signing key - ONCE, asks for a passphrase
+#    ./apt-repo.sh fetch            replace apt-repo/ with the published copy (gh-pages) -
+#                                   used by GitHub Actions, so older versions stay in the pool
 #    ./apt-repo.sh build [x.deb..]  (re)build apt-repo/ - by default from a fresh build-deb.sh
 #    ./apt-repo.sh publish          push the project page (site/) and apt-repo/ to the
 #                                   gh-pages branch (GitHub Pages)
@@ -21,6 +23,8 @@
 #  Environment:
 #    LAMADECK_KEY   key id/fingerprint to sign with (default: the key whose name is
 #                   "LamaDeck APT repository")
+#    LAMADECK_KEY_PASSPHRASE  the key's passphrase, for signing without gpg's dialog
+#                   (GitHub Actions); unset = gpg asks as usual
 #    GNUPGHOME      as usual for gpg (used by the tests with a throwaway key)
 # =============================================================================
 set -euo pipefail
@@ -64,6 +68,41 @@ init_key() {
     echo "  gpg --export-secret-keys --armor \"$(_key_id)\" > lamadeck-signing-key-BACKUP.asc"
 }
 
+_sign() {
+    # WHAT: gpg signing with the repository key; the passphrase from LAMADECK_KEY_PASSPHRASE if set.
+    # WHY:  on GitHub Actions there is no gpg dialog to type it in; --passphrase-fd 0 keeps it
+    #       off the command line (visible to other processes)
+    local key="$1"
+    shift
+    if [ -n "${LAMADECK_KEY_PASSPHRASE:-}" ]; then
+        gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --local-user "$key" "$@" \
+            <<<"$LAMADECK_KEY_PASSPHRASE"
+    else
+        gpg --batch --yes --local-user "$key" "$@"
+    fi
+}
+
+_fetch_gh_pages() {
+    # WHY: an explicit refspec - a CI checkout of a tag has no remote branches configured
+    git fetch -q origin +refs/heads/gh-pages:refs/remotes/origin/gh-pages
+}
+
+fetch_repo() {
+    # WHAT: apt-repo/ = the apt/ folder of the published gh-pages branch.
+    # WHY:  a fresh checkout (GitHub Actions) has no apt-repo/ - without this the new
+    #       repository would hold only the newest package and nothing to downgrade to
+    if ! git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+        echo "No gh-pages branch yet - starting with an empty repository."
+        return
+    fi
+    _fetch_gh_pages
+    rm -rf "$REPO_DIR"
+    mkdir -p "$REPO_DIR"
+    git archive origin/gh-pages apt | tar -x --strip-components=1 -C "$REPO_DIR"
+    echo "Fetched the published repository - packages:"
+    ls "$REPO_DIR/pool/main"
+}
+
 build_repo() {
     local key
     key="$(_key_id)"
@@ -101,8 +140,8 @@ build_repo() {
         -o APT::FTPArchive::Release::Description="LamaDeck - control panel for a local AI stack" \
         release dists/stable > dists/stable/Release
     # WHY: InRelease (inline signature) is what modern apt fetches; Release.gpg for older ones
-    gpg --batch --yes --local-user "$key" --clearsign -o dists/stable/InRelease dists/stable/Release
-    gpg --batch --yes --local-user "$key" --armor --detach-sign -o dists/stable/Release.gpg dists/stable/Release
+    _sign "$key" --clearsign -o dists/stable/InRelease dists/stable/Release
+    _sign "$key" --armor --detach-sign -o dists/stable/Release.gpg dists/stable/Release
 
     # WHAT: the public key and a ready-made source entry, for adding the repo by hand
     gpg --export "$key" > lamadeck-archive-keyring.gpg
@@ -184,7 +223,7 @@ publish_repo() {
     # shellcheck disable=SC2064
     trap "git worktree remove --force '$worktree' >/dev/null 2>&1 || true; git branch -D gh-pages-new >/dev/null 2>&1 || true" EXIT
     if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-        git fetch origin gh-pages
+        _fetch_gh_pages
         git worktree add "$worktree" origin/gh-pages --detach
     else
         git worktree add --detach "$worktree"
@@ -207,11 +246,12 @@ publish_repo() {
 
 case "${1:-}" in
     init-key) init_key ;;
+    fetch) fetch_repo ;;
     build) shift; build_repo "$@" ;;
     publish) publish_repo ;;
     preview) preview_pages ;;
     *)
-        echo "Usage: $0 init-key | build [package.deb ...] | publish | preview" >&2
+        echo "Usage: $0 init-key | fetch | build [package.deb ...] | publish | preview" >&2
         exit 1
         ;;
 esac
